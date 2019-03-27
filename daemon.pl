@@ -401,22 +401,20 @@ sub loadCommandFromURLSub{
 	if(exists($command->{$urls->{"deleteUrl"}})){$command->{"deleteKeys"}=handleKeys($command->{$urls->{"deleteUrl"}},$command);}
 	if(exists($command->{$urls->{"bashUrl"}})){$command->{"bashCode"}=handleCode($command->{$urls->{"bashUrl"}});}
 	if(!exists($command->{$urls->{"maxjobUrl"}})){$command->{$urls->{"maxjobUrl"}}=1;}
-	if(exists($command->{$urls->{"scriptUrl"}})){
-		my $scripts=$command->{$urls->{"scriptUrl"}};
-		if(ref($scripts)ne"ARRAY"){$scripts=[$scripts];}
-		foreach my $script(@{$scripts}){
-			my $name=$script->{$urls->{"scriptNameUrl"}};
-			my $code=$script->{$urls->{"scriptCodeUrl"}};
-			if(ref($code)ne"ARRAY"){$code=[$code];}
-			foreach my $c(@{$code}){
-				$c=~s/\\t/\t/g;
-				$c=~s/\\\\/\\\\\\\\/g;
-				#$c=~s/\\\//\//g;
-				$c=~s/\$/\\\$/g;
-			}
-			$command->{$name}=$code;
-			push(@{$command->{"script"}},$name);
-		}
+	if(exists($command->{$urls->{"scriptUrl"}})){handleScript($command);}
+}
+############################## handleScript ##############################
+sub handleScript{
+	my $command=shift();
+	my $scripts=$command->{$urls->{"scriptUrl"}};
+	if(ref($scripts)ne"ARRAY"){$scripts=[$scripts];}
+	foreach my $script(@{$scripts}){
+		my $name=$script->{$urls->{"scriptNameUrl"}};
+		my $code=$script->{$urls->{"scriptCodeUrl"}};
+		if(ref($code)ne"ARRAY"){$code=[$code];}
+		foreach my $c(@{$code}){$c=~s/\\t/\t/g;$c=~s/\\\\/\\\\\\\\/g;$c=~s/\$/\\\$/g;}
+		$command->{$name}=$code;
+		push(@{$command->{"script"}},$name);
 	}
 }
 ############################## lookForNewCommands ##############################

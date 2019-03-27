@@ -1,9 +1,4 @@
 <?php
-	#$_POST["db"]="unmapped_indexed.sqlite3";
-	#$_POST["query"]="\$studyid->Run->\$runid,\$runid->ScientificName->\$genome,\$runid->LibraryLayout->\$library,\$runid->unmap1->\$unmap1,\$runid->unmap2->\$unmap2";
-	#$_POST["query"]="\$root->(a|b)->\$result";
-	#$_POST["query"]="\$a->B->\$c";
-	#$_POST["db"]="test.sqlite3";
 	$db=(isset($_POST["db"])&&strlen($_POST["db"])>0)?htmlspecialchars($_POST["db"]):NULL;
 	$query=(isset($_POST["query"])&&strlen($_POST["query"])>0)?$_POST["query"]:NULL;
 	if($db==NULL||$query==NULL)exit();

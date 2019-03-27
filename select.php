@@ -15,7 +15,7 @@
 	if($recursion!=NULL)$rdf->{"rdfquery"}->{"recursion"}=$recursion;
 	if($precursion!=NULL)$rdf->{"rdfquery"}->{"precursion"}=$precursion;
 	if($class!=NULL)$rdf->{"rdfquery"}->{"class"}=$class;
-	printRDF($rdf);//database
+	printRDF($rdf);
 	//############################## printRDF ##############################
 	function printRDF($rdf){
 		$i=0;
@@ -58,8 +58,6 @@
 	function escapeReturnTab($string){return str_replace("\'","\\\'",str_replace("\"","\\\"",str_replace("\r","\\r",str_replace("\t","\\t",str_replace("\n","\\n",str_replace("\\","\\\\",$string))))));}
 	//############################## loadRDF ##############################
 	function loadRDF($pdo,$subject=NULL,$predicate=NULL,$object=NULL,$precursion=0,$recursion=0){
-		#if($subject!=NULL&&$predicate==NULL&&$object==NULL&&startsWith($subject,"http://"))$rdf=loadRdfFromWeb($subject);
-		#else $rdf=loadRdfFromDB($pdo,$subject,$predicate,$object);
 		$rdf=loadRdfFromDB($pdo,$subject,$predicate,$object);
 		$prevs=array();
 		$nexts=array();
@@ -116,7 +114,6 @@
 	//############################## loadRdfFromWeb ##############################
 	function loadRdfFromWeb($url,$username=NULL,$password=NULL){
 		try{
-			//http://www.hashbangcode.com/blog/using-authentication-and-filegetcontents
 			if($username!=NULL&&$password!=NULL)$context=stream_context_create(array('http'=>array('header'=>"Authorization: Basic ".base64_encode("$username:$password"))));
 			$content=file_get_contents($url,false,$context);
 			return json_decode($content);
