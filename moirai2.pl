@@ -17,18 +17,25 @@ $program_directory=substr($program_directory,0,-1);
 my $program_path=Cwd::abs_path($program_directory)."/$program_name";
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_c $opt_d $opt_h $opt_H $opt_m $opt_q $opt_Q $opt_r $opt_s $opt_v $opt_x);
+use vars qw($opt_c $opt_d $opt_h $opt_H $opt_m $opt_q $opt_Q $opt_r $opt_s $opt_x);
 getopts('c:d:hHm:qQ:rs:v:x');
 ############################## HELP ##############################
-if(defined($opt_h)||defined($opt_H)||!defined($opt_d)){
+if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
-	print "Program: Process execute tickets stored in a RDF database.\n";
-	print "Author: Akira Hasegawa (ah3q\@gsc.riken.jp)\n";
+	print "Program: Runs Moirai2 commands from web using a local RDF SQLIT3 database.\n";
+	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
-	print "Usage: $program_name -d DB CMD\n";
+	print "Usage: $program_name -d DB URL INPUT\n";
 	print "\n";
+	print "             Runs a Moirai2 command using specified inputs\n";
 	print "         DB  SQLite3 database in RDF format.\n";
-	print "        CMD  Command (default='run').\n";
+	print "        URL  Command URL or path (https://moirai2.github.io).\n";
+	print "      INPUT  input files/values for a command.\n";
+	print "\n";
+	print "Usage: $program_name -d DB\n";
+	print "\n";
+	print "             Runs a Moirai2 command as daemon\n";
+	print "         DB  SQLite3 database in RDF format.\n";
 	print "\n";
 	print "Options: -c  Path to control directory (default='./ctrl').\n";
 	print "         -d  Database file (always required).\n";
@@ -37,10 +44,11 @@ if(defined($opt_h)||defined($opt_H)||!defined($opt_d)){
 	print "         -Q  Export specified bin directory when throwing with qsub(default='\$HOME/bin').\n";
 	print "         -r  Run only once mode (default='loop').\n";
 	print "         -s  Loop second (default='10sec').\n";
-	print "         -v  Store Variables used for running in a specified path (default='none').\n";
 	print "         -x  No STDERR and STDOUT logs (default='show').\n";
 	print "\n";
-	print "Updates: 2019/03/04  Stores run options in the SQLite database.\n";
+	print "Updates: 2019/04/04  Changed program name from daemon.pl to moirai2.pl.\n";
+	print "         2019/04/03  Array output functionality and command line functionality added.\n";
+	print "         2019/03/04  Stores run options in the SQLite database.\n";
 	print "         2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
 	print "         2019/01/21  'mv' functionality added to move temporary files to designated locations.\n";
 	print "         2019/01/18  'process' functionality added to execute command from a control json.\n";
@@ -67,6 +75,7 @@ $urls->{"deleteUrl"}="https://moirai2.github.io/schema/daemon/delete";
 $urls->{"importUrl"}="https://moirai2.github.io/schema/daemon/import";
 $urls->{"inputUrl"}="https://moirai2.github.io/schema/daemon/input";
 $urls->{"outputUrl"}="https://moirai2.github.io/schema/daemon/output";
+$urls->{"outputsUrl"}="https://moirai2.github.io/schema/daemon/outputs";
 $urls->{"bashUrl"}="https://moirai2.github.io/schema/daemon/bash";
 $urls->{"batchUrl"}="https://moirai2.github.io/schema/daemon/batch";
 $urls->{"processUrl"}="https://moirai2.github.io/schema/daemon/process";
@@ -104,23 +113,41 @@ my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e
 my $newControlQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"controlUrl"}."\")";
 my $refreshQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"refreshUrl"}."\")";
 my $cwd=Cwd::getcwd();
-#setup database in absolute path
 my $rdfdb=$opt_d;
-if($rdfdb!~/^\//){$rdfdb="$cwd/$opt_d";}
-#other options
+if(!defined($rdfdb)){
+	if(scalar(@ARGV)>0){$rdfdb="rdf.sqlite3";}
+	else{print STDERR "Please specify database by -d option.\n";exit(1);}
+}
+if($rdfdb!~/^\//){$rdfdb="$cwd/$rdfdb";}
 my $sleeptime=defined($opt_s)?$opt_s:10;
 my $use_qsub=$opt_q;
 my $home=`echo \$HOME`;
 chomp($home);
 my $qsubbin=defined($opt_Q)?$opt_Q:"$home/bin";
 my $nolog=$opt_x;
+my $runmode=$opt_r;
 my $maxjob=defined($opt_m)?$opt_m:5;
 my $ctrldir=Cwd::abs_path(defined($opt_c)?$opt_c:"$cwd/ctrl");
+mkdir("tmp");
+mkdir($ctrldir);
+mkdir("$ctrldir/bash");
+mkdir("$ctrldir/insert");
+mkdir("$ctrldir/delete");
+mkdir("$ctrldir/completed");
+mkdir("$ctrldir/stdout");
+mkdir("$ctrldir/stderr");
+my $commands={};
+my $executes={};
+my $jsons={};
+my @execurls=();
+my $jobcount=0;
+my $ctrlcount=0;
+if(scalar(@ARGV)>0){commandProcess();$runmode=1;}
 if(!$nolog){
 	print STDERR "# program path   : $program_path\n";
 	print STDERR "# rdf database   : $rdfdb\n";
 	print STDERR "# ctrl directory : $ctrldir\n";
-	if($opt_r){print STDERR "# run mode       : once\n";}
+	if($runmode){print STDERR "# run mode       : once\n";}
 	else{print STDERR "# run mode       : normal\n";}
 	print STDERR "# sleeptime      : $sleeptime sec\n";
 	print STDERR "# max job        : $maxjob job".(($maxjob>1)?"s":"")."\n";
@@ -130,22 +157,8 @@ if(!$nolog){
 	}else{
 		print STDERR "# job submission : bash\n";
 	}
+	print STDERR "year/mon/date\thr:min:sec\tcontrol\tnewjob\tremain\tinsert\tdelete\tdone\n";
 }
-mkdir("tmp");
-mkdir($ctrldir);
-mkdir("$ctrldir/bash");
-mkdir("$ctrldir/insert");
-mkdir("$ctrldir/delete");
-mkdir("$ctrldir/completed");
-mkdir("$ctrldir/stdout");
-mkdir("$ctrldir/stderr");
-if(!$nolog){print STDERR "year/mon/date\thr:min:sec\tcontrol\tnewjob\tremain\tinsert\tdelete\tdone\n";}
-my $commands={};
-my $executes={};
-my $jsons={};
-my @execurls=();
-my $jobcount=0;
-my $ctrlcount=0;
 while(true){
 	my $jobs_running=getNumberOfJobsRunning();
 	controlAll($rdfdb,$executes,$ctrlcount,$jobcount);
@@ -173,8 +186,27 @@ while(true){
 	$jobs_running=getNumberOfJobsRunning();
 	mainProcess(\@execurls,$commands,$executes,$maxjob-$jobs_running);
 	$jobs_running=getNumberOfJobsRunning();
-	if($opt_r&&scalar(@execurls)==0&&$jobs_running==0){last;}
+	if($runmode&&scalar(@execurls)==0&&$jobs_running==0){last;}
 	else{sleep($sleeptime);}
+}
+############################## commandProcess ##############################
+sub commandProcess{
+	my @arguments=@ARGV;
+	my $url=shift(@arguments);
+	my $command=loadCommandFromURL($url);
+	$commands->{$url}=$command;
+	my @inputs=@{$command->{"inputUrl"}};
+	my $key=$arguments[0];
+	my $dbh=openDB($rdfdb);
+	my $nodeid=newNode($dbh);
+	$dbh->disconnect;
+	my @lines=();
+	push(@lines,"$key\t".$urls->{"executeUrl"}."\t$nodeid");
+	push(@lines,"$nodeid\t".$urls->{"commandUrl"}."\t$url");
+	for(my $i=1;$i<scalar(@inputs);$i++){push(@lines,"$nodeid\t$url#".$inputs[$i]."\t".$arguments[$i]);}
+	my ($fh,$file)=mkstemps("$ctrldir/insert/XXXXXXXXXX",".insert");
+	foreach my $line(@lines){print $fh "$line\n";}
+	close($fh);
 }
 ############################## mainProcess ##############################
 sub mainProcess{
@@ -376,17 +408,37 @@ sub loadCommandFromURL{
 sub loadCommandFromURLSub{
 	my $command=shift();
 	my $url=shift();
-	$command->{"inputs"}=[];
-	$command->{"outputs"}=[];
+	$command->{"input"}=[];
+	$command->{"output"}=[];
+	if(exists($command->{$urls->{"inputUrl"}})){
+		my $inputs=$command->{$urls->{"inputUrl"}};
+		if(ref($inputs)ne"ARRAY"){
+			if($inputs=~/,/){my @array=split(/,/,$inputs);$inputs=\@array;}
+			else{$inputs=[$inputs];}
+		}
+		$command->{$urls->{"inputUrl"}}=$inputs;
+		foreach my $input(@{$inputs}){if($input=~/^\$(.+)$/){$input=$1;}}
+		$command->{$urls->{"selectUrl"}}=createSelectFromInputs($url,$inputs);
+	}
 	if(exists($command->{$urls->{"selectUrl"}})){
 		my @temp=parseQuery($command->{$urls->{"selectUrl"}});
 		$command->{"rdfQuery"}=$temp[0];
-		$command->{"inputs"}=$temp[1];
+		$command->{"input"}=$temp[1];
 		$command->{"selectKeys"}=handleKeys($command->{$urls->{"selectUrl"}});
 		if(defined($temp[2])){$command->{"execvar"}=$temp[2];}
 	}
 	if(exists($command->{$urls->{"outputUrl"}})){
 		my $outputs=$command->{$urls->{"outputUrl"}};
+		if(ref($outputs)ne"ARRAY"){
+			if($outputs=~/,/){my @array=split(/,/,$outputs);$outputs=\@array;}
+			else{$outputs=[$outputs];}
+		}
+		$command->{$urls->{"outputUrl"}}=$outputs;
+		foreach my $output(@{$outputs}){if($output=~/^\$(.+)$/){$output=$1;}}
+		$command->{"output"}=$outputs;
+	}
+	if(exists($command->{$urls->{"outputsUrl"}})){
+		my $outputs=$command->{$urls->{"outputsUrl"}};
 		if(ref($outputs)ne"ARRAY"){
 			if($outputs=~/,/){my @array=split(/,/,$outputs);$outputs=\@array;}
 			else{$outputs=[$outputs];}
@@ -416,6 +468,15 @@ sub handleScript{
 		$command->{$name}=$code;
 		push(@{$command->{"script"}},$name);
 	}
+}
+############################## createSelectFromInputs ##############################
+sub createSelectFromInputs{
+	my $url=shift();
+	my @inputs=@{shift()};
+	my $keyinput=shift(@inputs);
+	my $select="\$$keyinput->https://moirai2.github.io/schema/daemon/execute->\$nodeid,\$nodeid->https://moirai2.github.io/schema/daemon/command->$url";
+	foreach my $input(@inputs){$select.=",\$nodeid->$url#$input=\$$input";}
+	return $select;
 }
 ############################## lookForNewCommands ##############################
 sub lookForNewCommands{
@@ -451,7 +512,7 @@ sub getExecuteJobs{
 	my $executes=shift();
 	my $url=$command->{$urls->{"commandUrl"}};
 	my $query=$command->{"rdfQuery"};
-	my $keys=$command->{"inputs"};
+	my $keys=$command->{"input"};
 	my $dbh=openDB($rdfdb);
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
@@ -573,7 +634,7 @@ sub bashCommand{
 		print OUT "EOF\n";
 	}
 	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
-	my $inputs=$command->{"inputs"};
+	my $inputs=$command->{"input"};
 	my @keys=(ref($inputs)eq"ARRAY")?@{$inputs}:keys(%{$inputs});
 	foreach my $key(@keys){if($key eq $execvar){next;}print OUT "\$execid\t$url#$key\t\$$key\n";}
 	print OUT "\$execid\t$url#tmpdir\t\$tmpdir\n";
@@ -586,9 +647,14 @@ sub bashCommand{
 	print OUT "########## database ##########\n";
 	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
 	print OUT "\$execid\t".$urls->{"timeEndedUrl"}."\t`date +%s`\n";
-	foreach my $output(@{$command->{"outputs"}}){print OUT "\$execid\t$url#$output\t\$$output\n";}
+	foreach my $output(@{$command->{"output"}}){print OUT "\$execid\t$url#$output\t\$$output\n";}
 	if(scalar(@{$command->{"insertKeys"}})>0){foreach my $row(@{$command->{"insertKeys"}}){print OUT join("\t",@{$row})."\n";}}
 	print OUT "EOF\n";
+	foreach my $output(@{$command->{"outputs"}}){
+		print OUT "for e in \${$output"."[\@]} ; do\n";
+		print OUT "echo \"\$execid\t$url#$output\t\$e\">>\$tmpdir/\$insertfile\n";
+		print OUT "done\n";
+	}
 	if(scalar(@{$command->{"deleteKeys"}})>0){
 		print OUT "cat<<EOF>>\$tmpdir/\$deletefile\n";
 		foreach my $row(@{$command->{"deleteKeys"}}){print OUT join("\t",@{$row})."\n";}
@@ -679,7 +745,7 @@ sub batchCommand{
 				$currentCommandUrl=getCurrentCommandUrl($keys);
 				printRowsWithData($datas,$keys);
 				print OUT "EOF\n";
-				print OUT "perl $cwd/daemon.pl -xrm 1 -d \$localdb -c \$tmpdir/ctrl\n";
+				print OUT "perl $cwd/moirai2.pl -xrm 1 -d \$localdb -c \$tmpdir/ctrl\n";
 			}elsif($key eq $urls->{"insertUrl"}){
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$value);
 				print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|perl $cwd/sqlite3.pl -qd \$localdb -f tsv insert\n";
@@ -1014,8 +1080,8 @@ sub handleKeys{
 			if($token=~/^\$(\w+)$/){
 				my $key=$1;
 				my $found=0;
-				foreach my $input(@{$command->{"inputs"}}){if($key eq $input){$found=1;}}
-				if($found==0){push(@{$command->{"outputs"}},$key);}
+				foreach my $input(@{$command->{"input"}}){if($key eq $input){$found=1;}}
+				if($found==0){push(@{$command->{"output"}},$key);}
 			}
 		}
 	}
