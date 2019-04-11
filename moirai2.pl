@@ -46,7 +46,8 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -s  Loop second (default='10sec').\n";
 	print "         -x  No STDERR and STDOUT logs (default='show').\n";
 	print "\n";
-	print "Updates: 2019/04/04  Changed program name from daemon.pl to moirai2.pl.\n";
+	print "Updates: 2019/04/08  'join' for handline multiple inputs at once.\n";
+	print "         2019/04/04  Changed program name from 'daemon.pl' to 'moirai2.pl'.\n";
 	print "         2019/04/03  Array output functionality and command line functionality added.\n";
 	print "         2019/03/04  Stores run options in the SQLite database.\n";
 	print "         2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
@@ -70,6 +71,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 ############################## MAIN ##############################
 my $urls={};
 $urls->{"selectUrl"}="https://moirai2.github.io/schema/daemon/select";
+$urls->{"joinUrl"}="https://moirai2.github.io/schema/daemon/join";
 $urls->{"insertUrl"}="https://moirai2.github.io/schema/daemon/insert";
 $urls->{"deleteUrl"}="https://moirai2.github.io/schema/daemon/delete";
 $urls->{"importUrl"}="https://moirai2.github.io/schema/daemon/import";
@@ -419,6 +421,7 @@ sub loadCommandFromURLSub{
 		$command->{$urls->{"inputUrl"}}=$inputs;
 		foreach my $input(@{$inputs}){if($input=~/^\$(.+)$/){$input=$1;}}
 		$command->{$urls->{"selectUrl"}}=createSelectFromInputs($url,$inputs);
+		print_table($command->{$urls->{"selectUrl"}});
 	}
 	if(exists($command->{$urls->{"selectUrl"}})){
 		my @temp=parseQuery($command->{$urls->{"selectUrl"}});
@@ -426,6 +429,17 @@ sub loadCommandFromURLSub{
 		$command->{"input"}=$temp[1];
 		$command->{"selectKeys"}=handleKeys($command->{$urls->{"selectUrl"}});
 		if(defined($temp[2])){$command->{"execvar"}=$temp[2];}
+	}
+	if(exists($command->{$urls->{"joinUrl"}})){
+		my $joins=$command->{$urls->{"joinUrl"}};
+		if(ref($joins)ne"ARRAY"){
+			if($joins=~/,/){my @array=split(/,/,$joins);$joins=\@array;}
+			else{$joins=[$joins];}
+		}
+		$command->{$urls->{"joinUrl"}}=$joins;
+		my $hash={};
+		foreach my $join(@{$joins}){if($join=~/^\$(.+)$/){$join=$1;};$hash->{$join}=1;}
+		$command->{"join"}=$hash;
 	}
 	if(exists($command->{$urls->{"outputUrl"}})){
 		my $outputs=$command->{$urls->{"outputUrl"}};
@@ -475,7 +489,7 @@ sub createSelectFromInputs{
 	my @inputs=@{shift()};
 	my $keyinput=shift(@inputs);
 	my $select="\$$keyinput->https://moirai2.github.io/schema/daemon/execute->\$nodeid,\$nodeid->https://moirai2.github.io/schema/daemon/command->$url";
-	foreach my $input(@inputs){$select.=",\$nodeid->$url#$input=\$$input";}
+	foreach my $input(@inputs){$select.=",\$nodeid->$url#$input->\$$input";}
 	return $select;
 }
 ############################## lookForNewCommands ##############################
@@ -511,6 +525,7 @@ sub getExecuteJobs{
 	my $command=shift();
 	my $executes=shift();
 	my $url=$command->{$urls->{"commandUrl"}};
+	my $join=$command->{"join"};
 	my $query=$command->{"rdfQuery"};
 	my $keys=$command->{"input"};
 	my $dbh=openDB($rdfdb);
@@ -519,15 +534,47 @@ sub getExecuteJobs{
 	my $rows=$sth->fetchall_arrayref();
 	$dbh->disconnect;
 	my $count=0;
-	foreach my $row(@{$rows}){
-		my $variables={};
-		for(my $i=0;$i<scalar(@{$row});$i++){
-			my $value=$row->[$i];
-			my $key=$keys->[$i];
-			$variables->{$key}=$value;
+	if(defined($join)){
+		my $temp={};
+		foreach my $row(@{$rows}){
+			my $label="|";
+			for(my $i=0;$i<scalar(@{$row});$i++){
+				my $key=$keys->[$i];
+				my $value=$row->[$i];
+				if(!exists($join->{$key})){$label.="$value|";}
+			}
+			if(!exists($temp->{$label})){
+				$temp->{$label}=[];
+				for(my $i=0;$i<scalar(@{$row});$i++){
+					my $key=$keys->[$i];
+					my $value=$row->[$i];
+					if(exists($join->{$key})){$temp->{$label}->[$i]=[];}
+					else{$temp->{$label}->[$i]=$value;}
+				}
+			}
+			for(my $i=0;$i<scalar(@{$row});$i++){
+				my $key=$keys->[$i];
+				my $value=$row->[$i];
+				if(exists($join->{$key})){push(@{$temp->{$label}->[$i]},$value);}
+			}
 		}
-		push(@{$executes->{$url}},$variables);
-		$count++;
+		foreach my $value(values(%{$temp})){
+			my $variables={};
+			for(my $i=0;$i<scalar(@{$value});$i++){$variables->{$keys->[$i]}=$value->[$i];}
+			push(@{$executes->{$url}},$variables);
+			$count++;
+		}
+	}else{
+		foreach my $row(@{$rows}){
+			my $variables={};
+			for(my $i=0;$i<scalar(@{$row});$i++){
+				my $key=$keys->[$i];
+				my $value=$row->[$i];
+				$variables->{$key}=$value;
+			}
+			push(@{$executes->{$url}},$variables);
+			$count++;
+		}
 	}
 	return $count;
 }
@@ -552,12 +599,51 @@ sub updateExecuteTicket{
 		if(scalar(@tokens)<3){next;}
 		if($tokens[1] eq $urls->{"executeUrl"}&&$tokens[2] eq $execvar){
 			my @outs=();
+			my @keys=sort{$b cmp $a} keys(%{$variables});
 			for(my $i=0;$i<3;$i++){
-				my $line=$tokens[$i];
-				foreach my $key (sort{$b cmp $a} keys(%{$variables})){my $value=$variables->{$key};$line=~s/\$$key/$value/g;}
-				push(@outs,$line);
+				my @arrays=($tokens[$i]);
+				foreach my $key(@keys){
+					foreach my $token(@arrays){
+						if($token=~/\$$key/){
+							my $value=$variables->{$key};
+							if(ref($value) eq "ARRAY"){
+								my @temps=();
+								foreach my $val(@{$value}){
+									my $line=$token;
+									$line=~s/\$$key/$val/g;
+									push(@temps,$line);
+								}
+								@arrays=@temps;
+							}else{
+								$token=~s/\$$key/$value/g;
+							}
+						}
+					}
+				}
+				push(@outs,\@arrays);
 			}
-			push(@{$deletes},join("\t",@outs));
+			my @lines=("");
+			for(my $i=0;$i<scalar(@outs);$i++){
+				my $out=$outs[$i];
+				if(ref($out) eq "ARRAY"){
+					my @temps=();
+					for(my $j=0;$j<scalar(@lines);$j++){
+						foreach my $o(@{$out}){
+							my $line=$lines[$j];
+							if($i>0){$line.="\t";}
+							$line.=$o;
+							push(@temps,$line);
+						}
+					}
+					@lines=@temps;
+				}else{
+					foreach my $line(@lines){
+						if($i>0){$line.="\t";}
+						$line.=$out;
+					}
+				}
+			}
+			push(@{$deletes},@lines);
 		}
 	}
 }
@@ -622,7 +708,8 @@ sub bashCommand{
 		if($key eq $execvar){$break=1;}
 		if($break){next;}
 		my $value=$variables->{$key};
-		print OUT "$key=\"$value\"\n";
+		if(ref($value)eq"ARRAY"){print OUT "$key=(\"".join("\" \"",@{$value})."\")\n";}
+		else{print OUT "$key=\"$value\"\n";}
 	}
 	print OUT "########## initialize ##########\n";
 	print OUT "cd \$cwd\n";
