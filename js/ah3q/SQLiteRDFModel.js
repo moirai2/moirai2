@@ -96,7 +96,7 @@ SQLiteRDFModel.prototype.jsonEscape=function(string){if(string==null)return;retu
 SQLiteRDFModel.prototype.queryRDF=function(json,method){
 	var self=this;
 	if(!("db" in json))json.db=this.db;
-	var post=$.ajax({type:'POST',dataType:'json',url:"query.php",data:json}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
+	var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=query",data:json}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.success(function(data){if(method!=null)method(data);});
 }
 SQLiteRDFModel.prototype.selectRDF=function(json,method){
@@ -104,72 +104,72 @@ SQLiteRDFModel.prototype.selectRDF=function(json,method){
 	if(typeof json!=='object')json={subject:json};
 	if(!("db" in json))json.db=this.db;
 	if(!("recursion" in json))json.recursion=0;
-	var post=$.ajax({type:'POST',dataType:'json',url:"select.php",data:json}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
+	var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=select",data:json}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.success(function(data){if(method!=null)method(data);});
 }
 SQLiteRDFModel.prototype.recordText=function(text,method){
 	var self=this;
 	var text=this.jsonEscape(text);
 	var json="{\""+this.address+"\":{\""+this.textUrl+"\":{\""+text+"\":{\""+this.timeStampUrl+"\":"+new Date().getTime()+"}}}}";
-	var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.recordPath=function(path,method){
 	var self=this;var json;
 	if(Array.isArray(path)){var json="{\""+this.address+"\":{\""+this.fileUrl+"\":{";var i=0;path.forEach(function(p){if(i>0)json+=",";json+="\""+self.jsonEscape(p)+"\":{\""+self.timeStampUrl+"\":"+new Date().getTime()+"}";i++;});json+="}}}";}else{json="{\""+this.address+"\":{\""+this.fileUrl+"\":{\""+this.jsonEscape(path)+"\":{\""+this.timeStampUrl+"\":"+new Date().getTime()+"}}}}";}
-	var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.recordFileFormat=function(filepath,fileformat,method){
 	var self=this;
 	var text=this.jsonEscape(text);
 	var json="{\""+filepath+"\":{\""+this.fileFormatUrl+"\":\""+fileformat+"\"}}";
-	var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.recordMD5=function(file,method){
 	var self=this;
-	var post=$.ajax({type:'POST',dataType:'text',url:"md5.php",data:{'file':file}}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
-	post.success(function(md5){var json="{\""+file+"\":{\""+self.md5Url+"\":\""+md5+"\"}}";var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(data){method(data)});});
+	var post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=md5",data:{'file':file}}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
+	post.success(function(md5){var json="{\""+file+"\":{\""+self.md5Url+"\":\""+md5+"\"}}";var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(data){method(data)});});
 }
 SQLiteRDFModel.prototype.recordLink=function(url,method){
 	var self=this;
 	var url=this.jsonEscape(url);
 	var json="{\""+this.address+"\":{\""+this.linkUrl+"\":{\""+url+"\":{\""+this.timeStampUrl+"\":"+new Date().getTime()+"}}}}";
-	var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.recordXML=function(xml,method){
 	var self=this;
-	var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':xml}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':xml}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.deleteRDF=function(json,method){
 	var self=this;
 	var string=this.jsonEscape(JSON.stringify(json));
-	var post=$.ajax({type:'POST',url:"delete.php",data:{'db':self.db,'data':string}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=delete",data:{'db':self.db,'data':string}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.insertRDF=function(json,method){
 	var self=this;
 	var string=this.jsonEscape(JSON.stringify(json));
-	var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':string}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':string}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.updateRDF=function(json,method){
 	var self=this;
 	var string=this.jsonEscape(JSON.stringify(json));
-	var post=$.ajax({type:'POST',url:"update.php",data:{'db':self.db,'data':string}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=update",data:{'db':self.db,'data':string}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.newNode=function(method){
 	var self=this;
-	var post=$.ajax({type:'POST',url:"newnode.php",data:{'db':self.db}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=newnode",data:{'db':self.db}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
 SQLiteRDFModel.prototype.recordFileContent=function(path,method){
 	var self=this;
 	if(!("db" in json))json.db=this.db;
 	if(!("root" in json))json.root=this.address;
-	jQuery.get(path,function(content){var json="{\""+path+"\":{\""+self.fileContentUrl+"\":"+JSON.stringify(content)+"}}";var post=$.ajax({type:'POST',url:"insert.php",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(data){method(data)});})
+	jQuery.get(path,function(content){var json="{\""+path+"\":{\""+self.fileContentUrl+"\":"+JSON.stringify(content)+"}}";var post=$.ajax({type:'POST',url:"moirai2.php?command=insert",data:{'db':self.db,'data':json}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(data){method(data)});})
 }

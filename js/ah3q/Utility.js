@@ -3,9 +3,9 @@ function Utility(){
 	this.colors=colors=["#FE0000","#00FF01","#0000FE","#FFFF01","#FF00FE","#01FFFF","#800000","#008001","#010080","#818001","#81007F","#008081","#C0C0C0","#808080","#9A99FF","#993365","#FFFFCD","#CDFFFF","#660066","#FE8081","#0066CB","#CCCCFF","#0100D0","#FF00FE","#FFFF01","#01FFFF","#81007F","#800000","#008081","#0000FE","#00CCFF","#CDFFFF","#CDFFCC","#FEFF99","#99CDFF","#FF99CB","#CC99FE","#FFCC9A","#3366FF","#33CBCC","#99CC01","#FFCC00","#FE9900","#FF6600","#66669A","#969696","#003466","#339967","#013300","#333301","#993400","#993365","#343399","#333333","#000000","#FFFFFF"];
 }
 Utility.prototype.isObject=function(val){if(val===null){return false;}else return ((typeof val==='function')||(typeof val==='object'));}
-Utility.prototype.readUrl=function(url,method){var self=this;$.post("proxy.php",{url:url},function(data){method(data);});}
-Utility.prototype.readJson=function(url,method){var self=this;$.post("proxy.php",{url:url},function(data){method(data);},'json');}
-Utility.prototype.readXML=function(url,method){var self=this;$.post("proxy.php",{url:url},function(data){method(data);},'xml');}
+Utility.prototype.readUrl=function(url,method){var self=this;$.post("moirai2.php?command=proxy",{url:url},function(data){method(data);});}
+Utility.prototype.readJson=function(url,method){var self=this;$.post("moirai2.php?command=proxy",{url:url},function(data){method(data);},'json');}
+Utility.prototype.readXML=function(url,method){var self=this;$.post("moirai2.php?command=proxy",{url:url},function(data){method(data);},'xml');}
 Utility.prototype.isImageFile=function(path){return path.endsWith(".jpg")||path.endsWith(".jpeg")||path.endsWith(".png")||path.endsWith(".gif");}
 Utility.prototype.directory=function(path){return path.substring(0,path.lastIndexOf('\/'));}
 Utility.prototype.filename=function(path){return path.substring(path.lastIndexOf('\/')+1);}
@@ -35,7 +35,7 @@ Utility.prototype.formatDate=function(date,format){
 	return format;
 }
 //######################################## DIRECTORY ########################################
-Utility.prototype.listDirectory=function(hash,method){var post=$.ajax({type:'POST',dataType:'json',url:"ls.php",data:hash});post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});post.success(function(data){method(data);});return this;}
+Utility.prototype.listDirectory=function(hash,method){var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=ls",data:hash});post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});post.success(function(data){method(data);});return this;}
 //######################################## EXPRESSION ########################################
 Utility.prototype.handleExpression=function(expression){var hash={};expression=expression.replace(new RegExp("\\\\\\$","g"),"");var exp1=new RegExp("\\$([\\w_]+)");while((found=expression.match(exp1))!=null){var key=found[1];expression=expression.replace(exp1,"");hash[key]=1;}var exp2=new RegExp("\\$\{([~}]+)\}");while((found=expression.match(exp2))!=null){var key=found[1];hash[key]=1;expression=expression.replace(exp2,"");}return Object.keys(hash);}
 //######################################## FILE ########################################
@@ -61,10 +61,10 @@ Utility.prototype.textToRDF=function(text){
 }
 Utility.prototype.uploadXML=function(xml,filename,method){var self=this;var file=new Blob([xml],{type:'text/xml'});file.name=filename;return this.uploadFile(file,method);}
 Utility.prototype.uploadText=function(text,method){var self=this;var file=new Blob([text],{type:'text/plain'});file.name="text.txt";return this.uploadFile(file,method);}
-Utility.prototype.uploadFile=function(file,method){var self=this;var fd=new FormData();fd.append("file",file,file.name);var post=$.ajax({type:'POST',contentType:false,processData:false,url:"upload.php",data:fd,dataType:"text"}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});if(method!=null)post.success(function(path){method(path);});}
-Utility.prototype.downloadFile=function(url,method){var self=this;var post=$.ajax({type:'POST',url:"download.php",data:(typeof url==='object')?url:{'url':url}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
-Utility.prototype.fileExists=function(path,method){var self=this;var post=$.ajax({type:'POST',url:"file_exists.php",data:{'path':path}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
-Utility.prototype.writeFile=function(filepath,content,method){var self=this;var post=$.ajax({type:'POST',url:"write.php",data:{"filepath":filepath,"content":content}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
+Utility.prototype.uploadFile=function(file,method){var self=this;var fd=new FormData();fd.append("file",file,file.name);var post=$.ajax({type:'POST',contentType:false,processData:false,url:"moirai2.php?command=upload",data:fd,dataType:"text"}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});if(method!=null)post.success(function(path){method(path);});}
+Utility.prototype.downloadFile=function(url,method){var self=this;var post=$.ajax({type:'POST',url:"moirai2.php?command=download",data:(typeof url==='object')?url:{'url':url}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
+Utility.prototype.fileExists=function(path,method){var self=this;var post=$.ajax({type:'POST',url:"moirai2.php?command=file_exists",data:{'path':path}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
+Utility.prototype.writeFile=function(filepath,content,method){var self=this;var post=$.ajax({type:'POST',url:"moirai2.php?command=write",data:{"filepath":filepath,"content":content}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
 //######################################## HASH ########################################
 Utility.prototype.getHash=function(hash,key){if(key in hash)return hash[key];var rows=Object.keys(hash);var temp={};for(var i=0;i<rows.length;i++)if(key in hash[rows[i]])temp[rows[i]]=hash[rows[i]][key];return temp;}
 Utility.prototype.putHash=function(hash,key,value){if(Array.isArray(key)){var temp=hash;for(var i=0;i<key.length-1;i++){if(temp[key[i]]==null)temp[key[i]]={};temp=temp[key[i]];}temp[key[key.length-1]]=value;}else hash[key]=value;return hash;}

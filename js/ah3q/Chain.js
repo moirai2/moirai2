@@ -228,7 +228,7 @@ Chain.prototype.domToData=function(keyWord){var self=this;this.jobs.push(functio
 Chain.prototype.listDirectory=function(directory){var self=this;if(!self.utility.isObject(directory))directory={"directory":directory};this.put(directory);this.jobs.push(function(){self.temporaryForTask=[];self.task=self.data.length;for(var i=0;i<self.data.length;i++)self.listDirectorySub(i,self.data[i]);});this.expand();return this;}
 Chain.prototype.listDirectorySub=function(index,json){var self=this;this.utility.listDirectory(json,function(data){self.temporaryForTask[index]=data;self.next();});}
 Chain.prototype.fileExists=function(path){var self=this;this.put("path",path);this.jobs.push(function(){self.temporaryForTask=[];self.task=self.data.length;for(var i=0;i<self.data.length;i++)self.fileExistsSub(i,self.data[i]);});return this;}
-Chain.prototype.fileExistsSub=function(index,json){var self=this;var post=$.ajax({type:'POST',dataType:'text',url:"file_exists.php",data:json});post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});post.success(function(data){self.temporaryForTask[index]=(data=="true");self.next();});}
+Chain.prototype.fileExistsSub=function(index,json){var self=this;var post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=file_exists",data:json});post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});post.success(function(data){self.temporaryForTask[index]=(data=="true");self.next();});}
 //######################################## ICON (Desktop) ########################################
 Chain.prototype.addChild=function(){var self=this;this.jobs.push(function(){for(var i=0;i<self.temporary.length;i++)self.desktopView.addChild(self.temporary[i]);self.start();});return this;}
 Chain.prototype.removeChild=function(){var self=this;this.jobs.push(function(){for(var i=0;i<self.temporary.length;i++)self.desktopView.removeChild(self.temporary[i]);self.start();});return this;}
@@ -417,10 +417,6 @@ Chain.prototype.ncbiELinkSub=function(json,index){
 //######################################## PARAMETER ########################################
 Chain.prototype.setRadius=function(radius){var self=this;this.jobs.push(function(){self.radius=radius;self.start();});return this;}
 Chain.prototype.setSize=function(width,height){var self=this;this.jobs.push(function(){self.width=width;self.height=height;self.start();});return this;}
-//######################################## R ########################################
-Chain.prototype.rInstall=function(package){mirror="http://cran.rstudio.com/";code="install.packages(\""+package+"\", repos=\""+mirror+"\")\npackageVersion(\""+package+"\")";return this.rExecute(code);}
-Chain.prototype.rExecute=function(code){return this.rPost({code:code});}
-Chain.prototype.rPost=function(json){var self=this;this.jobs.push(function(){var post=$.ajax({type:'POST',dataType:'text',url:"r.php",data:json});post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});post.success(function(data){self.temporary=[data];self.start();});});return this;}
 //######################################## RDF ########################################
 Chain.prototype.readRDF=function(template){var self=this;if(template!=null)this.assemble(template);this.jobs.push(function(){if(Array.isArray(self.temporary)){self.task=self.temporary.length;self.temporaryForTask=[];for(var i=0;i<self.temporary.length;i++){self.readRDFSub(i);}}else{self.utility.readRDF(self.temporary,function(data){self.temporary=data;self.start();})}});return this;}
 Chain.prototype.readRDFSub=function(index){var self=this;self.utility.readRDF(self.temporary[index],function(data){self.temporaryForTask[index]=data;self.next("rdf");});}

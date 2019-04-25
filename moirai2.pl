@@ -17,8 +17,8 @@ $program_directory=substr($program_directory,0,-1);
 my $program_path=Cwd::abs_path($program_directory)."/$program_name";
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_c $opt_d $opt_h $opt_H $opt_m $opt_q $opt_Q $opt_r $opt_s $opt_x);
-getopts('c:d:hHm:qQ:rs:v:x');
+use vars qw($opt_c $opt_d $opt_h $opt_H $opt_l $opt_m $opt_q $opt_Q $opt_r $opt_s $opt_S $opt_x);
+getopts('c:d:hHl:m:qQ:rs:S:v:x');
 ############################## HELP ##############################
 if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
@@ -45,6 +45,16 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -r  Run only once mode (default='loop').\n";
 	print "         -s  Loop second (default='10sec').\n";
 	print "         -x  No STDERR and STDOUT logs (default='show').\n";
+	print "\n";
+	print "Usage: $program_name auto < LIST\n";
+	print "       LIST  List of paths to RDF databases\n";
+	print "Options: -d  Path to a directory to search and create a list of SQLite databases (default='.').\n";
+	print "         -l  Log directory (default='log').\n";
+	print "         -m  Max number of jobs to throw (default='5').\n";
+	print "         -q  Use qsub for throwing jobs(default='bash').\n";
+	print "         -r  Recursive search through a directory (default='0').\n";
+	print "         -s  Loop second (default='10sec').\n";
+	print "         -S  Load list of databases from STDIN instead from a directory.\n";
 	print "\n";
 	print "Updates: 2019/04/08  'inputs' to pass inputs as variable array.\n";
 	print "         2019/04/04  Changed program name from 'daemon.pl' to 'moirai2.pl'.\n";
@@ -210,7 +220,7 @@ sub commandProcess{
 	my $url=shift(@arguments);
 	my $command=loadCommandFromURL($url);
 	$commands->{$url}=$command;
-	my @inputs=@{$command->{"inputUrl"}};
+	my @inputs=@{$command->{$urls->{"inputUrl"}}};
 	my $key=$arguments[0];
 	my $dbh=openDB($rdfdb);
 	my $nodeid=newNode($dbh);
@@ -1656,3 +1666,107 @@ sub getTime{
 }
 ############################## getNumberOfJobsRunning ##############################
 sub getNumberOfJobsRunning{my @files=getFiles("$ctrldir/bash");return scalar(@files);}
+############################## mkdirs ##############################
+# create directories recursively if necessary - 2007/01/24
+# mkdirs( @directories );
+sub mkdirs {
+	my @directories = @_;
+	foreach my $directory ( @directories ) {
+		if( -d $directory ) { next; } # skip... since it already exists...
+		my @tokens = split( /[\/\\]/, $directory );
+		if( ( $tokens[ 0 ] eq "" ) && ( scalar( @tokens ) > 1 ) ) { # This happend when handling absolute path
+			shift( @tokens ); # remove empty string
+			my $token = shift( @tokens ); # get next string
+			unshift( @tokens, "/$token" ); # push in
+		}
+		my $string = "";
+		foreach my $token ( @tokens ) { # go through directory
+			$string .= ( ( $string eq "" ) ? "" : "/" ) . $token;
+			if( -d $string ) { next; } # directory already exists
+			if( ! mkdir( $string ) ) { return 0; } # couldn't create directory
+		}
+	}
+	return 1; # was able to create directory
+}
+############################## absolute_path ##############################
+# Return absolute path - 2012/04/07
+# This returns absolute path of a file
+# Takes care of symbolic link problem where Cwd::abs_path returns the actual file instead of fullpath
+# $path absolute_path( $path );
+sub absolute_path {
+	my $path      = shift();
+	my $directory = dirname( $path );
+	my $filename  = basename( $path );
+	return Cwd::abs_path( $directory ) . "/" . $filename;
+}
+############################## list_files ##############################
+# list files under a directory - 2018/02/01
+# Fixed recursion problem - 2018/02/01
+# list_files($file_suffix,$recursive_search,@input_directories);
+sub list_files{
+	my @input_directories=@_;
+	my $file_suffix=shift(@input_directories);
+	my $recursive_search=shift(@input_directories);
+	my @input_files=();
+	foreach my $input_directory (@input_directories){
+		$input_directory=absolute_path($input_directory);
+		if(-f $input_directory){push(@input_files,$input_directory);next;}# It's a file, so process file
+		elsif(-l $input_directory){push(@input_files,$input_directory);next;}# It's a file, so process file
+		opendir(DIR,$input_directory);
+		foreach my $file(readdir(DIR)){# go through input directory
+			if($file eq "."){next;}
+			if($file eq "..") {next;}
+			if($file eq ""){next;}
+			$file="$input_directory/$file";
+			if(-d $file){# start recursive search
+				if($recursive_search!=0){push(@input_files,list_files($file_suffix,$recursive_search-1,$file));}# do recursive search
+				next;# skip directory element
+			}elsif($file!~/$file_suffix$/){next;}
+			push(@input_files,$file);
+		}
+		closedir(DIR);
+	}
+	return @input_files;
+}
+############################## autodaemon ##############################
+sub autodaemon{
+	my $sleeptime=defined($opt_s)?$opt_s:10;
+	my $recursive_search=defined($opt_r)?$opt_r:0;
+	my $logdir=defined($opt_l)?$opt_l:"log";
+	my $databases={};
+	my $directory=defined($opt_d)?$opt_d:".";
+	my $md5cmd=(`which md5`)?"md5":"md5sum";
+	if(defined($opt_S)){while(<STDIN>){chomp;s/\r//g;if(-e $_){$databases->{$_}=0;}}}
+	while(1){
+		if(!defined($opt_S)){foreach my $file(list_files("sqlite3",$recursive_search,$directory)){if(!exists($databases->{$file})){$databases->{$file}=0;}}}
+		while(my($database,$timestamp)=each(%{$databases})){
+			my $basename=basename($database);
+			if(!(-e "$logdir/$basename")){mkdirs("$logdir/$basename");}
+			my @stats=stat($database);
+			my $modtime=$stats[9];
+			if(-e "$logdir/$basename.lock" && -e "$logdir/$basename.unlock"){
+				my $md4=`cat $logdir/$basename.unlock`;
+				my $md5=`$md5cmd<$database`;
+				unlink("$logdir/$basename.lock");
+				unlink("$logdir/$basename.unlock");
+				if($md4 ne $md5){$timestamp=0;}
+				else{$databases->{$database}=$modtime;next;}
+			}
+			if($modtime>$timestamp){
+				if(-e "$logdir/$basename.lock"){next;}
+				my $command="perl daemon.pl -r -d $database";
+				if(defined($opt_q)){$command.=" -q"}
+				if(defined($opt_m)){$command.=" -m $opt_m"}
+				my $time=time();
+				my $datetime=getDate("",$time).getTime("",$time);
+				mkdirs("$logdir/$basename");
+				$command.=">$logdir/$basename/$datetime.stdout";
+				$command.=" 2>$logdir/$basename/$datetime.stderr";
+				$command="$md5cmd<$database>$logdir/$basename.lock;$command;$md5cmd<$database>$logdir/$basename.unlock";
+				system($command);
+				$databases->{$database}=$modtime;
+			}
+		}
+		sleep($sleeptime);
+	}
+}
