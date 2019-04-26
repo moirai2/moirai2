@@ -70,7 +70,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         2018/11/27  Separating loading, selection, and execution and added 'maxjob'.\n";
 	print "         2018/11/19  Improving database updates by speed.\n";
 	print "         2018/11/17  Making daemon faster by collecting individual database accesses.\n";
-	print "         2018/11/16  Making updating/importing database faster by using improved sqlite3.pl.\n";
+	print "         2018/11/16  Making updating/importing database faster by using improved rdf.pl.\n";
 	print "         2018/11/09  Added import function where user udpate databse through specified file(s).\n";
 	print "         2018/09/14  Changed to a ticket system.\n";
 	print "         2018/02/06  Added qsub functionality.\n";
@@ -386,7 +386,7 @@ sub controlDelete{
 	my $rdfdb=shift();
 	my @files=getFiles("$ctrldir/delete");
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl sqlite3.pl -d $rdfdb -f tsv delete";
+	my $command="cat ".join(" ",@files)."|perl rdf.pl -d $rdfdb -f tsv delete";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -398,7 +398,7 @@ sub controlInsert{
 	my $rdfdb=shift();
 	my @files=getFiles("$ctrldir/insert");
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl sqlite3.pl -d $rdfdb -f tsv insert";
+	my $command="cat ".join(" ",@files)."|perl rdf.pl -d $rdfdb -f tsv insert";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -818,7 +818,7 @@ sub batchCommand{
 		foreach my $code(@{$command->{$name}}){print OUT "$code\n";}
 		print OUT "EOF\n";
 	}
-	print OUT "cat<<EOF|perl $cwd/sqlite3.pl -qd \$localdb -f tsv import\n";
+	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
 	printRowsWithData($datas,$command->{"selectKeys"});
 	print OUT "\$execid\t".$urls->{"timeStartedUrl"}."\t`date +%s`\n";
 	print OUT "EOF\n";
@@ -842,12 +842,12 @@ sub batchCommand{
 				foreach my $val(@array){
 					my $name=substr($val,1);
 					for(my $i=0;$i<scalar(@{$datas});$i++){
-						print OUT "$name$i=`perl $cwd/sqlite3.pl -d \$localdb newnode`\n";
+						print OUT "$name$i=`perl $cwd/rdf.pl -d \$localdb newnode`\n";
 						$datas->[$i]->{"\$$name"}="\$$name$i";
 					}
 				}
 			}elsif($key eq $urls->{"processUrl"}){
-				print OUT "cat<<EOF|perl $cwd/sqlite3.pl -qd \$localdb -f tsv import\n";
+				print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
 				my $keys=handleKeys($value);
 				$currentCommandUrl=getCurrentCommandUrl($keys);
 				printRowsWithData($datas,$keys);
@@ -855,15 +855,15 @@ sub batchCommand{
 				print OUT "perl $cwd/moirai2.pl -xrm 1 -d \$localdb -c \$tmpdir/ctrl\n";
 			}elsif($key eq $urls->{"insertUrl"}){
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$value);
-				print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|perl $cwd/sqlite3.pl -qd \$localdb -f tsv insert\n";
+				print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|perl $cwd/rdf.pl -qd \$localdb -f tsv insert\n";
 			}elsif($key eq $urls->{"deleteUrl"}){
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$value);
-				print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|perl $cwd/sqlite3.pl -qd \$localdb -f tsv delete\n";
+				print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|perl $cwd/rdf.pl -qd \$localdb -f tsv delete\n";
 			}elsif($key eq $urls->{"mkdirUrl"}){
 				my ($template,$keys)=constructMkdirTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
-				else{print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|bash\n";}
+				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
 			}elsif($key eq $urls->{"tmpfileUrl"}){
 				my @array=(ref($value)eq"ARRAY")?@{$value}:($value);
 				foreach my $val(@array){
@@ -878,38 +878,38 @@ sub batchCommand{
 				my ($template,$keys)=constructConcatTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
-				else{print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|bash\n";}
+				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
 			}elsif($key eq $urls->{"toInsertUrl"}){
 				my ($template,$keys)=constructToInsertTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
-				else{print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|bash>>\$tmpdir/\$insertfile\n";}
+				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash>>\$tmpdir/\$insertfile\n";}
 			}elsif($key eq $urls->{"mvUrl"}){
 				my ($template,$keys)=constructMvTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
-				else{print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|perl $cwd/sqlite3.pl -qd \$localdb -f tsv rename\n";}
+				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|perl $cwd/rdf.pl -qd \$localdb -f tsv rename\n";}
 			}elsif($key eq $urls->{"importUrl"}){
 				my ($template,$keys)=constructImportTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
-				else{print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|bash\n";}
+				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
 			}elsif($key eq $urls->{"rmdirUrl"}){
 				my ($template,$keys)=constructRmdirTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
-				else{print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|bash\n";}
+				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
 			}elsif($key eq $urls->{"rmUrl"}){
 				my ($template,$keys)=constructRmTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
-				else{print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f '$format' query $query|bash\n";}
+				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
 			}
 		}
 	}
-	print OUT "perl \$cwd/sqlite3.pl -qd \$localdb -f 'rmdir \$tmpdir > /dev/null 2>&1' query '\$nodeid->$currentCommandUrl#tmpdir->\$tmpdir'|bash\n";
+	print OUT "perl \$cwd/rdf.pl -qd \$localdb -f 'rmdir \$tmpdir > /dev/null 2>&1' query '\$nodeid->$currentCommandUrl#tmpdir->\$tmpdir'|bash\n";
 	print OUT "########## database ##########\n";
-	print OUT "cat<<EOF|perl $cwd/sqlite3.pl -qd \$localdb -f tsv import\n";
+	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
 	print OUT "\$execid\t".$urls->{"timeEndedUrl"}."\t`date +%s`\n";
 	print OUT "EOF\n";
 	if(scalar(@{$command->{"insertKeys"}})>0){
@@ -918,7 +918,7 @@ sub batchCommand{
 			if(scalar(@{$row})!=3){next;}
 			push(@queries,"'".join("->",@{$row})."'");
 		}
-		print OUT "perl \$cwd/sqlite3.pl -qd \$localdb query ".join(" ",@queries).">>\$tmpdir/\$insertfile\n";
+		print OUT "perl \$cwd/rdf.pl -qd \$localdb query ".join(" ",@queries).">>\$tmpdir/\$insertfile\n";
 	}
 	if(scalar(@{$command->{"deleteKeys"}})>0){
 		my @queries=();
@@ -926,15 +926,15 @@ sub batchCommand{
 			if(scalar(@{$row})!=3){next;}
 			push(@queries,"'".join("->",@{$row})."'");
 		}
-		print OUT "perl \$cwd/sqlite3.pl -qd \$localdb query ".join(",",@queries).">>\$tmpdir/\$deletefile\n";
+		print OUT "perl \$cwd/rdf.pl -qd \$localdb query ".join(",",@queries).">>\$tmpdir/\$deletefile\n";
 	}
 	print OUT "if [ -s \$tmpdir/\$stdoutfile ];then\n";
-	print OUT "cat<<EOF|perl $cwd/sqlite3.pl -qd \$localdb -f tsv import\n";
+	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
 	print OUT "\$execid\t".$urls->{"stdoutUrl"}."\t\$tmpdir/\$stdoutfile\n";
 	print OUT "EOF\n";
 	print OUT "fi\n";
 	print OUT "if [ -s \$tmpdir/\$stderrfile ];then\n";
-	print OUT "cat<<EOF|perl $cwd/sqlite3.pl -qd \$localdb -f tsv import\n";
+	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
 	print OUT "\$execid\t".$urls->{"stderrUrl"}."\t\$tmpdir/\$stderrfile\n";
 	print OUT "EOF\n";
 	print OUT "fi\n";
