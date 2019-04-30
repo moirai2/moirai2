@@ -117,12 +117,7 @@ if($command=="insert"){
 //############################## proxy.php ##############################
 }else if($command == "proxy"){
 	$url=$_POST["url"];
-	if(startsWith($url,"http://osc-internal.gsc.riken.jp/~ah3q")){
-	  $context=stream_context_create(array('http'=>array('header'=>"Authorization: Basic ".base64_encode("ah3q:has_q3ha"))));
-	  echo file_get_contents(htmlspecialchars($url),false,$context);
-	}else{
-	  echo file_get_contents($url);
-	}
+	echo file_get_contents($url);
 //############################## upload.php ##############################
 }else if($command == "upload"){
 	$uploaddir="uploaded";
@@ -222,32 +217,9 @@ function list_file($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
 	}
 	return $array;
 }
-	//############################## printArray ##############################
-	function printArray($array){
-		$i=0;
-		echo "[";
-		foreach($array as $hash){
-			$j=0;
-			if($i>0)echo ",";
-			echo "{";
-			foreach(array_keys(get_object_vars($hash)) as $key){
-				if($j>0)echo ",";
-				$value=escapeReturnTab($hash->{$key});
-				if(is_numeric($value))echo "\"$key\":$value";
-				else echo "\"$key\":\"$value\"";
-				$j++;
-			}
-			echo "}";
-			$i++;
-		}
-		echo "]";
-	}
-	function escapeReturnTab($string){return str_replace("\'","\\\'",str_replace("\"","\\\"",str_replace("\r","\\r",str_replace("\t","\\t",str_replace("\n","\\n",str_replace("\\","\\\\",$string))))));}
-//############################## startsWith ##############################
-function startsWith($haystack,$needle){return (strpos($haystack,$needle)===0);}
-//############################## insertEdge ##############################
+//############################## filterDatabasePath ##############################
 function filterDatabasePath($db){return preg_replace("/[^a-zA-Z0-9\.\_]+/","",$db);}
-//############################## tempjson ##############################
+//############################## tmpjson ##############################
 function tmpjson($data){
 	if($data==null)return;
 	$filepath=tempnam("/tmp","");

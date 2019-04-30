@@ -25,12 +25,15 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "Program: Executes MOIRAI2 command(s) using a local RDF SQLITE3 database.\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
-	print "Usage: $program_name -d DB URL INPUT\n";
+	print "Usage: $program_name -d DB URL [INPUT/OUTPUT ..]\n";
 	print "\n";
-	print "             Executes a MOIRAI2 command with user specified inputs/parameters\n";
-	print "         DB  SQLite3 database in RDF format.\n";
-	print "        URL  Command URL or path (https://moirai2.github.io).\n";
-	print "      INPUT  inputs/arguments of a MOIRAI2 command.\n";
+	print "             Executes a MOIRAI2 command with user specified inputs/outputs\n";
+	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
+	print "        URL  Command URL or path (command URLs from https://moirai2.github.io/).\n";
+	print "      INPUT  inputs of a MOIRAI2 command.\n";
+	print "     OUTPUT  outputs of a MOIRAI2 command.\n";
+	print "\n";
+	print "         -q  Use qsub for throwing jobs(default='bash').\n";
 	print "\n";
 	print "Usage: $program_name -d DB daemon\n";
 	print "\n";
@@ -38,7 +41,6 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         DB  SQLite3 database in RDF format.\n";
 	print "\n";
 	print "Options: -c  Path to control directory (default='./ctrl').\n";
-	print "         -d  Database file (always required).\n";
 	print "         -m  Max number of jobs to throw (default='5').\n";
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
 	print "         -Q  Export specified bin directory when throwing with qsub(default='\$HOME/bin').\n";
@@ -47,7 +49,9 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -x  No STDERR and STDOUT logs (default='show').\n";
 	print "\n";
 	print "Usage: $program_name auto < LIST\n";
+	print "\n";
 	print "       LIST  List of paths to RDF databases\n";
+	print "\n";
 	print "Options: -d  Path to a directory to search and create a list of SQLite databases (default='.').\n";
 	print "         -l  Log directory (default='log').\n";
 	print "         -m  Max number of jobs to throw (default='5').\n";
@@ -55,27 +59,29 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -r  Recursive search through a directory (default='0').\n";
 	print "         -s  Loop second (default='10sec').\n";
 	print "         -S  Load list of databases from STDIN instead from a directory.\n";
-	print "\n";
-	print "Updates: 2019/04/08  'inputs' to pass inputs as variable array.\n";
-	print "         2019/04/04  Changed program name from 'daemon.pl' to 'moirai2.pl'.\n";
-	print "         2019/04/03  Array output functionality and command line functionality added.\n";
-	print "         2019/03/04  Stores run options in the SQLite database.\n";
-	print "         2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
-	print "         2019/01/21  'mv' functionality added to move temporary files to designated locations.\n";
-	print "         2019/01/18  'process' functionality added to execute command from a control json.\n";
-	print "         2019/01/17  Subdivide RDF database, revised execute flag to have instance in between.\n";
-	print "         2018/12/12  'singlethread' added for NCBI/BLAST query.\n";
-	print "         2018/12/10  Remove unnecessary files when completed.\n";
-	print "         2018/12/04  Added 'maxjob' and 'nolog' to speed up processed.\n";
-	print "         2018/11/27  Separating loading, selection, and execution and added 'maxjob'.\n";
-	print "         2018/11/19  Improving database updates by speed.\n";
-	print "         2018/11/17  Making daemon faster by collecting individual database accesses.\n";
-	print "         2018/11/16  Making updating/importing database faster by using improved rdf.pl.\n";
-	print "         2018/11/09  Added import function where user udpate databse through specified file(s).\n";
-	print "         2018/09/14  Changed to a ticket system.\n";
-	print "         2018/02/06  Added qsub functionality.\n";
-	print "         2018/02/01  Created to throw jobs registered in RDF SQLite3 database.\n";
-	print "\n";
+	if(defined($opt_H)){
+		print "\n";
+		print "Updates: 2019/04/08  'inputs' to pass inputs as variable array.\n";
+		print "         2019/04/04  Changed program name from 'daemon.pl' to 'moirai2.pl'.\n";
+		print "         2019/04/03  Array output functionality and command line functionality added.\n";
+		print "         2019/03/04  Stores run options in the SQLite database.\n";
+		print "         2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
+		print "         2019/01/21  'mv' functionality added to move temporary files to designated locations.\n";
+		print "         2019/01/18  'process' functionality added to execute command from a control json.\n";
+		print "         2019/01/17  Subdivide RDF database, revised execute flag to have instance in between.\n";
+		print "         2018/12/12  'singlethread' added for NCBI/BLAST query.\n";
+		print "         2018/12/10  Remove unnecessary files when completed.\n";
+		print "         2018/12/04  Added 'maxjob' and 'nolog' to speed up processed.\n";
+		print "         2018/11/27  Separating loading, selection, and execution and added 'maxjob'.\n";
+		print "         2018/11/19  Improving database updates by speed.\n";
+		print "         2018/11/17  Making daemon faster by collecting individual database accesses.\n";
+		print "         2018/11/16  Making updating/importing database faster by using improved rdf.pl.\n";
+		print "         2018/11/09  Added import function where user udpate databse through specified file(s).\n";
+		print "         2018/09/14  Changed to a ticket system.\n";
+		print "         2018/02/06  Added qsub functionality.\n";
+		print "         2018/02/01  Created to throw jobs registered in RDF SQLite3 database.\n";
+		print "\n";
+	}
 	exit(0);
 }
 ############################## MAIN ##############################
@@ -96,17 +102,14 @@ $urls->{"scriptNameUrl"}="https://moirai2.github.io/schema/daemon/script/name";
 $urls->{"maxjobUrl"}="https://moirai2.github.io/schema/daemon/maxjob";
 $urls->{"singleThreadUrl"}="https://moirai2.github.io/schema/daemon/singlethread";
 $urls->{"qsubOptUrl"}="https://moirai2.github.io/schema/daemon/qsubopt";
-
 $urls->{"commandUrl"}="https://moirai2.github.io/schema/daemon/command";
 $urls->{"controlUrl"}="https://moirai2.github.io/schema/daemon/control";
 $urls->{"executeUrl"}="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"refreshUrl"}="https://moirai2.github.io/schema/daemon/refresh";
-
 $urls->{"stderrUrl"}="https://moirai2.github.io/schema/daemon/stderr";
 $urls->{"stdoutUrl"}="https://moirai2.github.io/schema/daemon/stdout";
 $urls->{"timeEndedUrl"}="https://moirai2.github.io/schema/daemon/timeended";
 $urls->{"timeStartedUrl"}="https://moirai2.github.io/schema/daemon/timestarted";
-
 $urls->{"processUrl"}="https://moirai2.github.io/schema/daemon/process";
 $urls->{"newnodeUrl"}="https://moirai2.github.io/schema/daemon/newnode";
 $urls->{"mvUrl"}="https://moirai2.github.io/schema/daemon/mv";
@@ -116,7 +119,6 @@ $urls->{"mkdirUrl"}="https://moirai2.github.io/schema/daemon/mkdir";
 $urls->{"concatUrl"}="https://moirai2.github.io/schema/daemon/concat";
 $urls->{"toInsertUrl"}="https://moirai2.github.io/schema/daemon/toinsert";
 $urls->{"tmpfileUrl"}="https://moirai2.github.io/schema/daemon/tmpfile";
-
 $urls->{"condaUrl"}="https://moirai2.github.io/schema/daemon/conda";
 $urls->{"gunzipUrl"}="https://moirai2.github.io/schema/daemon/gunzip";
 $urls->{"bunzip2Url"}="https://moirai2.github.io/schema/daemon/bunzip2";
@@ -127,7 +129,6 @@ $urls->{"filesizeUrl"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"linecountUrl"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"seqcountUrl"}="https://moirai2.github.io/schema/daemon/seqcount";
 $urls->{"requiredUrl"}="https://moirai2.github.io/schema/daemon/required";
-
 $urls->{"systemdownloadUrl"}="https://moirai2.github.io/schema/system/download";
 $urls->{"systemuploadUrl"}="https://moirai2.github.io/schema/system/upload";
 $urls->{"systemunzipUrl"}="https://moirai2.github.io/schema/system/unzip";
@@ -136,7 +137,6 @@ $urls->{"systemcondaUrl"}="https://moirai2.github.io/schema/system/conda";
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"executeUrl"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"commandUrl"}."\")";
 my $newControlQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"controlUrl"}."\")";
 my $refreshQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"refreshUrl"}."\")";
-
 my $cwd=Cwd::getcwd();
 my $rdfdb=$opt_d;
 if(!defined($rdfdb)){
@@ -214,6 +214,35 @@ while(true){
 	if($runmode&&scalar(@execurls)==0&&$jobs_running==0){last;}
 	else{sleep($sleeptime);}
 }
+############################## assignCommand ##############################
+sub assignCommand{
+	my $command=shift();
+	my @inputs=@{$command->{$urls->{"inputUrl"}}};
+	my @outputs=@{$command->{$urls->{"outputUrl"}}};
+	my @arguments=();
+	foreach my $input(@inputs){push(@arguments,promtCommandInput($command,$input));}
+	foreach my $output(@outputs){push(@arguments,promtCommandOutput($command,$output));}
+	return @arguments;
+}
+############################## promtCommandInput ##############################
+sub promtCommandInput{
+	my $command=shift();
+	my $label=shift();
+	print STDOUT "#Input [$label]?";
+	my $value=<STDIN>;
+	chomp($value);
+	if($value eq ""){exit(1);}
+	return $value;
+}
+############################## promtCommandOutput ##############################
+sub promtCommandOutput{
+	my $command=shift();
+	my $label=shift();
+	print STDOUT "#Output [$label]?";
+	my $value=<STDIN>;
+	chomp($value);
+	return $value;
+}
 ############################## commandProcess ##############################
 sub commandProcess{
 	my @arguments=@ARGV;
@@ -221,14 +250,29 @@ sub commandProcess{
 	my $command=loadCommandFromURL($url);
 	$commands->{$url}=$command;
 	my @inputs=@{$command->{$urls->{"inputUrl"}}};
-	my $key=$arguments[0];
+	my @outputs=@{$command->{$urls->{"outputUrl"}}};
+	my $cmdline="#Command: ".basename($command->{$urls->{"commandUrl"}});
+	if(scalar(@inputs)>0){$cmdline.=" [".join("] [",@inputs)."]";}
+	if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
+	print "$cmdline\n";
+	if((scalar(@inputs)+scalar(@outputs))>0&&scalar(@arguments)==0){@arguments=assignCommand($command);print_table(@arguments);}
+	if(scalar(@arguments)<scalar(@inputs)){exit(1);}
+	my $key=shift(@arguments);
 	my $dbh=openDB($rdfdb);
 	my $nodeid=newNode($dbh);
 	$dbh->disconnect;
 	my @lines=();
 	push(@lines,"$key\t".$urls->{"executeUrl"}."\t$nodeid");
 	push(@lines,"$nodeid\t".$urls->{"commandUrl"}."\t$url");
-	for(my $i=1;$i<scalar(@inputs);$i++){push(@lines,"$nodeid\t$url#".$inputs[$i]."\t".$arguments[$i]);}
+	foreach my $input(@inputs){
+		my $argument=shift(@arguments);
+		push(@lines,"$nodeid\t$url#$input\t$argument");
+	}
+	foreach my $output(@outputs){
+		if(scalar(@arguments)==0){last;}
+		my $argument=shift(@arguments);
+		push(@lines,"$nodeid\t$url#$output\t$argument");
+	}
 	my ($fh,$file)=mkstemps("$ctrldir/insert/XXXXXXXXXX",".insert");
 	foreach my $line(@lines){print $fh "$line\n";}
 	close($fh);
