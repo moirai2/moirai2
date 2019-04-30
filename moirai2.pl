@@ -214,6 +214,12 @@ while(true){
 	if($runmode&&scalar(@execurls)==0&&$jobs_running==0){last;}
 	else{sleep($sleeptime);}
 }
+############################## printCommand ##############################
+sub printCommand{
+	my $command=shift();
+	my @inputs=@{$command->{$urls->{"inputUrl"}}};
+	my @outputs=@{$command->{$urls->{"outputUrl"}}};
+}
 ############################## assignCommand ##############################
 sub assignCommand{
 	my $command=shift();
