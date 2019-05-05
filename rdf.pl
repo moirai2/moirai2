@@ -32,24 +32,6 @@ sub help{
 	print "    PRE  Predicate of a RDF triple.\n";
 	print "    OBJ  Object of a RDF triple.\n";
 	print "\n";
-	print "COMMAND: $program_name -d DB -r 1 select SUB PRE OBJ\n";
-	print "         Get RDF information from database recursively (OBJ of a first query becomes SUB of a next query).\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -r  Recursion(default='0').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -R 1 select SUB PRE OBJ\n";
-	print "         Get RDF information from database recursively(SUB of a first query becomes OBJ of a next query).\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -R  Precursion(default='0').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB -f template select SUB PRE OBJ\n";
 	print "         Create output with assemble template ([0] as subject,[1] as predicate, and [2] as object).\n";
 	print "         For example \"[0] has done [1] on [2]\" template will produce \"subject has done predicate on object\" \n";
@@ -343,7 +325,7 @@ if(lc($command) eq "select"){
 		$rdf=webSelect($database,$json);
 	}else{
 		my $dbh=openDB($database);
-		$rdf=selectRdf($dbh,$subject,$predicate,$object,$precursion,$recursion);
+		$rdf=dbSelect($dbh,$subject,$predicate,$object,$precursion,$recursion);
 		$dbh->disconnect;
 	}
 	my $format=defined($opt_f)?$opt_f:"tsv";
@@ -498,7 +480,7 @@ if(lc($command) eq "select"){
 		if($object eq "?"){$object=undef;}
 		my $dbh=openDB($database);
 		$dbh->begin_work;
-		deleteRDFFromDB($dbh,$subject,$predicate,$object);
+		dbDelete($dbh,$subject,$predicate,$object);
 		$dbh->commit;
 		$dbh->disconnect;
 	}elsif($opt_f eq "tsv"){
@@ -943,6 +925,44 @@ sub checkReponse{
 	if($success){print STDERR "OK\n";}
 	else{print STDERR "FAILED\n";}
 }
+############################## dbSelect ##############################
+sub dbSelect{
+	my $dbh=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
+	my $where="";
+	if($subject ne ""){
+		if(length($where)>0){$where.=" and";}
+		if(ref($subject) eq "ARRAY"){$where.=" e1.subject in(select id from node where data in(\"".join("\",\"",@{$subject})."\"))";}
+		else{$where.=" e1.subject=(select id from node where data='$subject')";}
+	}
+	if($predicate ne ""){
+		if(length($where)>0){$where.=" and";}
+		if(ref($predicate) eq "ARRAY"){$where.=" e1.predicate in(select id from node where data in(\"".join("\",\"",@{$predicate})."\"))";}
+		else{$where.=" e1.predicate=(select id from node where data='$predicate')";}
+	}
+	if($object ne ""){
+		if(length($where)>0){$where.=" and";}
+		if(ref($object) eq "ARRAY"){$where.=" e1.object in(select id from node where data in(\"".join("\",\"",@{$object})."\"))";}
+		else{$where.=" e1.object=(select id from node where data='$object')";}
+	}
+	if($where ne ""){$query.=" where$where";}
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my $hash={};
+	while(my @rows=$sth->fetchrow_array()){
+		my $subject=$rows[0];
+		my $predicate=$rows[1];
+		my $object=$rows[2];
+		if(!exists($hash->{$subject})){$hash->{$subject}={};}
+		if(!exists($hash->{$subject}->{$predicate})){$hash->{$subject}->{$predicate}=$object;}
+		elsif(ref($hash->{$subject}->{$predicate}) eq "ARRAY"){push(@{$hash->{$subject}->{$predicate}},$object);}
+		else{$hash->{$subject}->{$predicate}=[$hash->{$subject}->{$predicate},$object];}
+	}
+	return $hash;
+}
 ############################## dbUpdate ##############################
 sub dbUpdate{
 	my $database=shift();
@@ -962,6 +982,30 @@ sub dbInsert{
 	insertRDF($dbh,$json);
 	$dbh->commit;
 	$dbh->disconnect;
+}
+############################## dbDelete ##############################
+sub dbDelete{
+	my $dbh=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $query="delete from edge";
+	my @wheres=();
+	if(defined($subject)){
+		if(ref($subject) eq "ARRAY"){push(@wheres,"subject in(select id from node where data in(\"".join("\",\"",@{$subject})."\"))");}
+		else{push(@wheres,"subject=(select id from node where data='$subject')");}
+	}
+	if(defined($predicate)){
+		if(ref($predicate) eq "ARRAY"){push(@wheres,"predicate in(select id from node where data in(\"".join("\",\"",@{$predicate})."\"))");}
+		else{push(@wheres,"predicate=(select id from node where data='$predicate')");}
+	}
+	if(defined($object)){
+		if(ref($object) eq "ARRAY"){push(@wheres,"object in(select id from node where data in(\"".join("\",\"",@{$object})."\"))");}
+		else{push(@wheres,"object=(select id from node where data='$object')");}
+	}
+	if(scalar(@wheres)>0){$query.=" where ".join(" and ",@wheres);}
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
 }
 ############################## webSelect ##############################
 sub webSelect{
@@ -1423,66 +1467,6 @@ sub escapeReturnTab{
 	$string=~s/\'/\\\'/g;
 	return $string;
 }
-############################## selectRdf ##############################
-sub selectRdf{
-	my $dbh=shift();
-	my $subject=shift();
-	my $predicate=shift();
-	my $object=shift();
-	my $precursion=shift();
-	my $recursion=shift();
-	my $rdf=selectRdfFromDB($dbh,$subject,$predicate,$object);
-	if($precursion==0&&$recursion==0){return $rdf;}
-	my $nexts={};
-	my $prevs={};
-	foreach my $subject(keys(%{$rdf})){
-		$prevs->{$subject}=1;
-		foreach my $predicate(keys(%{$rdf->{$subject}})){
-			$object=$rdf->{$subject}->{$predicate};
-			if(ref($object)eq"ARRAY"){foreach my $o(@{$object}){$nexts->{$o}=1;}}
-			else{$nexts->{$object}=1;}
-		}
-	}
-	my $completed={};
-	while($precursion>0){
-		my @keys=keys(%{$prevs});
-		my $prevs={};
-		my $rdf2=selectRdfFromDB($dbh,undef,undef,\@keys);
-		foreach my $subject(keys(%{$rdf2})){
-			if(exists($completed->{$subject})){next;}
-			else{$completed->{$subject}=1;}
-			foreach my $predicate(keys(%{$rdf2->{$subject}})){
-				$object=$rdf2->{$subject}->{$predicate};
-				if(!exists($rdf->{$subject})){$rdf->{$subject}={};}
-				if(!exists($rdf->{$subject}->{$predicate})){$rdf->{$subject}->{$predicate}=$object;}
-				elsif(ref($rdf->{$subject}->{$predicate}) eq "ARRAY"){push(@{$rdf->{$subject}->{$predicate}},$object);}
-				else{$rdf->{$subject}->{$predicate}=[$rdf->{$subject}->{$predicate},$object];}
-			}
-			$prevs->{$subject}=1;
-		}
-		$precursion--;
-	}
-	while($recursion>0){
-		my @keys=keys(%{$nexts});
-		my $nexts={};
-		my $rdf2=selectRdfFromDB($dbh,\@keys);
-		foreach my $subject(keys(%{$rdf2})){
-			if(exists($completed->{$subject})){next;}
-			else{$completed->{$subject}=1;}
-			foreach my $predicate(keys(%{$rdf2->{$subject}})){
-				$object=$rdf2->{$subject}->{$predicate};
-				if(!exists($rdf->{$subject})){$rdf->{$subject}={};}
-				if(!exists($rdf->{$subject}->{$predicate})){$rdf->{$subject}->{$predicate}=$object;}
-				elsif(ref($rdf->{$subject}->{$predicate}) eq "ARRAY"){push(@{$rdf->{$subject}->{$predicate}},$object);}
-				else{$rdf->{$subject}->{$predicate}=[$rdf->{$subject}->{$predicate},$object];}
-				if(ref($object)eq"ARRAY"){foreach my $o(@{$object}){$nexts->{$o}=1;}}
-				else{$nexts->{$object}=1;}
-			}
-		}
-		$recursion--;
-	}
-	return $rdf;
-}
 ############################## loadJsonFromWeb ##############################
 sub loadJsonFromWeb{
 	my $url=shift();
@@ -1490,69 +1474,6 @@ sub loadJsonFromWeb{
 	my $password=shift();
 	my $content=getHttpContent($url,$username,$password);
 	return jsonDecode($content);
-}
-############################## deleteRdfFromDB ##############################
-sub deleteRdfFromDB{
-	my $dbh=shift();
-	my $subject=shift();
-	my $predicate=shift();
-	my $object=shift();
-	my $query="delete from edge where ";
-	my @wheres=();
-	if(defined($subject)){
-		if(ref($subject) eq "ARRAY"){push(@wheres,"subject=\"".join("\",\"",@{$subject})."\"");}
-		else{push(@wheres,"subject=\"$subject\"");}
-	}
-	if(defined($predicate)){
-		if(ref($predicate) eq "ARRAY"){push(@wheres,"predicate=\"".join("\",\"",@{$predicate})."\"");}
-		else{push(@wheres,"predicate=\"$predicate\"");}
-	}
-	if(defined($object)){
-		if(ref($object) eq "ARRAY"){push(@wheres,"object=\"".join("\",\"",@{$object})."\"");}
-		else{push(@wheres,"object=\"$object\"");}
-	}
-	if(scalar(@wheres)){return;}
-	$query.=join(" and ",@wheres);
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-}
-############################## selectRdfFromDB ##############################
-sub selectRdfFromDB{
-	my $dbh=shift();
-	my $subject=shift();
-	my $predicate=shift();
-	my $object=shift();
-	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
-	my $where="";
-	if($subject ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($subject) eq "ARRAY"){$where.=" e1.subject in(select id from node where data in(\"".join("\",\"",@{$subject})."\"))";}
-		else{$where.=" e1.subject=(select id from node where data='$subject')";}
-	}
-	if($predicate ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($predicate) eq "ARRAY"){$where.=" e1.predicate in(select id from node where data in(\"".join("\",\"",@{$predicate})."\"))";}
-		else{$where.=" e1.predicate=(select id from node where data='$predicate')";}
-	}
-	if($object ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($object) eq "ARRAY"){$where.=" e1.object in(select id from node where data in(\"".join("\",\"",@{$object})."\"))";}
-		else{$where.=" e1.object=(select id from node where data='$object')";}
-	}
-	if($where ne ""){$query.=" where$where";}
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	my $hash={};
-	while(my @rows=$sth->fetchrow_array()){
-		my $subject=$rows[0];
-		my $predicate=$rows[1];
-		my $object=$rows[2];
-		if(!exists($hash->{$subject})){$hash->{$subject}={};}
-		if(!exists($hash->{$subject}->{$predicate})){$hash->{$subject}->{$predicate}=$object;}
-		elsif(ref($hash->{$subject}->{$predicate}) eq "ARRAY"){push(@{$hash->{$subject}->{$predicate}},$object);}
-		else{$hash->{$subject}->{$predicate}=[$hash->{$subject}->{$predicate},$object];}
-	}
-	return $hash;
 }
 ############################## queryCount ##############################
 sub queryCount{
@@ -2489,7 +2410,7 @@ sub countLines{
 		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
 		else{$count=`cat $file|wc -l`;}
 		chomp($count);
-		print $writer "$file\tlinecount\t$count\n";
+		print $writer "$file\thttps://https://moirai2.github.io/schema/file/linecount\t$count\n";
 	}
 }
 ############################## countSequences ##############################
@@ -2519,7 +2440,7 @@ sub countSequences{
 		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
 		else{$count=`cat $file|wc -l`;}
 		chomp($count);
-		print $writer "$file\tseqcount\t$count\n";
+		print $writer "$file\thttps://https://moirai2.github.io/schema/file/seqcount\t$count\n";
 	}
 }
 ############################## testCommand ##############################
@@ -2531,6 +2452,7 @@ sub testCommand{
 	close($writer);
 	if(system("$command > $file")){return 1;}
 	my $value1=readText($file);
+	chomp($value1);
 	if($value1 eq $value2){return 0;}
 	print STDERR ">$command\n";
 	print STDERR "$value1\n";
@@ -2540,15 +2462,15 @@ sub testCommand{
 sub test{
 	unlink("test.sqlite3");
 	testCommand("perl rdf.pl -d test.sqlite3 insert A B C","");
-	testCommand("perl rdf.pl -d test.sqlite3 select","{\"A\":{\"B\":\"C\"}}\n");
+	testCommand("perl rdf.pl -d test.sqlite3 select","A\tB\tC");
 	testCommand("perl rdf.pl -d test.sqlite3 insert D E F","");
-	testCommand("perl rdf.pl -d test.sqlite3 select","{\"A\":{\"B\":\"C\"},\"D\":{\"E\":\"F\"}}\n");
+	testCommand("perl rdf.pl -d test.sqlite3 select","A\tB\tC\nD\tE\tF");
 	testCommand("perl rdf.pl -d test.sqlite3 delete A B C","");
-	testCommand("perl rdf.pl -d test.sqlite3 select","{\"D\":{\"E\":\"F\"}}\n");
-	testCommand("perl rdf.pl -d test.sqlite3 -f tsv select","D	E	F\n");
-	testCommand("perl rdf.pl -d test.sqlite3 -f '[0]-[1]-[2]' select","D-E-F\n");
+	testCommand("perl rdf.pl -d test.sqlite3 select","D\tE\tF");
+	testCommand("perl rdf.pl -d test.sqlite3 -f tsv select","D	E	F");
+	testCommand("perl rdf.pl -d test.sqlite3 -f '[0]-[1]-[2]' select","D-E-F");
 	testCommand("perl rdf.pl -d test.sqlite3 insert D G H","");
-	testCommand("perl rdf.pl -d test.sqlite3 -f tsv select","D	E	F\nD	G	H\n");
-	testCommand("perl rdf.pl -d test.sqlite3 -f json select","{\"D\":{\"E\":\"F\",\"G\":\"H\"}}\n");
+	testCommand("perl rdf.pl -d test.sqlite3 -f tsv select","D	E	F\nD	G	H");
+	testCommand("perl rdf.pl -d test.sqlite3 -f json select","{\"D\":{\"E\":\"F\",\"G\":\"H\"}}");
 	testCommand("perl rdf.pl -d test.sqlite3 delete ? ? H","");
 }
