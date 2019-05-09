@@ -13,7 +13,7 @@ function Chain(){
 	this.temporary=[];//temporary value stored
 	this.temporaryForTask=[];//temporary stores array values for multiple tasks
 	this.xml=[];//stores XML data
-	this.json=[];//sotres JSON data
+	this.json=[];//stores JSON data
 	this.rdf={};//stores in my original rdf format
 	this.query={};//stores address query
 	this.network={};//network value stored for vis
@@ -578,6 +578,15 @@ Chain.prototype.newNode=function(key){
 	return this;
 }
 Chain.prototype.newNodeSub=function(data,key){var self=this;this.sqliteRDFModel.newNode(function(name){data[key]=name;self.next();});}
+Chain.prototype.executeCommand=function(template){
+	var self=this;
+	if(template!=null)this.assemble(template);
+	this.jobs.push(function(){
+		var json=JSON.parse(self.temporary);
+		self.sqliteRDFModel.executeCommand(json,function(){self.start();});
+	});
+	return this;
+}
 Chain.prototype.selectRDF=function(json){var self=this;this.jobs.push(function(){if(json==null)json=self.query;self.sqliteRDFModel.selectRDF(json,function(rdf){self.rdf=rdf;self.start();});});return this;}
 Chain.prototype.insertRDF=function(template){var self=this;if(template!=null)this.parseRDF(template);this.jobs.push(function(){self.sqliteRDFModel.insertRDF(self.rdf,function(){self.start();});});return this;}
 Chain.prototype.updateRDF=function(template){var self=this;if(template!=null)this.parseRDF(template);this.jobs.push(function(){self.sqliteRDFModel.updateRDF(self.rdf,function(){self.start();});});return this;}

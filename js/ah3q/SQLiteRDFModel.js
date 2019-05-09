@@ -167,6 +167,12 @@ SQLiteRDFModel.prototype.newNode=function(method){
 	var post=$.ajax({type:'POST',url:"moirai2.php?command=newnode",data:{'db':self.db}}).fail(function(xhr,data){console.log("failed",xhr,data);});
 	if(method!=null)post.success(function(data){method(data)});
 }
+SQLiteRDFModel.prototype.executeCommand=function(json,method){
+	var self=this;
+	var string=this.jsonEscape(JSON.stringify(json));
+	var post=$.ajax({type:'POST',url:"moirai2.php?command=command",data:{'db':self.db,'data':string}}).fail(function(xhr,data){console.log("failed",xhr,data);});
+	if(method!=null)post.success(function(data){method(data)});
+}
 SQLiteRDFModel.prototype.recordFileContent=function(path,method){
 	var self=this;
 	if(!("db" in json))json.db=this.db;

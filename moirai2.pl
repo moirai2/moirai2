@@ -17,8 +17,8 @@ $program_directory=substr($program_directory,0,-1);
 my $program_path=Cwd::abs_path($program_directory)."/$program_name";
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_c $opt_d $opt_h $opt_H $opt_l $opt_m $opt_q $opt_Q $opt_r $opt_s $opt_S $opt_x);
-getopts('c:d:hHl:m:qQ:rs:S:v:x');
+use vars qw($opt_c $opt_d $opt_h $opt_H $opt_l $opt_m $opt_q $opt_Q $opt_s);
+getopts('c:d:hHlm:qQ:s:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"selectUrl"}="https://moirai2.github.io/schema/daemon/select";
@@ -79,35 +79,27 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "      INPUT  inputs of a MOIRAI2 command.\n";
 	print "     OUTPUT  outputs of a MOIRAI2 command.\n";
 	print "\n";
-	print "         -q  Use qsub for throwing jobs(default='bash').\n";
+	print "Usage: $program_name -d DB -s SEC\n";
 	print "\n";
-	print "Usage: $program_name -d DB daemon\n";
+	print "             Execute Moirai2 commands registered in the database in daemon mode.\n";
+	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
+	print "        SEC  Loop every specified seconds (default='run only once').\n";
 	print "\n";
-	print "             Runs a Moirai2 in daemon/loop mode.\n";
-	print "         DB  SQLite3 database in RDF format.\n";
-	print "\n";
-	print "Options: -c  Path to control directory (default='./ctrl').\n";
-	print "         -m  Max number of jobs to throw (default='5').\n";
-	print "         -q  Use qsub for throwing jobs(default='bash').\n";
-	print "         -Q  Export specified bin directory when throwing with qsub(default='\$HOME/bin').\n";
-	print "         -r  Run only once mode (default='loop').\n";
-	print "         -s  Loop second (default='10sec').\n";
-	print "         -x  No STDERR and STDOUT logs (default='show').\n";
-	print "\n";
-	print "Usage: $program_name auto < LIST\n";
+	print "Usage: $program_name\n";
 	print "\n";
 	print "       LIST  List of paths to RDF databases\n";
 	print "\n";
-	print "Options: -d  Path to a directory to search and create a list of SQLite databases (default='.').\n";
-	print "         -l  Log directory (default='log').\n";
+	print "Options: -c  Path to control directory (default='./ctrl').\n";
+	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
+	print "         -l  Show STDERR and STDOUT logs (default='none').\n";
 	print "         -m  Max number of jobs to throw (default='5').\n";
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
-	print "         -r  Recursive search through a directory (default='0').\n";
-	print "         -s  Loop second (default='10sec').\n";
-	print "         -S  Load list of databases from STDIN instead from a directory.\n";
+	print "         -Q  Export specified bin directory when throwing with qsub(default='\$HOME/bin').\n";
+	print "         -s  Loop second (default='no loop').\n";
 	print "\n";
+	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "Updates: 2019/05/05  Set up 'output'.\n";
+		print "Updates: 2019/05/05  Set up 'output' for a command mode.\n";
 		print "         2019/04/08  'inputs' to pass inputs as variable array.\n";
 		print "         2019/04/04  Changed program name from 'daemon.pl' to 'moirai2.pl'.\n";
 		print "         2019/04/03  Array output functionality and command line functionality added.\n";
@@ -148,8 +140,9 @@ my $use_qsub=$opt_q;
 my $home=`echo \$HOME`;
 chomp($home);
 my $qsubbin=defined($opt_Q)?$opt_Q:"$home/bin";
-my $nolog=$opt_x;
-my $runmode=$opt_r;
+$qsubbin.=":$cwd/miniconda3/bin";
+my $showlog=$opt_l;
+my $runmode=defined($opt_s)?0:1;
 my $maxjob=defined($opt_m)?$opt_m:5;
 my $ctrldir=Cwd::abs_path(defined($opt_c)?$opt_c:"$cwd/ctrl");
 mkdir("tmp");
@@ -166,8 +159,8 @@ my $jsons={};
 my @execurls=();
 my $jobcount=0;
 my $ctrlcount=0;
-if(scalar(@ARGV)>0){commandProcess();$runmode=1;}
-if(!$nolog){
+if(scalar(@ARGV)>0){commandProcess();}
+if($showlog){
 	print STDERR "# program path   : $program_path\n";
 	print STDERR "# rdf database   : $rdfdb\n";
 	print STDERR "# ctrl directory : $ctrldir\n";
@@ -274,6 +267,7 @@ sub commandProcess{
 	my @arguments=@ARGV;
 	my $url=shift(@arguments);
 	my $command=loadCommandFromURL($url);
+	print_table($command);
 	$commands->{$url}=$command;
 	my @inputs=@{$command->{$urls->{"inputUrl"}}};
 	my @outputs=@{$command->{$urls->{"outputUrl"}}};
@@ -386,7 +380,7 @@ sub controlAll{
 	my @execurls=keys(%{$executes});
 	my $remaining=0;
 	foreach my $url(@execurls){my $count=scalar(@{$executes->{$url}});if($count>0){$remaining++;}}
-	if(!$nolog){print STDERR "$date\t$time\t$ctrlcount\t$jobcount\t$remaining\t$inserted\t$deleted\t$completed\n";}
+	if($showlog){print STDERR "$date\t$time\t$ctrlcount\t$jobcount\t$remaining\t$inserted\t$deleted\t$completed\n";}
 }
 ############################## throwJobs ##############################
 sub throwJobs{
@@ -422,18 +416,18 @@ sub throwJobs{
 	close($fh);
 	my $number=scalar(@{$bashFiles});
 	if($use_qsub){
-		if(!$nolog){print "#Submitting $path:\t";}
+		if($showlog){print "#Submitting $path:\t";}
 		my $command="qsub";
 		if(defined($qsubopt)){$command.=" $qsubopt";}
 		$command.=" $path";
 		if(system($command)==0){print "OK\n";}
 		else{print "FAILED\n";exit(1);}
 	}else{
-		if(!$nolog){print "#Executing $path:\t";}
+		if($showlog){print "#Executing $path:\t";}
 		my $command="bash";
 		$command.=" $path &";
-		if(system($command)==0){if(!$nolog){print "OK\n";}}
-		else{if(!$nolog){print "FAILED\n";}exit(1);}
+		if(system($command)==0){if($showlog){print "OK\n";}}
+		else{if($showlog){print "FAILED\n";}exit(1);}
 	}
 }
 ############################## controlCompleted ##############################
@@ -502,12 +496,12 @@ sub handleArray{
 ############################## loadCommandFromURL ##############################
 sub loadCommandFromURL{
 	my $url=shift();
-	if(!$nolog){print "#Loading $url:\t";}
+	if($showlog){print "#Loading $url:\t";}
 	my $command=getJson($url);
 	if(scalar(keys(%{$command}))==0){print "FAILED\n";return;}
 	loadCommandFromURLSub($command,$url);
 	$command->{$urls->{"commandUrl"}}=$url;
-	if(!$nolog){print "OK\n";}
+	if($showlog){print "OK\n";}
 	return $command;
 }
 sub loadCommandFromURLSub{
@@ -1021,7 +1015,7 @@ sub batchCommand{
 				$currentCommandUrl=getCurrentCommandUrl($keys);
 				printRowsWithData($datas,$keys);
 				print OUT "EOF\n";
-				print OUT "perl $cwd/moirai2.pl -xrm 1 -d \$localdb -c \$tmpdir/ctrl\n";
+				print OUT "perl $cwd/moirai2.pl -m 1 -d \$localdb -c \$tmpdir/ctrl\n";
 			}elsif($key eq $urls->{"insertUrl"}){
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$value);
 				print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|perl $cwd/rdf.pl -qd \$localdb -f tsv insert\n";
@@ -1446,88 +1440,6 @@ sub getFileContent{
 	close(IN);
 	return $content;
 }
-############################## updateRDF ##############################
-sub updateRDF{
-	my $dbh=shift();
-	my $json=shift();
-	foreach my $subject(keys(%{$json})){
-		my $subject_id=handleNode($dbh,$subject);
-		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
-			my $predicate_id=handleNode($dbh,$predicate);
-			my $object=$json->{$subject}->{$predicate};
-			if(ref($object)eq"ARRAY"){
-				foreach my $o(@{$object}){
-					my $object_id=handleNode($dbh,$o);
-					updateEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}elsif(ref($object)eq"HASH"){
-				foreach my $o(keys(%{$object})){
-					my $object_id=handleNode($dbh,$o);
-					updateEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}else{
-				my $object_id=handleNode($dbh,$object);
-				updateEdge($dbh,$subject_id,$predicate_id,$object_id);
-			}
-		}
-	}
-}
-############################## insertRDF ##############################
-sub insertRDF{
-	my $dbh=shift();
-	my $json=shift();
-	foreach my $subject(keys(%{$json})){
-		my $subject_id=handleNode($dbh,$subject);
-		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
-			my $predicate_id=handleNode($dbh,$predicate);
-			my $object=$json->{$subject}->{$predicate};
-			if(ref($object)eq"ARRAY"){
-				foreach my $o(@{$object}){
-					my $object_id=handleNode($dbh,$o);
-					insertEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}elsif(ref($object)eq"HASH"){
-				foreach my $o(keys(%{$object})){
-					my $object_id=handleNode($dbh,$o);
-					insertEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}else{
-				my $object_id=handleNode($dbh,$object);
-				insertEdge($dbh,$subject_id,$predicate_id,$object_id);
-			}
-		}
-	}
-}
-############################## deleteRDF ##############################
-sub deleteRDF{
-	my $dbh=shift();
-	my $json=shift();
-	if(ref($json)eq"HASH"){}#hash
-	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){updateRDF($j);}return;}#array
-	else{$json=parseRDF($json);}#string
-	foreach my $subject(keys(%{$json})){
-		my $subject_id=handleNode($dbh,$subject);
-		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
-			my $predicate_id=handleNode($dbh,$predicate);
-			my $object=$json->{$subject}->{$predicate};
-			if(ref($object)eq"ARRAY"){
-				foreach my $o(@{$object}){
-					my $object_id=handleNode($dbh,$o);
-					deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}elsif(ref($object)eq"HASH"){
-				foreach my $o(keys(%{$object})){
-					my $object_id=handleNode($dbh,$o);
-					deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
-					deleteRDF($dbh,$object);
-				}
-			}else{
-				my $object_id=handleNode($dbh,$object);
-				deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
-			}
-		}
-	}
-}
 ############################## json_encode ##############################
 sub json_encode{
 	my $object=shift;
@@ -1871,11 +1783,10 @@ sub absolute_path {
 ############################## list_files ##############################
 # list files under a directory - 2018/02/01
 # Fixed recursion problem - 2018/02/01
-# list_files($file_suffix,$recursive_search,@input_directories);
+# list_files($file_suffix,@input_directories);
 sub list_files{
 	my @input_directories=@_;
 	my $file_suffix=shift(@input_directories);
-	my $recursive_search=shift(@input_directories);
 	my @input_files=();
 	foreach my $input_directory (@input_directories){
 		$input_directory=absolute_path($input_directory);
@@ -1887,10 +1798,8 @@ sub list_files{
 			if($file eq "..") {next;}
 			if($file eq ""){next;}
 			$file="$input_directory/$file";
-			if(-d $file){# start recursive search
-				if($recursive_search!=0){push(@input_files,list_files($file_suffix,$recursive_search-1,$file));}# do recursive search
-				next;# skip directory element
-			}elsif($file!~/$file_suffix$/){next;}
+			if(-d $file){next;}# skip directory element
+			elsif($file!~/$file_suffix$/){next;}
 			push(@input_files,$file);
 		}
 		closedir(DIR);
@@ -1900,14 +1809,12 @@ sub list_files{
 ############################## autodaemon ##############################
 sub autodaemon{
 	my $sleeptime=defined($opt_s)?$opt_s:10;
-	my $recursive_search=defined($opt_r)?$opt_r:0;
 	my $logdir=defined($opt_l)?$opt_l:"log";
 	my $databases={};
 	my $directory=defined($opt_d)?$opt_d:".";
 	my $md5cmd=(`which md5`)?"md5":"md5sum";
-	if(defined($opt_S)){while(<STDIN>){chomp;s/\r//g;if(-e $_){$databases->{$_}=0;}}}
 	while(1){
-		if(!defined($opt_S)){foreach my $file(list_files("sqlite3",$recursive_search,$directory)){if(!exists($databases->{$file})){$databases->{$file}=0;}}}
+		foreach my $file(list_files("sqlite3",$directory)){if(!exists($databases->{$file})){$databases->{$file}=0;}}
 		while(my($database,$timestamp)=each(%{$databases})){
 			my $basename=basename($database);
 			if(!(-e "$logdir/$basename")){mkdirs("$logdir/$basename");}

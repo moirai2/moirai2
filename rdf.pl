@@ -17,297 +17,161 @@ my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_d $opt_D $opt_f $opt_h $opt_H $opt_l $opt_q $opt_R $opt_r $opt_t $opt_w);
-getopts('d:D:f:hHl:qR:r:tw:');
+use vars qw($opt_d $opt_D $opt_e $opt_f $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
+getopts('d:D:e:f:hHl:qr:tw:');
+############################## URLs ##############################
+# $urls->{"moirai2"}    -> $urls->{"moirai2/download"}     -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+# "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" -> $urls->{"file"} -> download/Miniconda3-latest-MacOSX-x86_64.sh
+# $urls->{"miniconda3"} -> $urls->{"miniconda3/download"}  -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+# $urls->{"miniconda3"} -> $urls->{"miniconda3/installer"} -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+# $urls->{"miniconda3"} -> $urls->{"miniconda3/directory"} -> "miniconda3"
+# $urls->{"miniconda3"} -> $urls->{"miniconda3/bin"}       -> "miniconda3/bin/conda"
+my $urls={};
+$urls->{"moirai2"             }="https://moirai2.github.io/schema/moirai2";
+$urls->{"moirai2/download"    }="https://moirai2.github.io/schema/moirai2/download";
+$urls->{"miniconda3"          }="https://moirai2.github.io/schema/moirai2/miniconda3";
+$urls->{"miniconda3/bin"      }="https://moirai2.github.io/schema/moirai2/miniconda3/bin";
+$urls->{"miniconda3/directory"}="https://moirai2.github.io/schema/moirai2/miniconda3/directory";
+$urls->{"miniconda3/download" }="https://moirai2.github.io/schema/moirai2/miniconda3/download";
+$urls->{"miniconda3/installer"}="https://moirai2.github.io/schema/moirai2/miniconda3/installer";
+$urls->{"miniconda3/package"  }="https://moirai2.github.io/schema/moirai2/miniconda3/package";
+$urls->{"daemon"              }="https://moirai2.github.io/schema/daemon";
+$urls->{"daemon/batch"        }="https://moirai2.github.io/schema/daemon/batch";
+$urls->{"daemon/process"      }="https://moirai2.github.io/schema/daemon/process";
+$urls->{"daemon/command"      }="https://moirai2.github.io/schema/daemon/command";
+$urls->{"daemon/control"      }="https://moirai2.github.io/schema/daemon/control";
+$urls->{"daemon/execute"      }="https://moirai2.github.io/schema/daemon/execute";
+$urls->{"daemon/execid"       }="https://moirai2.github.io/schema/daemon/execid";
+$urls->{"daemon/timestarted"  }="https://moirai2.github.io/schema/daemon/timestarted";
+$urls->{"daemon/timeended"    }="https://moirai2.github.io/schema/daemon/timeended";
+$urls->{"bin"                 }="https://moirai2.github.io/schema/bin";
+$urls->{"file"                }="https://moirai2.github.io/schema/file";
+$urls->{"file/md5"            }="https://moirai2.github.io/schema/file/md5";
+$urls->{"file/linecount"      }="https://moirai2.github.io/schema/file/linecount";
+$urls->{"file/seqcount"       }="https://moirai2.github.io/schema/file/seqcount";
 ############################## HELP ##############################
 sub help{
 	print "PROGRAM: $program_name\n";
 	print "  USAGE: Utilities for handling a RDF sqlite3 database.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB select SUB PRE OBJ\n";
-	print "         Get RDF information from database with specified subject, predicate, and object.  Use '?' for undefined.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f template select SUB PRE OBJ\n";
-	print "         Create output with assemble template ([0] as subject,[1] as predicate, and [2] as object).\n";
-	print "         For example \"[0] has done [1] on [2]\" template will produce \"subject has done predicate on object\" \n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Output format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB insert SUB PRE OBJ\n";
-	print "         Put one RDF element (subject, predicate, object) to database.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB insert SUB PRE < OBJ\n";
-	print "         Put one RDF element with content of file as an object to database.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f tsv insert < TSV\n";
-	print "         Insert RDF database with a tab separated file (subject,predicate,object).\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f json insert < JSON\n";
-	print "         Insert RDF database with a json file.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "   JSON  Format written in{A:{B:C}}.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f template insert < TSV\n";
-	print "         Construct tab separated values using template and then insert.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     -t  test case (default='insert').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB update SUB PRE OBJ\n";
-	print "         Update RDF object value of a triple.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f tsv update < TSV\n";
-	print "         Update RDF object value of a triple with a tab separated file.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f json update < JSON\n";
-	print "         Update RDF object value of a triple with a json file.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "   JSON  Format written in{A:{B:C}}.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f template update < TSV\n";
-	print "         Update RDF object value of a triple with a template.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB delete SUB PRE OBJ\n";
-	print "         Delete one RDF element to database.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f tsv delete < TSV\n";
-	print "         Delete RDF database with a tab separated file.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f json delete < JSON\n";
-	print "         Delete RDF database with a json file.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "   JSON  Format written in{A:{B:C}}.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f template delete < TSV\n";
-	print "         Delete RDF database by constructing new tsv values with a template.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB import < TSV\n";
-	print "         Import RDF elements to database.\n";
-	print "         Tag separated file with subject,predicate,and object columns.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB dump > JSON\n";
-	print "         Dump RDF elements of database to a file in json format.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "   JSON  Format written in{A:{B:C}}.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f tsv dump > TSV\n";
-	print "         Dump RDF elements of database to a file.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Input format 'json', 'tsv', or '[0]\t[1]\t[2]' (default='json').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
+	print "COMMAND: $program_name -d DB dump > TSV\n";
+	print "COMMAND: $program_name -d DB -f json dump > JSON\n";
 	print "COMMAND: $program_name -d DB query QUERY > JSON\n";
-	print "         Query database using \"SUB->PRE->\$obj\" where variable is defined with '\$'.\n";
-	print "         Since unix also uses '\$' for variables,be sure to escape with '\\\$' when defining variable name(s).\n";
-	print "         Output in array-hash format.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "   JSON  Format written in{A:{B:C}}.\n";
-	print "\n";
-	print "COMMAND: $program_name -f template -d DB query QUERY > JSON\n";
-	print "         Query database using \"SUB->PRE->\$obj\" where variable is defined with '\$'.\n";
-	print "         Since unix also uses '\$' for variables,be sure to escape with '\\\$' when defining variable name(s).\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  Output format 'json', or key template format (default='json').\n";
-	print "     -w  Wait until there is a query hits.  Repeat for x seconds.  (default='no wait').\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "   JSON  Format written in{A:{B:C}}.\n";
+	print "COMMAND: $program_name -d DB replace FROM TO\n";
+	print "COMMAND: $program_name -d DB rename FROM TO\n";
+	print "COMMAND: $program_name -d DB newnode\n";
+	print "COMMAND: $program_name linecount DIR/FILE\n";
+	print "COMMAND: $program_name seqcount DIR/FILE\n";
+	print "COMMAND: $program_name md5 DIR/FILE\n";
+	print "COMMAND: $program_name -d DB reindex\n";
+	print "COMMAND: $program_name -d DB download URL\n";
+	print "COMMAND: $program_name -d DB -e ENV miniconda URL\n";
+	print "COMMAND: $program_name -d DB -f json execute < JSON\n";
 	print "\n";
 	print "COMMAND: $program_name -d DB remove execute\n";
-	print "         Remove execute tickets from database.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB remove log\n";
-	print "         Remove execution logs from database.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB remove control\n";
-	print "         Remove controls tickets from database.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB remove empty\n";
-	print "         Remove empty nodes and edges with atleast one empty slot.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB reindex\n";
-	print "         Remove unused nodes and reassign indeces.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f tsv replace < TSV\n";
-	print "         Replace node values with new values.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Tab separated values where first column is old and second is new values.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB -f tsv rename < TSV\n";
-	print "         Replace node filepath values with new filepath.  Files will be moved to new locations.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Tab separated values where first column is old path and second is destination path.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB copy -D DB2 QUERY [QUERY2 ..]\n";
-	print "         Query database using \"SUB->PRE->\$obj\" where variable is defined with '\$'.\n";
-	print "         Since unix also uses '\$' for variables,be sure to escape with '\\\$' when defining variable name(s).\n";
-	print "         Query results are copied to new RDF database DB2.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -D  Path to a sqlite3 db file (required for copy).\n";
-	print "     DB  SQLite3 database in RDF format copy from.\n";
-	print "    DB2  SQLite3 database in RDF format copy to.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB merge DB2 [DB3 ..]\n";
-	print "         Merge database into one.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
+	print "COMMAND: $program_name -d DB -D DB2 copy QUERY QUERY2\n";
+	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name -d DB rmdup SUB PRE OBJ\n";
-	print "         Remove duplicated edges with specified subject, predicate, and object.  Use '?' for undef values.\n";
-	print "         Latest edge information will be kept and others will be discarded. (Currently under construction)\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    SUB  Subject of a RDF triple.\n";
-	print "    PRE  Predicate of a RDF triple.\n";
-	print "    OBJ  Object of a RDF triple.\n";
-	print "\n";
-	print "COMMAND: $program_name -d URL insert -f tsv < TSV\n";
-	print "         Put RDF information to foreign SQLite RDF database through 'moirai2.php?command=insert'.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
-	print "COMMAND: $program_name -d URL select -f tsv < TSV\n";
-	print "         Put RDF information to foreign SQLite RDF database through 'moirai2.php?command=select'.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "    TSV  Text with three columns(subject,predicate,object) delimmed with a tab.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB newnode\n";
-	print "         Create a new node.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB stats\n";
-	print "         Get statistics of executions by going through logs.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -l  Write exectime logs to specified file(show only stats).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
 	print "COMMAND: $program_name -d DB mergetemp\n";
-	print "         Merge multiple local DBs stored in tmp directory into one database.\n";
-	print "         New node instances will be renamed to avoid collision.\n";
-	print "         Merged local DBs and directories will be removed.\n";
-	print "         Database with error will not be removed.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     DB  SQLite3 database in RDF format.\n";
-	print "\n";
-	print "COMMAND: $program_name -d DB count DIR\n";
-	print "         Calculate line counts of specified files under directories.\n";
-	print "     -d  Path to a sqlite3 db file (required).\n";
-	print "     -f  File suffix (default='none').\n";
-	print "     -r  Recursive search(default='infinite')).\n";
-	print "    DIR  Directories.\n";
-	print "     DB  SQLite3 database in RDF format.\n";
+	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
+	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
-	print "UPDATED: 2019/04/26  Changed name from 'sqlite3.pl' to 'rdf.pl'.\n";
-	print "         2019/03/13  'linecount' and 'seqcount' added to count files.\n";
-	print "         2019/02/18  'mergetemp' added to merge control databases into one.\n";
-	print "         2019/02/13  Get statistics of executions by going through logs.\n";
-	print "         2019/01/28  Insert and query RDF through PHP with HTTP POST added.\n";
-	print "         2019/01/16  Remove 'empty' was added to remove empty node and edges.\n";
-	print "         2019/01/10  'rmdup' was added to remove duplicated edges.\n";
-	print "         2019/01/09  'copy' was added to divide database into two.\n";
-	print "         2019/01/08  'merge' was added to combine two database into one.\n";
-	print "         2018/12/25  'replace' and 'rename' was added to change node values for 'mv' command.\n";
-	print "         2018/11/27  'reindex' was added to reindex node ids after removing controls.\n";
-	print "         2018/11/27  Remove 'execute','control', and 'log' were added.\n";
-	print "         2018/11/19  insert/update/delete with tsv/json format were added.\n";
-	print "         2018/11/08  Made import faster by storing nodes and edges data in perl hashtables.\n";
-	print "         2018/11/07  Added assemble expression codes.\n";
-	print "         2018/11/06  Speed up recursion of select method.\n";
-	print "         2018/10/30  Modified import to handle multiple cases.\n";
-	print "         2018/08/03  parseQuery() added for handing RDF query.\n";
-	print "         2018/02/24  'import' function was added to import TSV into database.\n";
-	print "         2018/02/15  Modified insert to accept object from STDIN.\n";
-	print "         2018/01/30  Created this to handle RDF SQLite database from bash script.\n";
+	if(defined($opt_H)){
+		print "UPDATED: 2019/05/07  Added 'md5' to calculate md5 of files.\n";
+		print "         2019/04/26  Changed name from 'sqlite3.pl' to 'rdf.pl'.\n";
+		print "         2019/03/13  'linecount' and 'seqcount' added to count files.\n";
+		print "         2019/02/18  'mergetemp' added to merge control databases into one.\n";
+		print "         2019/02/13  Get statistics of executions by going through logs.\n";
+		print "         2019/01/28  Insert and query RDF through PHP with HTTP POST added.\n";
+		print "         2019/01/16  Remove 'empty' was added to remove empty node and edges.\n";
+		print "         2019/01/10  'rmdup' was added to remove duplicated edges.\n";
+		print "         2019/01/09  'copy' was added to divide database into two.\n";
+		print "         2019/01/08  'merge' was added to combine two database into one.\n";
+		print "         2018/12/25  'replace' and 'rename' was added to change node values for 'mv' command.\n";
+		print "         2018/11/27  'reindex' was added to reindex node ids after removing controls.\n";
+		print "         2018/11/27  Remove 'execute','control', and 'log' were added.\n";
+		print "         2018/11/19  insert/update/delete with tsv/json format were added.\n";
+		print "         2018/11/08  Made import faster by storing nodes and edges data in perl hashtables.\n";
+		print "         2018/11/07  Added assemble expression codes.\n";
+		print "         2018/11/06  Speed up recursion of select method.\n";
+		print "         2018/10/30  Modified import to handle multiple cases.\n";
+		print "         2018/08/03  parseQuery() added for handing RDF query.\n";
+		print "         2018/02/24  'import' function was added to import TSV into database.\n";
+		print "         2018/02/15  Modified insert to accept object from STDIN.\n";
+		print "         2018/01/30  Created this to handle RDF SQLite database from bash script.\n";
+	}
+}
+############################## test ##############################
+sub test{
+	mkdir(test);
+	unlink("test/rdf.sqlite3");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 insert A B C","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select","A\tB\tC");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 insert D E F","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select","A\tB\tC\nD\tE\tF");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select A","A\tB\tC");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select ? E","D\tE\tF");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select ? ? C","A\tB\tC");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete A B C","deleted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select","D\tE\tF");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f json select","{\"D\":{\"E\":\"F\"}}");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f '[0]-[1]-[2]' select","D-E-F");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 insert D G H","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f tsv select","D	E	F\nD	G	H");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f json select","{\"D\":{\"E\":\"F\",\"G\":\"H\"}}");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete ? ? H","deleted 1");
+	testCommand("echo 'D\tE\tF'|perl rdf.pl -d test/rdf.sqlite3 -f tsv delete","deleted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 newnode","_node1_");
+	testCommand("echo '' > test/test.txt","");
+	testCommand("perl rdf.pl md5 test/test.txt","test/test.txt	".$urls->{"file/md5"}."	d41d8cd98f00b204e9800998ecf8427e");
+	testCommand("perl rdf.pl linecount test/test.txt","test/test.txt	".$urls->{"file/linecount"}."	0");
+	testCommand("perl rdf.pl seqcount test/test.txt","test/test.txt	".$urls->{"file/seqcount"}."	0");
+	testCommand("echo '{\"A\":{\"B\":\"C\"}}'|perl rdf.pl -d test/rdf.sqlite3 -f json insert ","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 replace C D","replaced 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 replace C D","replaced 0");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 replace D E","replaced 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 dump","A	B	E");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 rename test/test.txt test/test3.txt","replaced 0");
+	testCommand("perl rdf.pl md5 test/test.txt | perl rdf.pl -d test/rdf.sqlite3 import","imported 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 rename test/test.txt test/test2.txt","replaced 1");
+	unlink("test/rdf.sqlite3");
+	rmdir("test");
 }
 ############################## MAIN ##############################
-my $command=shift(@ARGV);
-if($command eq "test"){test();}
-elsif($command eq "linecount"){}
-elsif($command eq "seqcount"){}
-elsif(defined($opt_h)||defined($opt_H)||!defined($opt_d)||!defined($command)){help();exit(0);}
 my $database=$opt_d;
+if(!defined($database)){$database="rdf.sqlite3";}
 my $iswebdb=($database=~/^https?:\/\//)?1:0;
-if(lc($command) eq "select"){
-	my $recursion=defined($opt_r)?$opt_r:0;
-	my $precursion=defined($opt_R)?$opt_R:0;
+my $command=shift(@ARGV);
+if(defined($opt_h)||defined($opt_H)||!defined($command)){
+	help();
+	exit(0);
+}elsif($command eq "test"){
+	test();
+	exit(0);
+}elsif($command eq "file/linecount"){
+	my $writer=IO::File->new(">&STDOUT");
+	countLines($writer,$opt_r,$opt_f,@ARGV);
+	close($writer);
+}elsif($command eq "file/seqcount"){
+	my $writer=IO::File->new(">&STDOUT");
+	countSequences($writer,$opt_r,$opt_f,@ARGV);
+	close($writer);
+	exit(0);
+}elsif($command eq "file/md5"){
+	my $writer=IO::File->new(">&STDOUT");
+	md5Files($writer,$opt_r,$opt_f,@ARGV);
+	close($writer);
+	exit(0);
+}elsif(lc($command) eq "select"){
 	my $subject=shift(@ARGV);
 	my $predicate=shift(@ARGV);
 	my $object=shift(@ARGV);
@@ -320,12 +184,10 @@ if(lc($command) eq "select"){
 		$json->{"subject"}=$subject;
 		$json->{"predicate"}=$predicate;
 		$json->{"object"}=$object;
-		$json->{"precursion"}=$precursion;
-		$json->{"recursion"}=$recursion;
 		$rdf=webSelect($database,$json);
 	}else{
 		my $dbh=openDB($database);
-		$rdf=dbSelect($dbh,$subject,$predicate,$object,$precursion,$recursion);
+		$rdf=dbSelect($dbh,$subject,$predicate,$object);
 		$dbh->disconnect;
 	}
 	my $format=defined($opt_f)?$opt_f:"tsv";
@@ -346,30 +208,28 @@ if(lc($command) eq "select"){
 		if(!defined($predicate)){exit(1);}
 		if(!defined($object)){$object="";while(<STDIN>){$object.=$_;}chomp($object);}
 		my $json={$subject=>{$predicate=>$object}};
-		if($iswebdb){webInsert($database,$json);}
-		else{dbInsert($database,$json);}
+		my $linecount=($iswebdb)?webInsert($database,$json):dbInsert($database,$json);
+		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif($opt_f eq "tsv"){
 		my $reader=IO::File->new("-");
-		if($iswebdb){webInsert($database,readJson($reader));}
-		else{
-			my $linecount=importDB($database,$reader);
-			if(!$opt_q){print "insert $linecount\n";}
-		}
+		my $linecount=($iswebdb)?webInsert($database,readJson($reader)):importDB($database,$reader);
 		close($reader);
+		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif($opt_f eq "json"){
 		my $reader=IO::File->new("-");
 		my $json=readJson($reader);
 		close($reader);
-		if($iswebdb){webInsert($database,$json);}
-		else{dbInsert($database,$json);}
+		my $linecount=($iswebdb)?webInsert($database,$json):dbInsert($database,$json);
+		if(!$opt_q){print "inserted $linecount\n";}
 	}else{
 		my $reader=IO::File->new("-");
 		my $file=($opt_f=~/\-\>/)?assembleJson($reader,$opt_f):assembleFile($reader,$opt_f);
 		close($reader);
 		$reader=IO::File->new($file);
-		if(defined($opt_t)){while(<$reader>){print;}}
-		else{my $linecount=importDB($database,$reader);}
+		if(defined($opt_t)){while(<$reader>){print;};exit(0);}
+		my $linecount=importDB($database,$reader);
 		close($reader);
+		if(!$opt_q){print "inserted $linecount\n";}
 	}
 }elsif(lc($command) eq "import"){
 	my $reader=IO::File->new("-");
@@ -424,8 +284,8 @@ if(lc($command) eq "select"){
 }elsif($command eq "remove"){
 	my $dbh=openDB($database);
 	foreach my $arg (@ARGV){
-		if($arg eq "execute"){removeExecute($dbh);}
-		elsif($arg eq "control"){removeControl($dbh);}
+		if($arg eq "daemon/execute"){removeExecute($dbh);}
+		elsif($arg eq "daemon/control"){removeControl($dbh);}
 		elsif($arg eq "log"){removeLog($dbh);}
 		elsif($arg eq "empty"){removeEmpty($dbh,$database);}
 	}
@@ -480,9 +340,10 @@ if(lc($command) eq "select"){
 		if($object eq "?"){$object=undef;}
 		my $dbh=openDB($database);
 		$dbh->begin_work;
-		dbDelete($dbh,$subject,$predicate,$object);
+		my $linecount=dbDelete($dbh,$subject,$predicate,$object);
 		$dbh->commit;
 		$dbh->disconnect;
+		if(!$opt_q){print "deleted $linecount\n";}
 	}elsif($opt_f eq "tsv"){
 		if($iswebdb){
 			my $reader=IO::File->new("-");
@@ -502,7 +363,7 @@ if(lc($command) eq "select"){
 		close($reader);
 		my $dbh=openDB($database);
 		$dbh->begin_work;
-		deleteRDF($dbh,$json);
+		my $linecount=deleteRDF($dbh,$json);
 		$dbh->commit;
 		$dbh->disconnect;
 	}else{
@@ -519,7 +380,7 @@ if(lc($command) eq "select"){
 			close($reader);
 			my $dbh=openDB($database);
 			$dbh->begin_work;
-			deleteRDF($dbh,$json);
+			my $linecount=deleteRDF($dbh,$json);
 			$dbh->commit;
 			$dbh->disconnect;
 		}
@@ -532,6 +393,13 @@ if(lc($command) eq "select"){
 		close($reader);
 		$dbh->disconnect;
 		if(!$opt_q){print "replaced $linecount\n";}
+	}else{
+		my $dbh=openDB($database);
+		my $from=shift(@ARGV);
+		my $to=shift(@ARGV);
+		my $linecount=dbReplace($dbh,$from,$to);
+		if(!$opt_q){print "replaced $linecount\n";}
+		$dbh->disconnect;
 	}
 }elsif(lc($command) eq "rename"){
 	if($opt_f eq "tsv"){
@@ -541,6 +409,13 @@ if(lc($command) eq "select"){
 		close($reader);
 		$dbh->disconnect;
 		if(!$opt_q){print "renamed $linecount\n";}
+	}else{
+		my $dbh=openDB($database);
+		my $from=shift(@ARGV);
+		my $to=shift(@ARGV);
+		my $linecount=dbReplace($dbh,$from,$to,1);
+		if(!$opt_q){print "replaced $linecount\n";}
+		$dbh->disconnect;
 	}
 }elsif(lc($command) eq "merge"){
 	my ($writer,$file)=tempfile(UNLINK=>1);
@@ -553,7 +428,7 @@ if(lc($command) eq "select"){
 	my $reader=IO::File->new($file);
 	my $linecount=importDB($database,$reader);
 	close($reader);
-	if(!$opt_q){print "insert $linecount\n";}
+	if(!$opt_q){print "inserted $linecount\n";}
 }elsif(lc($command) eq "copy"){
 	my $dbh=openDB($database);
 	my ($writer,$file)=tempfile(UNLINK=>1);
@@ -568,21 +443,192 @@ if(lc($command) eq "select"){
 	close($reader);
 	if(!$opt_q){print "copied $linecount\n";}
 }elsif(lc($command) eq "newnode"){
-	my $dbh=openDB($database);
-	print newNode($dbh)."\n";
-	$dbh->disconnect;
+	print newNode($database)."\n";
 }elsif(lc($command) eq "stats"){
 	computeStatistics($database,$opt_l);
 }elsif(lc($command) eq "mergetemp"){
 	mergeTemps($database);
-}elsif(lc($command) eq "linecount"){
-	my $writer=IO::File->new(">&STDOUT");
-	countLines($writer,$opt_r,$opt_f,@ARGV);
-	close($writer);
-}elsif(lc($command) eq "seqcount"){
-	my $writer=IO::File->new(">&STDOUT");
-	countSequences($writer,$opt_r,$opt_f,@ARGV);
-	close($writer);
+}elsif(lc($command) eq "command"){
+	my $reader=IO::File->new("-");
+	my $json=readJson($reader);
+	close($reader);
+	print executeComand($database,$json)."\n";
+}elsif(lc($command) eq "download"){
+	insertDownload($database,@ARGV);
+	startDownload($database);
+}elsif(lc($command) eq "miniconda"){
+	insertMiniconda($database,@ARGV);
+	checkMinicondaBin($database);
+	installMiniconda($opt_e,$database);
+}
+############################## executeComand ##############################
+sub executeComand{
+	my $database=shift();
+	my $json=shift();
+	my $nodeid=newNode($database);
+	my $rdf={};
+	my $url=$json->{"url"};
+	$rdf->{$urls->{"daemon"}}={};
+	$rdf->{$urls->{"daemon"}}->{$urls->{"daemon/execute"}}=$nodeid;
+	$rdf->{$nodeid}={};
+	$rdf->{$nodeid}->{$urls->{"daemon/command"}}=$url;
+	foreach my $key(keys(%{$json})){
+		if($key eq "url"){next;}
+		my $value=$json->{$key};
+		$rdf->{$nodeid}->{"$url#$key"}=$value;
+	}
+	dbInsert($database,$rdf);
+	return $nodeid;
+}
+############################## mkdirDownload ##############################
+sub mkdirDownload{my $path="download/".time();mkdir("download");mkdir($path);return $path}
+############################## installMiniconda ##############################
+sub installMiniconda{
+	my $environment=shift();
+	my $database=shift();
+	my $condabin=getObject($database,$urls->{"miniconda3"},$urls->{"miniconda3/bin"});
+	if(defined($environment)&&!defined(getObject($database,$urls->{"miniconda3"},$urls->{"miniconda3/environment"},$environment))){
+		my $command="$condabin create -y -n $environment";
+		print STDERR "Creatin environment: $environment\n";
+		my $success=system($command);
+		dbInsert($database,{$urls->{"miniconda3"}=>{$urls->{"miniconda3/environment"}=>$environment}});
+	}
+	my @packages=getObjects($database,$urls->{"miniconda3"},$urls->{"miniconda3/package"});
+	foreach my $package(@packages){
+		print STDERR "Installing package: $package";
+		my @tokens=split(/\/+/,$package);
+		my $package=pop(@tokens);
+		my $channel=pop(@tokens);
+		if($channel eq "anaconda"){$channel=undef;}
+		my $command="$condabin install -y";
+		if(defined($environment)){$command.=" -n $environment";}
+		if(defined($channel)){$command.=" -c $channel";}
+		$command.=" $package";
+		print STDERR ">$command\n";
+		my $success=system($command);
+	}
+}
+############################## insertMiniconda ##############################
+sub insertMiniconda{
+	my @urls=@_;
+	my $database=shift(@urls);
+	my $json={$urls->{"miniconda3"}=>{$urls->{"miniconda3/package"}=>[]}};
+	foreach my $url(@urls){push(@{$json->{$urls->{"miniconda3"}}->{$urls->{"miniconda3/package"}}},$url);}
+	dbInsert($database,$json);
+}
+############################## checkMinicondaBin ##############################
+sub checkMinicondaBin{
+	my $database=shift();
+	my $object=getObject($database,$urls->{"miniconda3"},$urls->{"miniconda3/bin"});
+	if(defined($object)){return $object;}
+	my $url=getObject($database,$urls->{"miniconda3"},$urls->{"miniconda3/installer"});
+	if(!defined($url)){
+		$url=getMiniconda3Url();
+		print STDERR "Miniconda3 Installer: $url\n";
+		dbInsert($database,{$urls->{"miniconda3"}=>{$urls->{"miniconda3/installer"}=>$url}});
+	}
+	my $path=getObject($database,$url,$urls->{"file"});
+	if(!defined($path)){
+		insertDownload($database,$url);
+		startDownload($database);
+		$path=getObject($database,$url,$urls->{"file"});
+		print STDERR "Downloaded: $path\n";
+	}
+	if(!defined($path)){print STDERR "Couldn't download $url\n";exit(1);}
+	my $directory=getObject($database,$urls->{"miniconda3"},$urls->{"miniconda3/directory"});
+	if(!defined($directory)){
+		$directory="miniconda3";
+		print STDERR "Miniconda3 Directory: $directory\n";
+		dbInsert($database,{$urls->{"miniconda3"}=>{$urls->{"miniconda3/directory"}=>$directory}});
+	}
+	my $command="bash $path -f -b -p $directory";
+	print STDERR "Install Command: $command\n";
+	if(system("$command > condainstall.stdout 2> condainstall.stderr")!=0){exit(1);}
+	dbInsert($database,{$urls->{"miniconda3"}=>{$urls->{"miniconda3/bin"}=>"$directory/bin/conda"}});
+	rename("condainstall.stdout","$directory/condainstall.stdout");
+	rename("condainstall.stderr","$directory/condainstall.stderr");
+}
+############################## getObject ##############################
+sub getObject{
+	my $database=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $dbh=openDB($database);
+	my $hash=dbSelect($dbh,$subject,$predicate,$object);
+	$dbh->disconnect;
+	if(scalar(keys(%{$hash}))==0){return;}
+	my $object=$hash->{$subject}->{$predicate};
+	if(ref($object)ne"ARRAY"){return $object;}
+	return $object->[0];
+}
+############################## getObjects ##############################
+sub getObjects{
+	my $database=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $dbh=openDB($database);
+	my $hash=dbSelect($dbh,$subject,$predicate,$object);
+	$dbh->disconnect;
+	if(scalar(keys(%{$hash}))==0){return [];}
+	my $object=$hash->{$subject}->{$predicate};
+	if(ref($object)ne"ARRAY"){$object=[$object];}
+	return @{$object};
+}
+############################## startDownload ##############################
+sub startDownload{
+	my $database=shift();
+	my @downloads=getObjects($database,$urls->{"moirai2"},$urls->{"moirai2/download"});
+	my @files=();
+	foreach my $url(@downloads){
+		my $path=downloadFile($url,mkdirDownload());
+		if(!defined($path)){next;}
+		my $json={$url=>{$urls->{"file"}=>$path}};
+		dbInsert($database,$json);
+		push(@files,$path);
+	}
+	return @files;
+}
+############################## insertDownload ##############################
+sub insertDownload{
+	my @urls=@_;
+	my $database=shift(@urls);
+	if(scalar(@urls)>0){
+		my $json={$urls->{"moirai2"}=>{$urls->{"moirai2/download"}=>[]}};
+		foreach my $url(@urls){push(@{$json->{$urls->{"moirai2"}}->{$urls->{"moirai2/download"}}},$url);}
+		dbInsert($database,$json);
+	}
+}
+############################## getMiniconda3Url ##############################
+sub getMiniconda3Url{
+	my $uname=`uname -a`;
+	my $os="Linux";
+	if($uname=~/Darwin/){$os="MacOSX";}
+	elsif($uname=~/Windows/){$os="Windows";}
+	my $processor="x86";
+	if($uname=~/86_64/){$processor="x86_64";}
+	my $version=3;
+	my $suffix=($os eq "Windows")?".exe":".sh";
+	return "https://repo.anaconda.com/miniconda/Miniconda$version-latest-$os-$processor$suffix";
+}
+############################## downloadFile ##############################
+sub downloadFile{
+	my $url=shift();
+	my $outdir=shift();
+	my $agent=new LWP::UserAgent();
+	$agent->agent('rdf.pl/1.0');
+	$agent->timeout(10);
+	$agent->env_proxy;
+	my $request=HTTP::Request->new(GET=>$url);
+	my $filename="$outdir/".basename($url);
+	my $res=$agent->request($request);
+	if($res->is_success){
+		open(OUT,">$filename");
+		print OUT $res->content;
+		close(OUT);
+	}elsif($res->is_error){return;}
+	return $filename;
 }
 ############################## mergeTemps ##############################
 sub mergeTemps{
@@ -671,12 +717,12 @@ sub calculateTotalStatistics{
 		my $remaining=$request-$completed;
 		$stats->{$ctrlurl}->{"remaining"}=$remaining;
 		my $averagetime=0;
-		foreach my $command(keys(%{$stats->{$ctrlurl}->{"command"}})){
-			my $count=$stats->{$ctrlurl}->{"command"}->{$command}->{"count"};
-			my $jobdone=$stats->{$ctrlurl}->{"command"}->{$command}->{"jobdone"};
-			my $totaltime=$stats->{$ctrlurl}->{"command"}->{$command}->{"totaltime"};
+		foreach my $command(keys(%{$stats->{$ctrlurl}->{"daemon/command"}})){
+			my $count=$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"count"};
+			my $jobdone=$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"jobdone"};
+			my $totaltime=$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"totaltime"};
 			my $avgtime=($jobdone>0)?$totaltime/$jobdone:0;
-			$stats->{$ctrlurl}->{"command"}->{$command}->{"avgtime"}=$avgtime;
+			$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"avgtime"}=$avgtime;
 			$averagetime+=$avgtime*$count;
 		}
 		$stats->{$ctrlurl}->{"averagetime"}=$averagetime;
@@ -695,8 +741,8 @@ sub getControlProgress{
 		$stats->{$url}->{"request"}=queryCount($dbh,parseQuery($total_query));
 		$stats->{$url}->{"completed"}=queryCount($dbh,removeLastQuery(parseQuery($done_query)));
 		foreach my $command(getProcessCommands($controls->{$url})){
-			if(!exists($stats->{$url}->{"command"}->{$command})){$stats->{$url}->{"command"}->{$command}={};}
-			$stats->{$url}->{"command"}->{$command}->{"count"}++;
+			if(!exists($stats->{$url}->{"daemon/command"}->{$command})){$stats->{$url}->{"daemon/command"}->{$command}={};}
+			$stats->{$url}->{"daemon/command"}->{$command}->{"count"}++;
 		}
 	}
 	return $stats;
@@ -713,12 +759,12 @@ sub removeLastQuery{
 sub getProcessCommands{
 	my $control=shift();
 	my @array=();
-	foreach my $batch(@{$control->{"https://moirai2.github.io/schema/daemon/batch"}}){
-		if(!exists($batch->{"https://moirai2.github.io/schema/daemon/process"})){next();}
-		my @lines=@{$batch->{"https://moirai2.github.io/schema/daemon/process"}};
+	foreach my $batch(@{$control->{$urls->{"daemon/batch"}}}){
+		if(!exists($batch->{$urls->{"daemon/process"}})){next();}
+		my @lines=@{$batch->{$urls->{"daemon/process"}}};
 		foreach my $line(@lines){
 			my @tokens=split(/\-\>/,$line);
-			if($tokens[1]eq"https://moirai2.github.io/schema/daemon/command"){push(@array,$tokens[2]);}
+			if($tokens[1] eq $urls->{"daemon/command"}){push(@array,$tokens[2]);}
 		}
 	}
 	return wantarray?@array:$array[0];
@@ -728,7 +774,7 @@ sub getProgressQueries{
 	my $control=shift();
 	my @done=();
 	my @total=();
-	foreach my $select(@{$control->{"https://moirai2.github.io/schema/daemon/moirai.php?command=select"}}){
+	foreach my $select(@{$control->{$urls->{"daemon/control"}}}){
 		if($select=~/^(.+)\-\>\!(.+)$/){
 			push(@done,"$1->$2->\$$2");
 		}else{push(@total,$select);push(@done,$select);}
@@ -777,14 +823,14 @@ sub handleTimeStatistics{
 		my $url;
 		foreach my $predicate(keys(%{$hash->{$subject}})){
 			my $object=$hash->{$subject}->{$predicate};
-			if($predicate eq "https://moirai2.github.io/schema/daemon/timestarted"){$starttime=$object;}
-			elsif($predicate eq "https://moirai2.github.io/schema/daemon/timeended"){$endtime=$object;}
-			elsif($predicate eq "https://moirai2.github.io/schema/daemon/command"){$url=$object;}
+			if($predicate eq $urls->{"daemon/timestarted"}){$starttime=$object;}
+			elsif($predicate eq $urls->{"daemon/timeended"}){$endtime=$object;}
+			elsif($predicate eq $urls->{"daemon/command"}){$url=$object;}
 		}
 		if(defined($starttime)&&defined($endtime)&&defined($url)){
 			my $time=$endtime-$starttime;
-			$stats->{$ctrlurl}->{"command"}->{$url}->{"jobdone"}++;
-			$stats->{$ctrlurl}->{"command"}->{$url}->{"totaltime"}+=$time;
+			$stats->{$ctrlurl}->{"daemon/command"}->{$url}->{"jobdone"}++;
+			$stats->{$ctrlurl}->{"daemon/command"}->{$url}->{"totaltime"}+=$time;
 			if($writer!=null){print $writer "$ctrlurl\t$url\t".getDate("/",$starttime)." ".getTime(":",$starttime)."\t".getDate("/",$endtime)." ".getTime(":",$endtime)."\t$time\n";}
 		}
 	}
@@ -816,7 +862,7 @@ sub getExecuteStats{
 ############################## getControls ##############################
 sub getControls{
 	my $dbh=shift();
-	my $query="select n1.data from edge as e1 left outer join node as n1 on e1.object = n1.id where e1.predicate=(select id from node where data=\"https://moirai2.github.io/schema/daemon/control\")";
+	my $query="select n1.data from edge as e1 left outer join node as n1 on e1.object = n1.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/control"}."\")";
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
 	my $controls={};
@@ -979,9 +1025,10 @@ sub dbInsert{
 	my $json=shift();
 	my $dbh=openDB($database);
 	$dbh->begin_work;
-	insertRDF($dbh,$json);
+	my $linecount=insertRDF($dbh,$json);
 	$dbh->commit;
 	$dbh->disconnect;
+	return $linecount;
 }
 ############################## dbDelete ##############################
 sub dbDelete{
@@ -1005,7 +1052,28 @@ sub dbDelete{
 	}
 	if(scalar(@wheres)>0){$query.=" where ".join(" and ",@wheres);}
 	my $sth=$dbh->prepare($query);
-	$sth->execute();
+	my $linecount=$sth->execute();
+	if($linecount eq "0E0"){$linecount=0;}
+	return $linecount;
+}
+############################## dbReplace ##############################
+sub dbReplace{
+	my $dbh=shift();
+	my $from=shift();
+	my $to=shift();
+	my $rename=shift();
+	my $query="update node set data=\"$to\" where data=\"$from\"";
+	$dbh->begin_work;
+	my $sth=$dbh->prepare($query);
+	my $linecount=$sth->execute();
+	if($linecount eq "0E0"){return 0;}
+	$dbh->commit;
+	if($rename && -e $from){
+		if($to=~/^(.+)\/\.$/){$to="$1/".basename($from);}
+		mkpath(dirname($to));
+		rename($from,$to);
+	}
+	return $linecount;
 }
 ############################## webSelect ##############################
 sub webSelect{
@@ -1111,28 +1179,32 @@ sub assembleFile{
 sub removeControl{
 	my $dbh=shift();
 	$dbh->begin_work;
-	my $query="delete from edge where predicate=(select id from node where data=\"https://moirai2.github.io/schema/daemon/control\")";
+	my $query="delete from edge where predicate=(select id from node where data=\"".$urls->{"daemon/control"}."\")";
 	my $sth=$dbh->prepare($query);
-	$sth->execute();
+	my $linecount=$sth->execute();
 	$dbh->commit;
+	if($linecount eq "0E0"){$linecount=0;}
+	return $linecount;
 }
 ############################## removeExecute ##############################
 sub removeExecute{
 	my $dbh=shift();
 	$dbh->begin_work;
-	my $query="delete from edge where predicate=(select id from node where data=\"https://moirai2.github.io/schema/daemon/execute\")";
+	my $query="delete from edge where predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
 	my $sth=$dbh->prepare($query);
-	$sth->execute();
+	my $linecount=$sth->execute();
 	$dbh->commit;
+	if($linecount eq "0E0"){$linecount=0;}
+	return $linecount;
 }
 ############################## removeLog ##############################
 sub removeLog{
 	my $dbh=shift();
 	$dbh->begin_work;
-	my $query="delete from edge where subject in (select object from edge where predicate=(select id from node where data=\"https://moirai2.github.io/schema/daemon/execid\"))";
+	my $query="delete from edge where subject in (select object from edge where predicate=(select id from node where data=\"".$urls->{"daemon/execid"}."\"))";
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
-	$query="delete from edge where predicate=(select id from node where data=\"https://moirai2.github.io/schema/daemon/execid\")";
+	$query="delete from edge where predicate=(select id from node where data=\"".$urls->{"daemon/execid"}."\")";
 	$sth=$dbh->prepare($query);
 	$sth->execute();
 	$dbh->commit;
@@ -1151,7 +1223,6 @@ sub removeEmpty{
 	my $sth=$dbh->prepare("SELECT subject,predicate,object FROM edge");
 	$sth->execute();
 	my @row=();
-	my $linecount=0;
 	while(@row=$sth->fetchrow_array()){
 		my $subid=$row[0];
 		my $preid=$row[1];
@@ -1513,14 +1584,7 @@ sub dumpDB{
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
 	my $hash={};
-	if($format eq "tsv"){
-		while(my @rows=$sth->fetchrow_array()){
-			my $subject=$rows[0];
-			my $predicate=$rows[1];
-			my $object=$rows[2];
-			print $writer "$subject\t$predicate\t$object\n";
-		}
-	}else{
+	if($format eq "json"){
 		my $rdf={};
 		while(my @rows=$sth->fetchrow_array()){
 			my $subject=$rows[0];
@@ -1532,25 +1596,22 @@ sub dumpDB{
 			else{$rdf->{$subject}->{$predicate}=[$rdf->{$subject}->{$predicate},$object];}
 		}
 		outputInJsonFormat($rdf,$writer);
+	}else{
+		while(my @rows=$sth->fetchrow_array()){
+			my $subject=$rows[0];
+			my $predicate=$rows[1];
+			my $object=$rows[2];
+			print $writer "$subject\t$predicate\t$object\n";
+		}
 	}
-}
-############################## putRDF ##############################
-sub putRDF{
-	my $dbh=shift();
-	my $subject=shift();
-	my $predicate=shift();
-	my $object=shift();
-	my $subject_id=handleNode($dbh,$subject);
-	my $predicate_id=handleNode($dbh,$predicate);
-	my $object_id=handleNode($dbh,$object);
-	insertEdge($dbh,$subject_id,$predicate_id,$object_id);
 }
 ############################## updateRDF ##############################
 sub updateRDF{
 	my $dbh=shift();
 	my $json=shift();
+	my $linecount=0;
 	if(ref($json)eq"HASH"){}
-	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){updateRDF($j);}return;}
+	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=updateRDF($j);}return;}
 	else{$json=parseRDF($json);}
 	foreach my $subject(keys(%{$json})){
 		my $subject_id=handleNode($dbh,$subject);
@@ -1560,20 +1621,20 @@ sub updateRDF{
 			if(ref($object)eq"ARRAY"){
 				foreach my $o(@{$object}){
 					my $object_id=handleNode($dbh,$o);
-					updateEdge($dbh,$subject_id,$predicate_id,$object_id);
+					$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
 				}
 			}elsif(ref($object)eq"HASH"){
 				foreach my $o(keys(%{$object})){
 					my $object_id=handleNode($dbh,$o);
-					updateEdge($dbh,$subject_id,$predicate_id,$object_id);
-					updateRDF($dbh,$object);
+					$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
 				}
 			}else{
 				my $object_id=handleNode($dbh,$object);
-				updateEdge($dbh,$subject_id,$predicate_id,$object_id);
+				$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
 			}
 		}
 	}
+	return $linecount;
 }
 ############################## replaceTSV ##############################
 sub replaceTSV{
@@ -1673,8 +1734,9 @@ sub deleteTSV{
 sub deleteRDF{
 	my $dbh=shift();
 	my $json=shift();
+	my $linecount=0;
 	if(ref($json)eq"HASH"){}
-	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){deleteRDF($j);}return;}
+	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=deleteRDF($j);}return;}
 	else{$json=parseRDF($json);}
 	foreach my $subject(keys(%{$json})){
 		my $subject_id=handleNode($dbh,$subject);
@@ -1684,20 +1746,20 @@ sub deleteRDF{
 			if(ref($object)eq"ARRAY"){
 				foreach my $o(@{$object}){
 					my $object_id=handleNode($dbh,$o);
-					deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
+					$linecount+=deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
 				}
 			}elsif(ref($object)eq"HASH"){
 				foreach my $o(keys(%{$object})){
 					my $object_id=handleNode($dbh,$o);
-					deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
-					deleteRDF($dbh,$object);
+					$linecount+=deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
 				}
 			}else{
 				my $object_id=handleNode($dbh,$object);
-				deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
+				$linecount+=deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
 			}
 		}
 	}
+	return $linecount;
 }
 ############################## expressionCreate ##############################
 sub expressionCreate{
@@ -1966,13 +2028,10 @@ sub escapeCharacter{
 sub insertRDF{
 	my $dbh=shift();
 	my $json=shift();
-	if(ref($json)eq"HASH"){
-	}elsif(ref($json)eq"ARRAY"){
-		foreach my $j(@{$json}){insertRDF($j);}
-		return;
-	}else{
-		$json=parseRDF($json);
-	}
+	my $linecount=0;
+	if(ref($json)eq"HASH"){}
+	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=insertRDF($j);}return;}
+	else{$json=parseRDF($json);}
 	foreach my $subject(keys(%{$json})){
 		my $subject_id=handleNode($dbh,$subject);
 		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
@@ -1981,19 +2040,20 @@ sub insertRDF{
 			if(ref($object)eq"ARRAY"){
 				foreach my $o(@{$object}){
 					my $object_id=handleNode($dbh,$o);
-					insertEdge($dbh,$subject_id,$predicate_id,$object_id);
+					$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
 				}
 			}elsif(ref($object)eq"HASH"){
 				foreach my $o(keys(%{$object})){
 					my $object_id=handleNode($dbh,$o);
-					insertEdge($dbh,$subject_id,$predicate_id,$object_id);
+					$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
 				}
 			}else{
 				my $object_id=handleNode($dbh,$object);
-				insertEdge($dbh,$subject_id,$predicate_id,$object_id);
+				$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
 			}
 		}
 	}
+	return $linecount;
 }
 ############################## jsonEncode ##############################
 sub jsonEncode{
@@ -2219,11 +2279,13 @@ sub handleNode{
 	return insertNode($dbh,$data);
 }
 sub newNode{
-	my $dbh=shift();
+	my $database=shift();
+	my $dbh=openDB($database);
 	my $id=nodeMax($dbh)+1;
 	my $name="_node$id"."_";
 	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
 	$sth->execute($id,$name);
+	$dbh->disconnect;
 	return $name;
 }
 sub insertNode{
@@ -2239,7 +2301,9 @@ sub updateNode{
 	my $from=shift();
 	my $to=shift();
 	my $sth=$dbh->prepare("update node set data=? where id=(select id from node where data=?)");
-	$sth->execute($to,$from);
+	my $linecount=$sth->execute($to,$from);
+	if($linecount eq "0E0"){$linecount=0;}
+	return $linecount;
 }
 sub insertEdge{
 	my $dbh=shift();
@@ -2247,7 +2311,9 @@ sub insertEdge{
 	my $predicate=shift();
 	my $object=shift();
 	my $sth=$dbh->prepare("INSERT OR IGNORE INTO edge(subject,predicate,object) VALUES(?,?,?)");
-	$sth->execute($subject,$predicate,$object);
+	my $linecount=$sth->execute($subject,$predicate,$object);
+	if($linecount eq "0E0"){$linecount=0;}
+	return $linecount;
 }
 sub updateEdge{
 	my $dbh=shift();
@@ -2257,7 +2323,9 @@ sub updateEdge{
 	my $sth=$dbh->prepare("UPDATE edge SET object=? where subject=? and predicate=?");
 	$sth->execute($object,$subject,$predicate);
 	$sth=$dbh->prepare("INSERT OR IGNORE INTO edge VALUES(?,?,?)");
-	$sth->execute($subject,$predicate,$object);
+	my $linecount=$sth->execute($subject,$predicate,$object);
+	if($linecount eq "0E0"){$linecount=0;}
+	return $linecount;
 }
 sub deleteEdge{
 	my $dbh=shift();
@@ -2265,7 +2333,9 @@ sub deleteEdge{
 	my $predicate=shift();
 	my $object=shift();
 	my $sth=$dbh->prepare("DELETE FROM edge WHERE subject=? AND predicate=? AND object=?");
-	$sth->execute($subject,$predicate,$object);
+	my $linecount=$sth->execute($subject,$predicate,$object);
+	if($linecount eq "0E0"){$linecount=0;}
+	return $linecount;
 }
 sub getEdges{
 	my $dbh=shift();
@@ -2409,8 +2479,33 @@ sub countLines{
 		elsif($file=~/\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;}
 		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
 		else{$count=`cat $file|wc -l`;}
-		chomp($count);
-		print $writer "$file\thttps://https://moirai2.github.io/schema/file/linecount\t$count\n";
+		if($count=~/(\d+)/){$count=$1;}
+		print $writer "$file\t".$urls->{"file/linecount"}."\t$count\n";
+	}
+}
+############################## md5Files ##############################
+sub md5Files{
+	my @files=@_;
+	my $writer=shift(@files);
+	my $recursivesearch=shift(@files);
+	my $filesuffix=shift(@files);
+	if(!defined($recursivesearch)){$recursivesearch=-1;}
+	foreach my $file(listFiles($filesuffix,$recursivesearch,@ARGV)){
+		my $md5=`which md5`;
+		my $md5sum=`which md5sum`;
+		if(defined($md5)){
+			chomp($md5);
+			my $sum=`$md5 $file`;
+			chomp($sum);
+			if($sum=~/(\S+)$/){$sum=$1;}
+			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
+		}elsif(defined($md5sum)){
+			chomp($md5sum);
+			my $sum=`$md5sum $file`;
+			chomp($sum);
+			if($sum=~/^(\S+)/){$sum=$1;}
+			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
+		}
 	}
 }
 ############################## countSequences ##############################
@@ -2439,8 +2534,8 @@ sub countSequences{
 		elsif($file=~/\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;}
 		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
 		else{$count=`cat $file|wc -l`;}
-		chomp($count);
-		print $writer "$file\thttps://https://moirai2.github.io/schema/file/seqcount\t$count\n";
+		if($count=~/(\d+)/){$count=$1;}
+		print $writer "$file\t".$urls->{"file/seqcount"}."\t$count\n";
 	}
 }
 ############################## testCommand ##############################
@@ -2457,20 +2552,4 @@ sub testCommand{
 	print STDERR ">$command\n";
 	print STDERR "$value1\n";
 	print STDERR "$value2\n";
-}
-############################## test ##############################
-sub test{
-	unlink("test.sqlite3");
-	testCommand("perl rdf.pl -d test.sqlite3 insert A B C","");
-	testCommand("perl rdf.pl -d test.sqlite3 select","A\tB\tC");
-	testCommand("perl rdf.pl -d test.sqlite3 insert D E F","");
-	testCommand("perl rdf.pl -d test.sqlite3 select","A\tB\tC\nD\tE\tF");
-	testCommand("perl rdf.pl -d test.sqlite3 delete A B C","");
-	testCommand("perl rdf.pl -d test.sqlite3 select","D\tE\tF");
-	testCommand("perl rdf.pl -d test.sqlite3 -f tsv select","D	E	F");
-	testCommand("perl rdf.pl -d test.sqlite3 -f '[0]-[1]-[2]' select","D-E-F");
-	testCommand("perl rdf.pl -d test.sqlite3 insert D G H","");
-	testCommand("perl rdf.pl -d test.sqlite3 -f tsv select","D	E	F\nD	G	H");
-	testCommand("perl rdf.pl -d test.sqlite3 -f json select","{\"D\":{\"E\":\"F\",\"G\":\"H\"}}");
-	testCommand("perl rdf.pl -d test.sqlite3 delete ? ? H","");
 }

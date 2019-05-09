@@ -26,23 +26,28 @@ if($command=="insert"){
 	unlink($json);
 //############################## newnode.php ##############################
 }else if($command=="newnode"){
-	$_POST["db"]="20190216.sqlite3";
 	$db=filterDatabasePath($_POST["db"]);
 	if($db==null)exit(1);
 	$id=trim(`perl rdf.pl -d $db newnode`);
 	echo $id;
+//############################## command.php ##############################
+}else if($command=="command"){
+	$db=filterDatabasePath($_POST["db"]);
+	$json=tmpjson($_POST["data"]);
+	if($db==null)exit(1);
+	$id=trim(`perl rdf.pl -d $db -f json command < $json`);
+	unlink($json);
+	echo $id;
 //############################## select.php ##############################
-}else if($command == "select"){
+}else if($command=="select"){
 	$db=filterDatabasePath($_POST["db"]);
 	if($db==null)exit(1);
 	$subject=isset($_POST["subject"])?escapeshellarg($_POST["subject"]):"?";
 	$predicate=isset($_POST["predicate"])?escapeshellarg($_POST["predicate"]):"?";
 	$object=isset($_POST["object"])?escapeshellarg($_POST["object"]):"?";
-	$recursion=isset($_POST["recursion"])?escapeshellarg($_POST["recursion"]):0;
-	$precursion=isset($_POST["precursion"])?escapeshellarg($_POST["precursion"]):0;
-	echo `perl rdf.pl -d $db -R $precursion -r $recursion select $subject $predicate $object`;
+	echo `perl rdf.pl -d $db select $subject $predicate $object`;
 //############################## query.php ##############################
-}else if($command == "query"){
+}else if($command=="query"){
 	$db=filterDatabasePath($_POST["db"]);
 	if($db==null)exit(1);
 	$json=tmpjson($_POST["query"]);
@@ -115,11 +120,11 @@ if($command=="insert"){
 	}
 	echo "]";
 //############################## proxy.php ##############################
-}else if($command == "proxy"){
+}else if($command=="proxy"){
 	$url=$_POST["url"];
 	echo file_get_contents($url);
 //############################## upload.php ##############################
-}else if($command == "upload"){
+}else if($command=="upload"){
 	$uploaddir="uploaded";
 	if(!file_exists($uploaddir))mkdir($uploaddir);
 	chmod($uploaddir,0777);
@@ -130,7 +135,7 @@ if($command=="insert"){
 	if(move_uploaded_file($_FILES['file']['tmp_name'],"$path")){chmod("$path",0777);echo $path;}
 	else echo "ERROR";
 //############################## write.php ##############################
-}else if($command == "write"){
+}else if($command=="write"){
 	$filepath=$_POST["filepath"];
 	$content=$_POST["content"];
 	if(!isset($filepath))exit();
@@ -138,7 +143,7 @@ if($command=="insert"){
 	fwrite($handler,$content);
 	fclose($handler);
 //############################## zip.php ##############################
-}else if($command == "zip"){
+}else if($command=="zip"){
 	$directory=$_GET["directory"];
 	$directory="input";
 	if(!isset($directory))exit();
