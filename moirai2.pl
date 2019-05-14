@@ -21,49 +21,51 @@ use vars qw($opt_c $opt_d $opt_h $opt_H $opt_l $opt_m $opt_q $opt_Q $opt_s);
 getopts('c:d:hHlm:qQ:s:');
 ############################## URLs ##############################
 my $urls={};
-$urls->{"selectUrl"}="https://moirai2.github.io/schema/daemon/select";
-$urls->{"insertUrl"}="https://moirai2.github.io/schema/daemon/insert";
-$urls->{"deleteUrl"}="https://moirai2.github.io/schema/daemon/delete";
-$urls->{"importUrl"}="https://moirai2.github.io/schema/daemon/import";
-$urls->{"inputUrl"}="https://moirai2.github.io/schema/daemon/input";
-$urls->{"inputsUrl"}="https://moirai2.github.io/schema/daemon/inputs";
-$urls->{"outputUrl"}="https://moirai2.github.io/schema/daemon/output";
-$urls->{"outputsUrl"}="https://moirai2.github.io/schema/daemon/outputs";
-$urls->{"bashUrl"}="https://moirai2.github.io/schema/daemon/bash";
-$urls->{"batchUrl"}="https://moirai2.github.io/schema/daemon/batch";
-$urls->{"scriptUrl"}="https://moirai2.github.io/schema/daemon/script";
-$urls->{"scriptCodeUrl"}="https://moirai2.github.io/schema/daemon/script/code";
-$urls->{"scriptNameUrl"}="https://moirai2.github.io/schema/daemon/script/name";
-$urls->{"maxjobUrl"}="https://moirai2.github.io/schema/daemon/maxjob";
-$urls->{"singleThreadUrl"}="https://moirai2.github.io/schema/daemon/singlethread";
-$urls->{"qsubOptUrl"}="https://moirai2.github.io/schema/daemon/qsubopt";
-$urls->{"commandUrl"}="https://moirai2.github.io/schema/daemon/command";
-$urls->{"controlUrl"}="https://moirai2.github.io/schema/daemon/control";
-$urls->{"executeUrl"}="https://moirai2.github.io/schema/daemon/execute";
-$urls->{"refreshUrl"}="https://moirai2.github.io/schema/daemon/refresh";
-$urls->{"stderrUrl"}="https://moirai2.github.io/schema/daemon/stderr";
-$urls->{"stdoutUrl"}="https://moirai2.github.io/schema/daemon/stdout";
-$urls->{"timeEndedUrl"}="https://moirai2.github.io/schema/daemon/timeended";
-$urls->{"timeStartedUrl"}="https://moirai2.github.io/schema/daemon/timestarted";
-$urls->{"processUrl"}="https://moirai2.github.io/schema/daemon/process";
-$urls->{"newnodeUrl"}="https://moirai2.github.io/schema/daemon/newnode";
-$urls->{"mvUrl"}="https://moirai2.github.io/schema/daemon/mv";
-$urls->{"rmUrl"}="https://moirai2.github.io/schema/daemon/rm";
-$urls->{"rmdirUrl"}="https://moirai2.github.io/schema/daemon/rmdir";
-$urls->{"mkdirUrl"}="https://moirai2.github.io/schema/daemon/mkdir";
-$urls->{"concatUrl"}="https://moirai2.github.io/schema/daemon/concat";
-$urls->{"toInsertUrl"}="https://moirai2.github.io/schema/daemon/toinsert";
-$urls->{"tmpfileUrl"}="https://moirai2.github.io/schema/daemon/tmpfile";
-$urls->{"condaUrl"}="https://moirai2.github.io/schema/daemon/conda";
-$urls->{"unzipUrl"}="https://moirai2.github.io/schema/daemon/unzip";
-$urls->{"md5Url"}="https://moirai2.github.io/schema/daemon/md5";
-$urls->{"filesizeUrl"}="https://moirai2.github.io/schema/daemon/filesize";
-$urls->{"linecountUrl"}="https://moirai2.github.io/schema/daemon/linecount";
-$urls->{"seqcountUrl"}="https://moirai2.github.io/schema/daemon/seqcount";
-$urls->{"requiredUrl"}="https://moirai2.github.io/schema/daemon/required";
-$urls->{"systemdownloadUrl"}="https://moirai2.github.io/schema/system/download";
-$urls->{"systemuploadUrl"}="https://moirai2.github.io/schema/system/upload";
-$urls->{"systemcondaUrl"}="https://moirai2.github.io/schema/system/conda";
+$urls->{"daemon/select"}="https://moirai2.github.io/schema/daemon/select";
+$urls->{"daemon/insert"}="https://moirai2.github.io/schema/daemon/insert";
+$urls->{"daemon/delete"}="https://moirai2.github.io/schema/daemon/delete";
+$urls->{"daemon/import"}="https://moirai2.github.io/schema/daemon/import";
+$urls->{"daemon/input"}="https://moirai2.github.io/schema/daemon/input";
+$urls->{"daemon/inputs"}="https://moirai2.github.io/schema/daemon/inputs";
+$urls->{"daemon/output"}="https://moirai2.github.io/schema/daemon/output";
+$urls->{"daemon/outputs"}="https://moirai2.github.io/schema/daemon/outputs";
+$urls->{"daemon/bash"}="https://moirai2.github.io/schema/daemon/bash";
+$urls->{"daemon/batch"}="https://moirai2.github.io/schema/daemon/batch";
+$urls->{"daemon/script"}="https://moirai2.github.io/schema/daemon/script";
+$urls->{"daemon/script/code"}="https://moirai2.github.io/schema/daemon/script/code";
+$urls->{"daemon/script/name"}="https://moirai2.github.io/schema/daemon/script/name";
+$urls->{"daemon/maxjob"}="https://moirai2.github.io/schema/daemon/maxjob";
+$urls->{"daemon/singlethread"}="https://moirai2.github.io/schema/daemon/singlethread";
+$urls->{"daemon/qsubopt"}="https://moirai2.github.io/schema/daemon/qsubopt";
+$urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
+$urls->{"daemon/control"}="https://moirai2.github.io/schema/daemon/control";
+$urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
+$urls->{"daemon/refresh"}="https://moirai2.github.io/schema/daemon/refresh";
+$urls->{"daemon/stderr"}="https://moirai2.github.io/schema/daemon/stderr";
+$urls->{"daemon/stdout"}="https://moirai2.github.io/schema/daemon/stdout";
+$urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
+$urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
+$urls->{"daemon/process"}="https://moirai2.github.io/schema/daemon/process";
+$urls->{"daemon/newnode"}="https://moirai2.github.io/schema/daemon/newnode";
+$urls->{"daemon/mv"}="https://moirai2.github.io/schema/daemon/mv";
+$urls->{"daemon/rm"}="https://moirai2.github.io/schema/daemon/rm";
+$urls->{"daemon/rmdir"}="https://moirai2.github.io/schema/daemon/rmdir";
+$urls->{"daemon/mkdir"}="https://moirai2.github.io/schema/daemon/mkdir";
+$urls->{"daemon/concat"}="https://moirai2.github.io/schema/daemon/concat";
+$urls->{"daemon/toinsert"}="https://moirai2.github.io/schema/daemon/toinsert";
+$urls->{"daemon/tmpfile"}="https://moirai2.github.io/schema/daemon/tmpfile";
+$urls->{"daemon/conda"}="https://moirai2.github.io/schema/daemon/conda";
+$urls->{"daemon/unzip"}="https://moirai2.github.io/schema/daemon/unzip";
+$urls->{"daemon/md5"}="https://moirai2.github.io/schema/daemon/md5";
+$urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
+$urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
+$urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
+$urls->{"daemon/required"}="https://moirai2.github.io/schema/daemon/required";
+$urls->{"daemon/miniconda"}="https://moirai2.github.io/schema/daemon/miniconda";
+
+$urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
+$urls->{"system/upload"}="https://moirai2.github.io/schema/system/upload";
+$urls->{"system/conda"}="https://moirai2.github.io/schema/system/conda";
 ############################## HELP ##############################
 if(defined($opt_h)&&scalar(@ARGV)==1&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0]);exit(0);}
 if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
@@ -73,21 +75,17 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "Usage: $program_name -d DB URL [INPUT/OUTPUT ..]\n";
 	print "\n";
-	print "             Executes a MOIRAI2 command with user specified inputs/outputs\n";
+	print "             Executes a MOIRAI2 command with user specified arguments\n";
 	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
 	print "        URL  Command URL or path (command URLs from https://moirai2.github.io/).\n";
-	print "      INPUT  inputs of a MOIRAI2 command.\n";
-	print "     OUTPUT  outputs of a MOIRAI2 command.\n";
+	print "      INPUT  inputs of a MOIRAI2 command (varies among commands).\n";
+	print "     OUTPUT  outputs of a MOIRAI2 command (varies among commands).\n";
 	print "\n";
 	print "Usage: $program_name -d DB -s SEC\n";
 	print "\n";
-	print "             Execute Moirai2 commands registered in the database in daemon mode.\n";
+	print "             Check for Moirai2 commands every X seconds and execute.\n";
 	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
-	print "        SEC  Loop every specified seconds (default='run only once').\n";
-	print "\n";
-	print "Usage: $program_name\n";
-	print "\n";
-	print "       LIST  List of paths to RDF databases\n";
+	print "        SEC  Loop search every specified seconds (default='run only once').\n";
 	print "\n";
 	print "Options: -c  Path to control directory (default='./ctrl').\n";
 	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
@@ -97,7 +95,15 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -Q  Export specified bin directory when throwing with qsub(default='\$HOME/bin').\n";
 	print "         -s  Loop second (default='no loop').\n";
 	print "\n";
+	print "Usage: $program_name daemon\n";
+	print "\n";
+	print "             Look for RDF databases and run once if filestamps are updated.\n";
+	print "Options: -d  Directory to search for (default='.').\n";
+	print "         -l  Log directory (default='./log').\n";
+	print "         -s  Loop second (default='10 sec').\n";
+	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
+	print "\n";
 	if(defined($opt_H)){
 		print "Updates: 2019/05/05  Set up 'output' for a command mode.\n";
 		print "         2019/04/08  'inputs' to pass inputs as variable array.\n";
@@ -124,12 +130,13 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	exit(0);
 }
 ############################## MAIN ##############################
-my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"executeUrl"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"commandUrl"}."\")";
-my $newControlQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"controlUrl"}."\")";
-my $executeQuery="select distinct s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"executeUrl"}."\")";
-my $refreshQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"refreshUrl"}."\")";
+my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
+my $newControlQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/control"}."\")";
+my $executeQuery="select distinct s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
+my $refreshQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/refresh"}."\")";
 my $cwd=Cwd::getcwd();
 my $rdfdb=$opt_d;
+if(scalar(@ARGV)==1&&$ARGV[0] eq "daemon"){autodaemon();exit();}
 if(!defined($rdfdb)){
 	if(scalar(@ARGV)>0){$rdfdb="rdf.sqlite3";}
 	else{print STDERR "Please specify database by -d option.\n";exit(1);}
@@ -210,10 +217,10 @@ while(true){
 sub printCommand{
 	my $url=shift();
 	my $command=loadCommandFromURL($url);
-	my @inputs=@{$command->{$urls->{"inputUrl"}}};
-	my @outputs=@{$command->{$urls->{"outputUrl"}}};
-	print STDOUT "\n#URL    :".$command->{$urls->{"commandUrl"}}."\n";
-	my $cmdline="#Command:".basename($command->{$urls->{"commandUrl"}});
+	my @inputs=@{$command->{$urls->{"daemon/input"}}};
+	my @outputs=@{$command->{$urls->{"daemon/output"}}};
+	print STDOUT "\n#URL    :".$command->{$urls->{"daemon/command"}}."\n";
+	my $cmdline="#Command:".basename($command->{$urls->{"daemon/command"}});
 	if(scalar(@inputs)>0){$cmdline.=" [".join("] [",@inputs)."]";}
 	if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
 	print STDOUT "$cmdline\n";
@@ -221,14 +228,14 @@ sub printCommand{
 	if(scalar(@outputs)>0){print STDOUT "#Output :".join(" ",@{$command->{"output"}})."\n";}
 	print STDOUT "#Bash   :";
 	my $index=0;
-	foreach my $line(@{$command->{$urls->{"bashUrl"}}}){if($index++>0){print STDOUT "        :"}print STDOUT "$line\n";}
-	if($command->{$urls->{"maxjobUrl"}}>1){print STDOUT "#Maxjob :".$command->{$urls->{"maxjobUrl"}}."\n";}
-	if(exists($command->{$urls->{"singleThreadUrl"}})){print STDOUT "#Single :".($command->{$urls->{"singleThreadUrl"}}?"true":"false")."\n";}
-	if(exists($command->{$urls->{"qsubOptUrl"}})){print STDOUT "#QsubOpt:".$command->{$urls->{"qsubOptUrl"}}."\n";}
-	if(exists($command->{$urls->{"scriptUrl"}})){
-		foreach my $script(@{$command->{$urls->{"scriptUrl"}}}){
-			print STDOUT "#Script :".$script->{$urls->{"scriptNameUrl"}}."\n";
-			foreach my $line(@{$script->{$urls->{"scriptCodeUrl"}}}){print STDOUT "        :$line\n";}
+	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){if($index++>0){print STDOUT "        :"}print STDOUT "$line\n";}
+	if($command->{$urls->{"daemon/maxjob"}}>1){print STDOUT "#Maxjob :".$command->{$urls->{"daemon/maxjob"}}."\n";}
+	if(exists($command->{$urls->{"daemon/singlethread"}})){print STDOUT "#Single :".($command->{$urls->{"daemon/singlethread"}}?"true":"false")."\n";}
+	if(exists($command->{$urls->{"daemon/qsubopt"}})){print STDOUT "#QsubOpt:".$command->{$urls->{"daemon/qsubopt"}}."\n";}
+	if(exists($command->{$urls->{"daemon/script"}})){
+		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
+			print STDOUT "#Script :".$script->{$urls->{"daemon/script/name"}}."\n";
+			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print STDOUT "        :$line\n";}
 		}
 	}
 	print STDOUT "\n";
@@ -236,8 +243,8 @@ sub printCommand{
 ############################## assignCommand ##############################
 sub assignCommand{
 	my $command=shift();
-	my @inputs=@{$command->{$urls->{"inputUrl"}}};
-	my @outputs=@{$command->{$urls->{"outputUrl"}}};
+	my @inputs=@{$command->{$urls->{"daemon/input"}}};
+	my @outputs=@{$command->{$urls->{"daemon/output"}}};
 	my @arguments=();
 	foreach my $input(@inputs){push(@arguments,promtCommandInput($command,$input));}
 	foreach my $output(@outputs){push(@arguments,promtCommandOutput($command,$output));}
@@ -267,14 +274,15 @@ sub commandProcess{
 	my @arguments=@ARGV;
 	my $url=shift(@arguments);
 	my $command=loadCommandFromURL($url);
-	print_table($command);
 	$commands->{$url}=$command;
-	my @inputs=@{$command->{$urls->{"inputUrl"}}};
-	my @outputs=@{$command->{$urls->{"outputUrl"}}};
-	my $cmdline="#Command: ".basename($command->{$urls->{"commandUrl"}});
-	if(scalar(@inputs)>0){$cmdline.=" [".join("] [",@inputs)."]";}
-	if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
-	print "$cmdline\n";
+	my @inputs=@{$command->{$urls->{"daemon/input"}}};
+	my @outputs=@{$command->{$urls->{"daemon/output"}}};
+	if($showlog){
+		my $cmdline="#Command: ".basename($command->{$urls->{"daemon/command"}});
+		if(scalar(@inputs)>0){$cmdline.=" [".join("] [",@inputs)."]";}
+		if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
+		print "$cmdline\n";
+	}
 	if((scalar(@inputs)+scalar(@outputs))>0&&scalar(@arguments)==0){@arguments=assignCommand($command);}
 	if(scalar(@arguments)<scalar(@inputs)){exit(1);}
 	my $key=$arguments[0];
@@ -282,8 +290,8 @@ sub commandProcess{
 	my $nodeid=newNode($dbh);
 	$dbh->disconnect;
 	my @lines=();
-	push(@lines,"$key\t".$urls->{"executeUrl"}."\t$nodeid");
-	push(@lines,"$nodeid\t".$urls->{"commandUrl"}."\t$url");
+	push(@lines,"$key\t".$urls->{"daemon/execute"}."\t$nodeid");
+	push(@lines,"$nodeid\t".$urls->{"daemon/command"}."\t$url");
 	foreach my $input(@inputs){push(@lines,"$nodeid\t$url#$input\t".shift(@arguments));}
 	foreach my $output(@outputs){if(scalar(@arguments)==0){last;}push(@lines,"$nodeid\t$url#$output\t".shift(@arguments));}
 	my ($fh,$file)=mkstemps("$ctrldir/insert/XXXXXXXXXX",".insert");
@@ -302,12 +310,12 @@ sub mainProcess{
 	for(my $i=0;($i<$available)&&(scalar(@{$execurls})>0);$i++){
 		my $url=shift(@{$execurls});
 		my $command=$commands->{$url};
-		my $singlethread=(exists($command->{$urls->{"singleThreadUrl"}})&&$command->{$urls->{"singleThreadUrl"}} eq "true");
-		my $qsubopt=$command->{$urls->{"qsubOptUrl"}};
-		my $maxjob=$command->{$urls->{"maxjobUrl"}};
+		my $singlethread=(exists($command->{$urls->{"daemon/singlethread"}})&&$command->{$urls->{"daemon/singlethread"}} eq "true");
+		my $qsubopt=$command->{$urls->{"daemon/qsubopt"}};
+		my $maxjob=$command->{$urls->{"daemon/maxjob"}};
 		if(!defined($maxjob)){$maxjob=1;}
 		my @bashFiles=();
-		if(exists($command->{$urls->{"batchUrl"}})){
+		if(exists($command->{$urls->{"daemon/batch"}})){
 			my $variables=initExecute($rdfdb,$command);
 			my @datas=();
 			while(scalar(@{$executes->{$url}})>0){
@@ -319,17 +327,17 @@ sub mainProcess{
 				push(@datas,$hash);
 				$maxjob--;
 			}
-			if(exists($command->{$urls->{"newnodeUrl"}})){newNodeCommand($rdfdb,$variables,$command->{$urls->{"newnodeUrl"}});}
+			if(exists($command->{$urls->{"daemon/newnode"}})){newNodeCommand($rdfdb,$variables,$command->{$urls->{"daemon/newnode"}});}
 			batchCommand($command,$variables,\@datas);
 			if(exists($variables->{"bashfile"})){push(@bashFiles,[$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"bashfile"},$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"stdoutfile"},$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"stderrfile"}]);}
 			$thrown++;
-		}elsif(exists($command->{$urls->{"bashUrl"}})){
+		}elsif(exists($command->{$urls->{"daemon/bash"}})){
 			while(scalar(@{$executes->{$url}})>0){
 				if(!$singlethread&&$maxjob<=0){last;}
 				my $variables=shift(@{$executes->{$url}});
 				initExecute($rdfdb,$command,$variables);
 				updateExecuteTicket($command,$variables,\@deletes);
-				if(exists($command->{$urls->{"newnodeUrl"}})){newNodeCommand($rdfdb,$variables,$command->{$urls->{"newnodeUrl"}});}
+				if(exists($command->{$urls->{"daemon/newnode"}})){newNodeCommand($rdfdb,$variables,$command->{$urls->{"daemon/newnode"}});}
 				bashCommand($command,$variables);
 				if(exists($variables->{"bashfile"})){push(@bashFiles,[$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"bashfile"},$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"stdoutfile"},$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"stderrfile"}]);}
 				$maxjob--;
@@ -500,7 +508,7 @@ sub loadCommandFromURL{
 	my $command=getJson($url);
 	if(scalar(keys(%{$command}))==0){print "FAILED\n";return;}
 	loadCommandFromURLSub($command,$url);
-	$command->{$urls->{"commandUrl"}}=$url;
+	$command->{$urls->{"daemon/command"}}=$url;
 	if($showlog){print "OK\n";}
 	return $command;
 }
@@ -509,82 +517,82 @@ sub loadCommandFromURLSub{
 	my $url=shift();
 	$command->{"input"}=[];
 	$command->{"output"}=[];
-	if(exists($command->{$urls->{"inputsUrl"}})){
-		$command->{$urls->{"inputsUrl"}}=handleArray($command->{$urls->{"inputsUrl"}});
-		$command->{"inputs"}=handleHash(@{$command->{$urls->{"inputsUrl"}}});
-		if(!exists($command->{$urls->{"inputUrl"}})){$command->{$urls->{"inputUrl"}}=$command->{$urls->{"inputsUrl"}};}
+	if(exists($command->{$urls->{"daemon/inputs"}})){
+		$command->{$urls->{"daemon/inputs"}}=handleArray($command->{$urls->{"daemon/inputs"}});
+		$command->{"inputs"}=handleHash(@{$command->{$urls->{"daemon/inputs"}}});
+		if(!exists($command->{$urls->{"daemon/input"}})){$command->{$urls->{"daemon/input"}}=$command->{$urls->{"daemon/inputs"}};}
 	}
-	if(exists($command->{$urls->{"inputUrl"}})){
-		$command->{$urls->{"inputUrl"}}=handleArray($command->{$urls->{"inputUrl"}});
+	if(exists($command->{$urls->{"daemon/input"}})){
+		$command->{$urls->{"daemon/input"}}=handleArray($command->{$urls->{"daemon/input"}});
 		my @array=();
-		foreach my $input(@{$command->{$urls->{"inputUrl"}}}){push(@array,$input);}
-		if(exists($command->{$urls->{"inputsUrl"}})){
-			my $hash=handleHash(@{$command->{$urls->{"inputUrl"}}});
-			foreach my $input(@{$command->{"inputsUrl"}}){if(!exists($hash->{$input})){push(@array,$input);}}
+		foreach my $input(@{$command->{$urls->{"daemon/input"}}}){push(@array,$input);}
+		if(exists($command->{$urls->{"daemon/inputs"}})){
+			my $hash=handleHash(@{$command->{$urls->{"daemon/input"}}});
+			foreach my $input(@{$command->{"daemon/inputs"}}){if(!exists($hash->{$input})){push(@array,$input);}}
 		}
 		$command->{"input"}=\@array;
 	}
-	if(exists($command->{$urls->{"outputsUrl"}})){
-		$command->{$urls->{"outputsUrl"}}=handleArray($command->{$urls->{"outputsUrl"}});
-		$command->{"outputs"}=$command->{$urls->{"outputsUrl"}};
+	if(exists($command->{$urls->{"daemon/outputs"}})){
+		$command->{$urls->{"daemon/outputs"}}=handleArray($command->{$urls->{"daemon/outputs"}});
+		$command->{"outputs"}=$command->{$urls->{"daemon/outputs"}};
 	}
-	if(exists($command->{$urls->{"outputUrl"}})){
-		$command->{$urls->{"outputUrl"}}=handleArray($command->{$urls->{"outputUrl"}});
+	if(exists($command->{$urls->{"daemon/output"}})){
+		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}});
 		my @array=();
-		foreach my $output(@{$command->{$urls->{"outputUrl"}}}){push(@array,$output);}
-		if(exists($command->{$urls->{"outputsUrl"}})){
-			my $hash=handleHash(@{$command->{$urls->{"outputUrl"}}});
-			foreach my $output(@{$command->{"outputsUrl"}}){if(!exists($hash->{$output})){push(@array,$output);}}
+		foreach my $output(@{$command->{$urls->{"daemon/output"}}}){push(@array,$output);}
+		if(exists($command->{$urls->{"daemon/outputs"}})){
+			my $hash=handleHash(@{$command->{$urls->{"daemon/output"}}});
+			foreach my $output(@{$command->{"daemon/outputs"}}){if(!exists($hash->{$output})){push(@array,$output);}}
 		}
 		$command->{"output"}=\@array;
 	}
-	if(exists($command->{$urls->{"selectUrl"}})){
-		my @temp=parseQuery($command->{$urls->{"selectUrl"}});
+	if(exists($command->{$urls->{"daemon/select"}})){
+		my @temp=parseQuery($command->{$urls->{"daemon/select"}});
 		$command->{"rdfQuery"}=$temp[0];
 		$command->{"input"}=$temp[1];
 		$command->{"keys"}=$temp[1];
-		$command->{"selectKeys"}=handleKeys($command->{$urls->{"selectUrl"}});
-		if(defined($temp[2])){$command->{"execvar"}=$temp[2];}
+		$command->{"selectKeys"}=handleKeys($command->{$urls->{"daemon/select"}});
 	}else{
 		my @array=();
 		foreach my $input(@{$command->{"input"}}){push(@array,$input);}
 		foreach my $output(@{$command->{"output"}}){push(@array,$output);}
 		$command->{"keys"}=\@array;
 	}
-	if(exists($command->{$urls->{"unzipUrl"}})){$command->{$urls->{"unzipUrl"}}=handleArray($command->{$urls->{"unzipUrl"}});}
-	if(exists($command->{$urls->{"md5Url"}})){$command->{$urls->{"md5Url"}}=handleArray($command->{$urls->{"md5Url"}});}
-	if(exists($command->{$urls->{"filesizeUrl"}})){$command->{$urls->{"filesizeUrl"}}=handleArray($command->{$urls->{"filesizeUrl"}});}
-	if(exists($command->{$urls->{"linecountUrl"}})){$command->{$urls->{"linecountUrl"}}=handleArray($command->{$urls->{"linecountUrl"}});}
-	if(exists($command->{$urls->{"seqcountUrl"}})){$command->{$urls->{"seqcountUrl"}}=handleArray($command->{$urls->{"seqcountUrl"}});}
-	if(exists($command->{$urls->{"importUrl"}})){if(ref($command->{$urls->{"importUrl"}}) ne "ARRAY"){$command->{$urls->{"importUrl"}}=[$command->{$urls->{"importUrl"}}];}}
-	if(exists($command->{$urls->{"newnodeUrl"}})){if(ref($command->{$urls->{"newnodeUrl"}}) ne "ARRAY"){$command->{$urls->{"newnodeUrl"}}=[$command->{$urls->{"newnodeUrl"}}];}}
-	if(exists($command->{$urls->{"batchUrl"}})){if(ref($command->{$urls->{"batchUrl"}}) ne "ARRAY"){$command->{$urls->{"batchUrl"}}=[$command->{$urls->{"batchUrl"}}];}}
-	if(exists($command->{$urls->{"insertUrl"}})){$command->{"insertKeys"}=handleKeys($command->{$urls->{"insertUrl"}},$command);}
-	if(exists($command->{$urls->{"deleteUrl"}})){$command->{"deleteKeys"}=handleKeys($command->{$urls->{"deleteUrl"}},$command);}
-	if(exists($command->{$urls->{"bashUrl"}})){$command->{"bashCode"}=handleCode($command->{$urls->{"bashUrl"}});}
-	if(!exists($command->{$urls->{"maxjobUrl"}})){$command->{$urls->{"maxjobUrl"}}=1;}
-	if(exists($command->{$urls->{"scriptUrl"}})){handleScript($command);}
+	if(exists($command->{$urls->{"daemon/miniconda"}})){$command->{$urls->{"daemon/miniconda"}}=handleArray($command->{$urls->{"daemon/miniconda"}});}
+	if(exists($command->{$urls->{"daemon/unzip"}})){$command->{$urls->{"daemon/unzip"}}=handleArray($command->{$urls->{"daemon/unzip"}});}
+	if(exists($command->{$urls->{"daemon/md5"}})){$command->{$urls->{"daemon/md5"}}=handleArray($command->{$urls->{"daemon/md5"}});}
+	if(exists($command->{$urls->{"daemon/filesize"}})){$command->{$urls->{"daemon/filesize"}}=handleArray($command->{$urls->{"daemon/filesize"}});}
+	if(exists($command->{$urls->{"daemon/linecount"}})){$command->{$urls->{"daemon/linecount"}}=handleArray($command->{$urls->{"daemon/linecount"}});}
+	if(exists($command->{$urls->{"daemon/seqcount"}})){$command->{$urls->{"daemon/seqcount"}}=handleArray($command->{$urls->{"daemon/seqcount"}});}
+	if(exists($command->{$urls->{"daemon/import"}})){if(ref($command->{$urls->{"daemon/import"}}) ne "ARRAY"){$command->{$urls->{"daemon/import"}}=[$command->{$urls->{"daemon/import"}}];}}
+	if(exists($command->{$urls->{"daemon/newnode"}})){if(ref($command->{$urls->{"daemon/newnode"}}) ne "ARRAY"){$command->{$urls->{"daemon/newnode"}}=[$command->{$urls->{"daemon/newnode"}}];}}
+	if(exists($command->{$urls->{"daemon/batch"}})){if(ref($command->{$urls->{"daemon/batch"}}) ne "ARRAY"){$command->{$urls->{"daemon/batch"}}=[$command->{$urls->{"daemon/batch"}}];}}
+	if(exists($command->{$urls->{"daemon/insert"}})){$command->{"insertKeys"}=handleKeys($command->{$urls->{"daemon/insert"}},$command);}
+	if(exists($command->{$urls->{"daemon/delete"}})){$command->{"deleteKeys"}=handleKeys($command->{$urls->{"daemon/delete"}},$command);}
+	if(exists($command->{$urls->{"daemon/bash"}})){$command->{"bashCode"}=handleCode($command->{$urls->{"daemon/bash"}});}
+	if(!exists($command->{$urls->{"daemon/maxjob"}})){$command->{$urls->{"daemon/maxjob"}}=1;}
+	if(exists($command->{$urls->{"daemon/script"}})){handleScript($command);}
 }
 ############################## handleScript ##############################
 sub handleScript{
 	my $command=shift();
-	my $scripts=$command->{$urls->{"scriptUrl"}};
+	my $scripts=$command->{$urls->{"daemon/script"}};
 	if(ref($scripts)ne"ARRAY"){$scripts=[$scripts];}
 	foreach my $script(@{$scripts}){
-		my $name=$script->{$urls->{"scriptNameUrl"}};
-		my $code=$script->{$urls->{"scriptCodeUrl"}};
+		my $name=$script->{$urls->{"daemon/script/name"}};
+		my $code=$script->{$urls->{"daemon/script/code"}};
 		if(ref($code)ne"ARRAY"){$code=[$code];}
 		$command->{$name}=$code;
 		push(@{$command->{"script"}},$name);
 	}
-	$command->{$urls->{"scriptUrl"}}=$scripts;
+	$command->{$urls->{"daemon/script"}}=$scripts;
 }
 ############################## createSelectFromInputs ##############################
 sub createSelectFromInputs{
 	my $url=shift();
 	my @inputs=@{shift()};
 	my $keyinput=shift(@inputs);
-	my $select="\$$keyinput->".$urls->{"executeUrl"}."->\$nodeid,\$nodeid->".$urls->{"commandUrl"}."->$url";
+	my $select="\$$keyinput->".$urls->{"daemon/execute"}."->\$nodeid,\$nodeid->".$urls->{"daemon/command"}."->$url";
 	foreach my $input(@inputs){$select.=",\$nodeid->$url#$input->\$$input";}
 	return $select;
 }
@@ -620,7 +628,7 @@ sub getExecuteJobs{
 	my $rdfdb=shift();
 	my $command=shift();
 	my $executes=shift();
-	if(exists($command->{$urls->{"selectUrl"}})){return getExecuteJobsSelect($rdfdb,$command,$executes);}
+	if(exists($command->{$urls->{"daemon/select"}})){return getExecuteJobsSelect($rdfdb,$command,$executes);}
 	else{return getExecuteJobsNodeid($rdfdb,$command,$executes);}
 }
 
@@ -629,8 +637,8 @@ sub getExecuteJobsNodeid{
 	my $rdfdb=shift();
 	my $command=shift();
 	my $executes=shift();
-	my $query="select distinct k.data,s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as k on e1.subject=k.id inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"executeUrl"}."\")";
-	my $url=$command->{$urls->{"commandUrl"}};
+	my $query="select distinct k.data,s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as k on e1.subject=k.id inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
+	my $url=$command->{$urls->{"daemon/command"}};
 	my $dbh=openDB($rdfdb);
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
@@ -644,9 +652,14 @@ sub getExecuteJobsNodeid{
 		my $nodeid=$row->[1];
 		my $predicate=$row->[2];
 		my $object=$row->[3];
-		if($predicate eq $url){next;}
-		if(!exists($variables->{$nodeid})){$variables->{$nodeid}={};$variables->{$nodeid}->{".nodeid"}=$nodeid;$variables->{$nodeid}->{".keyinput"}=$keyinput;}
-		if($predicate=~/^$url#(.+)$/){$variables->{$nodeid}->{$1}=$object;}
+		if($object eq $url){next;}
+		if(!exists($variables->{$nodeid})){$variables->{$nodeid}={};$variables->{$nodeid}->{"nodeid"}=$nodeid;$variables->{$nodeid}->{".keyinput"}=$keyinput;}
+		if($predicate=~/^$url#(.+)$/){
+			my $key=$1;
+			if(!exists($variables->{$nodeid}->{$key})){$variables->{$nodeid}->{$key}=$object;}
+			elsif(ref($variables->{$nodeid}->{$key})eq"ARRAY"){push(@{$variables->{$nodeid}->{$key}},$object);}
+			else{$variables->{$nodeid}->{$key}=[$variables->{$nodeid}->{$key},$object]}
+		}
 	}
 	my $count=0;
 	foreach my $key(sort{$a cmp $b}keys(%{$variables})){push(@{$executes->{$url}},$variables->{$key});$count++;}
@@ -663,11 +676,11 @@ sub getExecuteJobsSelect{
 	$sth->execute();
 	my $rows=$sth->fetchall_arrayref();
 	$dbh->disconnect;
-	my $url=$command->{$urls->{"commandUrl"}};
+	my $url=$command->{$urls->{"daemon/command"}};
 	my $keys=$command->{"keys"};
 	my $count=0;
-	if(exists($command->{$urls->{"inputsUrl"}})){
-		my $inputs=$command->{$urls->{"inputsUrl"}};
+	if(exists($command->{$urls->{"daemon/inputs"}})){
+		my $inputs=$command->{$urls->{"daemon/inputs"}};
 		my $temp={};
 		foreach my $row(@{$rows}){
 			my $label="|";
@@ -711,11 +724,11 @@ sub getExecuteJobsSelect{
 	}
 	foreach my $line(@{$command->{"selectKeys"}}){
 		my @tokens=@{$line};
-		if($tokens[1] eq $urls->{"executeUrl"}){
+		if($tokens[1] eq $urls->{"daemon/execute"}){
 			my $inputkey=substr($tokens[0],1);
 			my $nodekey=substr($tokens[2],1);
 			foreach my $variables(@{$executes->{$url}}){
-				$variables->{".nodeid"}=$variables->{$nodekey};
+				$variables->{"nodeid"}=$variables->{$nodekey};
 				$variables->{".keyinput"}=$variables->{$inputkey};
 			}
 		}
@@ -737,8 +750,8 @@ sub updateExecuteTicket{
 	my $command=shift();
 	my $variables=shift();
 	my $deletes=shift();
-	my $executeUrl=$urls->{"executeUrl"};
-	my $nodeid=$variables->{".nodeid"};
+	my $executeUrl=$urls->{"daemon/execute"};
+	my $nodeid=$variables->{"nodeid"};
 	my $keyinput=$variables->{".keyinput"};
 	push(@{$deletes},"$keyinput\t$executeUrl\t$nodeid");
 }
@@ -748,7 +761,7 @@ sub initExecute{
 	my $command=shift();
 	my $variables=shift();
 	if(!defined($variables)){$variables={};}
-	my $url=$command->{$urls->{"commandUrl"}};
+	my $url=$command->{$urls->{"daemon/command"}};
 	my $cwd=Cwd::getcwd();
 	$variables->{"cwd"}=$cwd;
 	$variables->{"cmdurl"}=$url;
@@ -765,8 +778,6 @@ sub initExecute{
 	$variables->{"deletefile"}="$filebsnm.delete";
 	$variables->{"completedfile"}="$filebsnm.completed";
 	$variables->{"filebsnm"}=$filebsnm;
-	if(exists($command->{"execvar"})){$variables->{"execid"}=$variables->{$command->{"execvar"}};}
-	else{$variables->{"execid"}=$filebsnm;}
 	$variables->{"localdb"}="$cwd/$tmpdir/$filebsnm.sqlite3";
 	return $variables;
 }
@@ -776,9 +787,8 @@ sub bashCommand{
 	my $variables=shift();
 	my $cwd=$variables->{"cwd"};
 	my $tmpdir=$variables->{"tmpdir"};
-	my $execid=$variables->{"execid"};
-	my $execvar=$command->{"execvar"};
-	my $url=$command->{$urls->{"commandUrl"}};
+	my $nodeid=$variables->{"nodeid"};
+	my $url=$command->{$urls->{"daemon/command"}};
 	my $bashfile="$cwd/$tmpdir/".$variables->{"bashfile"};
 	my $stderrfile="$cwd/$tmpdir/".$variables->{"stderrfile"};
 	my $stdoutfile="$cwd/$tmpdir/".$variables->{"stdoutfile"};
@@ -789,9 +799,9 @@ sub bashCommand{
 	print OUT "#!/bin/sh\n";
 	print OUT "set -eu\n";
 	print OUT "########## system ##########\n";
-	my @systemvars=("cmdurl","rdfdb","execid","cwd","tmpdir","filebsnm");
+	my @systemvars=("cmdurl","filebsnm","rdfdb","cwd","nodeid","tmpdir");
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","insertfile","completedfile");
-	my @unusedvars=("localdb",".nodeid",".keyinput");
+	my @unusedvars=("localdb",".keyinput");
 	foreach my $var(@systemvars){print OUT "$var=\"".$variables->{$var}."\"\n";}
 	foreach my $var(@systemfiles){print OUT "$var=\"".$variables->{$var}."\"\n";}
 	print OUT "########## variables ##########\n";
@@ -800,7 +810,6 @@ sub bashCommand{
 		foreach my $var(@systemvars){if($var eq $key){$break=1;last;}}
 		foreach my $var(@systemfiles){if($var eq $key){$break=1;last;}}
 		foreach my $var(@unusedvars){if($var eq $key){$break=1;last;}}
-		if($key eq $execvar){$break=1;}
 		if($break){next;}
 		my $value=$variables->{$key};
 		if(ref($value)eq"ARRAY"){print OUT "$key=(\"".join("\" \"",@{$value})."\")\n";}
@@ -826,17 +835,16 @@ sub bashCommand{
 	my @keys=@{$command->{"input"}};
 	my $inputs=$command->{"inputs"};
 	foreach my $key(@keys){
-		if($key eq $execvar){next;}
-		if(exists($inputs->{$key})){foreach my $value(@{$variables->{$key}}){print OUT "\$execid\t$url#$key\t$value\n";}}
-		else{print OUT "\$execid\t$url#$key\t\$$key\n";}
+		if(exists($inputs->{$key})){foreach my $value(@{$variables->{$key}}){print OUT "\$nodeid\t$url#$key\t$value\n";}}
+		else{print OUT "\$nodeid\t$url#$key\t\$$key\n";}
 	}
-	print OUT "\$execid\t$url#tmpdir\t\$tmpdir\n";
-	print OUT "\$execid\t".$urls->{"timeStartedUrl"}."\t`date +%s`\n";
+	print OUT "\$nodeid\t$url#tmpdir\t\$tmpdir\n";
+	print OUT "\$nodeid\t".$urls->{"daemon/timestarted"}."\t`date +%s`\n";
 	print OUT "EOF\n";
 	my @unzips=();
-	if(exists($command->{$urls->{"unzipUrl"}})){
+	if(exists($command->{$urls->{"daemon/unzip"}})){
 		print OUT "########## unzip ##########\n";
-		foreach my $key(@{$command->{$urls->{"unzipUrl"}}}){
+		foreach my $key(@{$command->{$urls->{"daemon/unzip"}}}){
 			if(exists($variables->{$key})){
 				my @values=(ref($variables->{$key})eq"ARRAY")?@{$variables->{$key}}:($variables->{$key});
 				foreach my $value(@values){
@@ -855,6 +863,18 @@ sub bashCommand{
 			}
 		}
 	}
+	if(exists($command->{$urls->{"daemon/miniconda"}})){
+		foreach my $url(@{$command->{$urls->{"daemon/miniconda"}}}){
+			print STDERR ">$url\n";
+			if($url=~/^https\:\/\/anaconda\.org\/(.+)$/){
+				my $environment=$1;
+				$environment=~s/\//_/g;
+				my $command="perl rdf.pl -d $rdfdb -e $environment miniconda $url";
+				print STDERR "$command\n";
+			}
+		}
+		exit();
+	}
 	print OUT "########## command ##########\n";
 	foreach my $line(@{$command->{"bashCode"}}){print OUT "$line\n";}
 	foreach my $output(@{$command->{"output"}}){
@@ -867,9 +887,9 @@ sub bashCommand{
 			$count++;
 		}
 	}
-	if(exists($command->{$urls->{"linecountUrl"}})){
+	if(exists($command->{$urls->{"daemon/linecount"}})){
 		print OUT "########## linecount ##########\n";
-		foreach my $key(@{$command->{$urls->{"linecountUrl"}}}){
+		foreach my $key(@{$command->{$urls->{"daemon/linecount"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
 				print OUT "for e in \${$key"."[\@]} ; do\n";
@@ -884,9 +904,9 @@ sub bashCommand{
 			}
 		}
 	}
-	if(exists($command->{$urls->{"linecountUrl"}})){
+	if(exists($command->{$urls->{"daemon/linecount"}})){
 		print OUT "########## seqcount ##########\n";
-		foreach my $key(@{$command->{$urls->{"seqcountUrl"}}}){
+		foreach my $key(@{$command->{$urls->{"daemon/seqcount"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
 				print OUT "for e in \${$key"."[\@]} ; do\n";
@@ -903,13 +923,13 @@ sub bashCommand{
 	}
 	print OUT "########## database ##########\n";
 	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
-	print OUT "\$execid\t".$urls->{"timeEndedUrl"}."\t`date +%s`\n";
+	print OUT "\$nodeid\t".$urls->{"daemon/timeended"}."\t`date +%s`\n";
 	if(scalar(@{$command->{"insertKeys"}})>0){foreach my $row(@{$command->{"insertKeys"}}){print OUT join("\t",@{$row})."\n";}}
-	foreach my $output(@{$command->{"output"}}){print OUT "\$execid\t$url#$output\t\$$output\n";}
+	foreach my $output(@{$command->{"output"}}){print OUT "\$nodeid\t$url#$output\t\$$output\n";}
 	print OUT "EOF\n";
 	foreach my $output(@{$command->{"outputs"}}){
 		print OUT "for e in \${$output"."[\@]} ; do\n";
-		print OUT "echo \"\$execid\t$url#$output\t\$e\">>\$tmpdir/\$insertfile\n";
+		print OUT "echo \"\$nodeid\t$url#$output\t\$e\">>\$tmpdir/\$insertfile\n";
 		print OUT "done\n";
 	}
 	if(scalar(@{$command->{"deleteKeys"}})>0){
@@ -918,12 +938,12 @@ sub bashCommand{
 		print OUT "EOF\n";
 	}
 	print OUT "if [ -s \$tmpdir/\$stdoutfile ];then\n";
-	print OUT "echo \"\$execid\t$url#stdoutfile\t\$tmpdir/\$stdoutfile\">>\$tmpdir/\$insertfile\n";
-	print OUT "echo \"\$execid\t".$urls->{"stdoutUrl"}."\t\$tmpdir/\$stdoutfile\">>\$tmpdir/\$insertfile\n";
+	print OUT "echo \"\$nodeid\t$url#stdoutfile\t\$tmpdir/\$stdoutfile\">>\$tmpdir/\$insertfile\n";
+	print OUT "echo \"\$nodeid\t".$urls->{"daemon/stdout"}."\t\$tmpdir/\$stdoutfile\">>\$tmpdir/\$insertfile\n";
 	print OUT "fi\n";
 	print OUT "if [ -s \$tmpdir/\$stderrfile ];then\n";
-	print OUT "echo \"\$execid\t$url#stderrfile\t\$tmpdir/\$stderrfile\">>\$tmpdir/\$insertfile\n";
-	print OUT "echo \"\$execid\t".$urls->{"stderrUrl"}."\t\$tmpdir/\$stderrfile\">>\$tmpdir/\$insertfile\n";
+	print OUT "echo \"\$nodeid\t$url#stderrfile\t\$tmpdir/\$stderrfile\">>\$tmpdir/\$insertfile\n";
+	print OUT "echo \"\$nodeid\t".$urls->{"daemon/stderr"}."\t\$tmpdir/\$stderrfile\">>\$tmpdir/\$insertfile\n";
 	print OUT "fi\n";
 	if(scalar(@unzips)>0){
 		print OUT "########## cleanup ##########\n";
@@ -931,7 +951,7 @@ sub bashCommand{
 	}
 	print OUT "########## completed ##########\n";
 	my $importcount=0;
-	foreach my $importfile(@{$command->{$urls->{"importUrl"}}}){print OUT "mv \$cwd/$importfile $ctrldir/insert/$execid.import\n";$importcount++;}
+	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$cwd/$importfile $ctrldir/insert/$nodeid.import\n";$importcount++;}
 	print OUT "mv \$cwd/\$tmpdir/\$completedfile $ctrldir/completed/\$filebsnm.sh\n";
 	close(OUT);
 	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$bashfile,\@scriptfiles,$tmpdir,$cwd);
@@ -950,10 +970,10 @@ sub batchCommand{
 	my $variables=shift();
 	my $datas=shift();
 	my $cwd=$variables->{"cwd"};
-	my $execid=$variables->{"execid"};
+	my $nodeid=$variables->{".nodeid"};
 	my $tmpdir=$variables->{"tmpdir"};
 	my $localdb=$variables->{"localdb"};
-	my $url=$command->{$urls->{"commandUrl"}};
+	my $url=$command->{$urls->{"daemon/command"}};
 	my $bashfile="$cwd/$tmpdir/".$variables->{"bashfile"};
 	my $insertfile="$cwd/$tmpdir/".$variables->{"insertfile"};
 	my $deletefile="$cwd/$tmpdir/".$variables->{"deletefile"};
@@ -963,12 +983,12 @@ sub batchCommand{
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
 	print OUT "########## system ##########\n";
-	my @systemvars=("cmdurl","rdfdb","execid","cwd","tmpdir","filebsnm");
+	my @systemvars=("cmdurl","rdfdb","cwd","tmpdir","filebsnm");
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","completedfile","localdb");
 	my @unusedvars=(".nodeid",".keyinput");
-	if(exists($command->{$urls->{"insertUrl"}})||existsProcess($command,$urls->{"toInsertUrl"})){push(@systemfiles,"insertfile");}
+	if(exists($command->{$urls->{"daemon/insert"}})||existsProcess($command,$urls->{"daemon/toinsert"})){push(@systemfiles,"insertfile");}
 	else{push(@unusedvars,"insertfile");}
-	if(exists($command->{$urls->{"deleteUrl"}})){push(@systemfiles,"deletefile");}
+	if(exists($command->{$urls->{"daemon/delete"}})){push(@systemfiles,"deletefile");}
 	else{push(@unusedvars,"deletefile");}
 	foreach my $var(@systemvars){print OUT "$var=\"".$variables->{$var}."\"\n";}
 	foreach my $var(@systemfiles){print OUT "$var=\"".$variables->{$var}."\"\n";}
@@ -983,10 +1003,10 @@ sub batchCommand{
 	}
 	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
 	printRowsWithData($datas,$command->{"selectKeys"});
-	print OUT "\$execid\t".$urls->{"timeStartedUrl"}."\t`date +%s`\n";
+	print OUT "\$nodeid\t".$urls->{"daemon/timestarted"}."\t`date +%s`\n";
 	print OUT "EOF\n";
-	if(exists($command->{$urls->{"tmpfileUrl"}})){
-		my $value=$command->{$urls->{"tmpfileUrl"}};
+	if(exists($command->{$urls->{"daemon/tmpfile"}})){
+		my $value=$command->{$urls->{"daemon/tmpfile"}};
 		print OUT "########## tmpfile ##########\n";
 		my @array=(ref($value)eq"ARRAY")?@{$value}:($value);
 		foreach my $val(@array){
@@ -998,9 +1018,9 @@ sub batchCommand{
 	}
 	print OUT "########## batch ##########\n";
 	my $currentCommandUrl;
-	foreach my $batch(@{$command->{$urls->{"batchUrl"}}}){
+	foreach my $batch(@{$command->{$urls->{"daemon/batch"}}}){
 		while(my ($key,$value)=each(%{$batch})){
-			if($key eq $urls->{"newnodeUrl"}){
+			if($key eq $urls->{"daemon/newnode"}){
 				my @array=(ref($value)eq"ARRAY")?@{$value}:($value);
 				foreach my $val(@array){
 					my $name=substr($val,1);
@@ -1009,25 +1029,25 @@ sub batchCommand{
 						$datas->[$i]->{"\$$name"}="\$$name$i";
 					}
 				}
-			}elsif($key eq $urls->{"processUrl"}){
+			}elsif($key eq $urls->{"daemon/process"}){
 				print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
 				my $keys=handleKeys($value);
 				$currentCommandUrl=getCurrentCommandUrl($keys);
 				printRowsWithData($datas,$keys);
 				print OUT "EOF\n";
 				print OUT "perl $cwd/moirai2.pl -m 1 -d \$localdb -c \$tmpdir/ctrl\n";
-			}elsif($key eq $urls->{"insertUrl"}){
+			}elsif($key eq $urls->{"daemon/insert"}){
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$value);
 				print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|perl $cwd/rdf.pl -qd \$localdb -f tsv insert\n";
-			}elsif($key eq $urls->{"deleteUrl"}){
+			}elsif($key eq $urls->{"daemon/delete"}){
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$value);
 				print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|perl $cwd/rdf.pl -qd \$localdb -f tsv delete\n";
-			}elsif($key eq $urls->{"mkdirUrl"}){
+			}elsif($key eq $urls->{"daemon/mkdir"}){
 				my ($template,$keys)=constructMkdirTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
 				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
-			}elsif($key eq $urls->{"tmpfileUrl"}){
+			}elsif($key eq $urls->{"daemon/tmpfile"}){
 				my @array=(ref($value)eq"ARRAY")?@{$value}:($value);
 				foreach my $val(@array){
 					my $name=substr($val,1);
@@ -1037,32 +1057,32 @@ sub batchCommand{
 						$datas->[$i]->{"\$$name"}="\$$name$i";
 					}
 				}
-			}elsif($key eq $urls->{"concatUrl"}){
+			}elsif($key eq $urls->{"daemon/concat"}){
 				my ($template,$keys)=constructConcatTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
 				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
-			}elsif($key eq $urls->{"toInsertUrl"}){
+			}elsif($key eq $urls->{"daemon/toinsert"}){
 				my ($template,$keys)=constructToInsertTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
 				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash>>\$tmpdir/\$insertfile\n";}
-			}elsif($key eq $urls->{"mvUrl"}){
+			}elsif($key eq $urls->{"daemon/mv"}){
 				my ($template,$keys)=constructMvTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
 				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|perl $cwd/rdf.pl -qd \$localdb -f tsv rename\n";}
-			}elsif($key eq $urls->{"importUrl"}){
+			}elsif($key eq $urls->{"daemon/import"}){
 				my ($template,$keys)=constructImportTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
 				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
-			}elsif($key eq $urls->{"rmdirUrl"}){
+			}elsif($key eq $urls->{"daemon/rmdir"}){
 				my ($template,$keys)=constructRmdirTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
 				else{print OUT "perl \$cwd/rdf.pl -qd \$localdb -f '$format' query $query|bash\n";}
-			}elsif($key eq $urls->{"rmUrl"}){
+			}elsif($key eq $urls->{"daemon/rm"}){
 				my ($template,$keys)=constructRmTemplate($value);
 				my ($query,$format)=constructQueryAndFormat($currentCommandUrl,$template,$keys);
 				if(scalar(@{$keys})==0){print OUT "$format\n";}
@@ -1073,7 +1093,7 @@ sub batchCommand{
 	print OUT "perl \$cwd/rdf.pl -qd \$localdb -f 'rmdir \$tmpdir > /dev/null 2>&1' query '\$nodeid->$currentCommandUrl#tmpdir->\$tmpdir'|bash\n";
 	print OUT "########## database ##########\n";
 	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
-	print OUT "\$execid\t".$urls->{"timeEndedUrl"}."\t`date +%s`\n";
+	print OUT "\$nodeid\t".$urls->{"daemon/timeended"}."\t`date +%s`\n";
 	print OUT "EOF\n";
 	if(scalar(@{$command->{"insertKeys"}})>0){
 		my @queries=();
@@ -1093,17 +1113,17 @@ sub batchCommand{
 	}
 	print OUT "if [ -s \$tmpdir/\$stdoutfile ];then\n";
 	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
-	print OUT "\$execid\t".$urls->{"stdoutUrl"}."\t\$tmpdir/\$stdoutfile\n";
+	print OUT "\$nodeid\t".$urls->{"daemon/stdout"}."\t\$tmpdir/\$stdoutfile\n";
 	print OUT "EOF\n";
 	print OUT "fi\n";
 	print OUT "if [ -s \$tmpdir/\$stderrfile ];then\n";
 	print OUT "cat<<EOF|perl $cwd/rdf.pl -qd \$localdb -f tsv import\n";
-	print OUT "\$execid\t".$urls->{"stderrUrl"}."\t\$tmpdir/\$stderrfile\n";
+	print OUT "\$nodeid\t".$urls->{"daemon/stderr"}."\t\$tmpdir/\$stderrfile\n";
 	print OUT "EOF\n";
 	print OUT "fi\n";
 	print OUT "########## completed ##########\n";
 	my $importcount=0;
-	foreach my $importfile(@{$command->{$urls->{"importUrl"}}}){print OUT "mv \$cwd/$importfile $ctrldir/insert/$execid.import\n";$importcount++;}
+	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$cwd/$importfile $ctrldir/insert/$nodeid.import\n";$importcount++;}
 	print OUT "mv \$cwd/\$tmpdir/\$completedfile $ctrldir/completed/\$filebsnm.sh\n";
 	close(OUT);
 	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$bashfile,\@scriptfiles,$tmpdir,$cwd,$localdb);
@@ -1113,8 +1133,8 @@ sub batchCommand{
 sub existsProcess{
 	my $command=shift();
 	my $url=shift();
-	if(!exists($command->{$urls->{"batchUrl"}})){return 0;}
-	foreach my $process(@{$command->{$urls->{"batchUrl"}}}){if(exists($process->{$url})){return 1;}}
+	if(!exists($command->{$urls->{"daemon/batch"}})){return 0;}
+	foreach my $process(@{$command->{$urls->{"daemon/batch"}}}){if(exists($process->{$url})){return 1;}}
 	return 0;
 }
 ############################## constructMvTemplate ##############################
@@ -1231,7 +1251,7 @@ sub getCurrentCommandUrl{
 	my $rows=shift();
 	foreach my $row(@{$rows}){
 		if(scalar(@{$row})!=3){next;}
-		if($row->[1] eq $urls->{"commandUrl"}){return $row->[2];}
+		if($row->[1] eq $urls->{"daemon/command"}){return $row->[2];}
 	}
 }
 ############################## printRowsWithData ##############################
@@ -1346,7 +1366,6 @@ sub parseQuery{
 	my $statement=shift();
 	my @statements=(ref($statement)ne"ARRAY")?($statement):@{$statement};
 	my @edges=();
-	my $execvar;
 	foreach my $s(@statements){push(@edges,split(/,/,$s));}
 	my $connects={};
 	my $variables={};
@@ -1361,7 +1380,6 @@ sub parseQuery{
 		my $edge_line=($i>0)?"inner join ":"from ";
 		my $edge=$edges[$i];
 		my @nodes=split(/->/,$edge);
-		if($nodes[1] eq $urls->{"executeUrl"}){$execvar=substr($nodes[2],1);}
 		my @wheres=();
 		for(my $j=0;$j<scalar(@nodes);$j++){
 			my $rdf;
@@ -1420,7 +1438,7 @@ sub parseQuery{
 	foreach my $key(sort{$a cmp $b}keys(%{$connects})){push(@connects2,$connects->{$key});}
 	my $query="select distinct ".join(", ",@columns)." ".join(" ",@connects2)." ".join(" ",@joins);
 	if(scalar(@where_conditions)>0){$query.=" where ".join(" and ",@where_conditions);}
-	return ($query,\@varnames,$execvar);
+	return ($query,\@varnames);
 }
 ############################## getJson ##############################
 sub getJson{
@@ -1830,7 +1848,7 @@ sub autodaemon{
 			}
 			if($modtime>$timestamp){
 				if(-e "$logdir/$basename.lock"){next;}
-				my $command="perl daemon.pl -r -d $database";
+				my $command="perl moirai2.pl -d $database";
 				if(defined($opt_q)){$command.=" -q"}
 				if(defined($opt_m)){$command.=" -m $opt_m"}
 				my $time=time();
