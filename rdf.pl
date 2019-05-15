@@ -43,8 +43,6 @@ $urls->{"conda/install"       }="https://moirai2.github.io/schema/conda/install"
 $urls->{"conda/error"         }="https://moirai2.github.io/schema/conda/error";
 $urls->{"conda/test"          }="https://moirai2.github.io/schema/conda/test";
 $urls->{"daemon"              }="https://moirai2.github.io/schema/daemon";
-$urls->{"daemon/batch"        }="https://moirai2.github.io/schema/daemon/batch";
-$urls->{"daemon/process"      }="https://moirai2.github.io/schema/daemon/process";
 $urls->{"daemon/command"      }="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/control"      }="https://moirai2.github.io/schema/daemon/control";
 $urls->{"daemon/execute"      }="https://moirai2.github.io/schema/daemon/execute";
@@ -69,15 +67,15 @@ sub help{
 	print "COMMAND: $program_name -d DB -f json dump > JSON\n";
 	print "COMMAND: $program_name -d DB query QUERY > JSON\n";
 	print "COMMAND: $program_name -d DB replace FROM TO\n";
-	print "COMMAND: $program_name -d DB rename FROM TO\n";
-	print "COMMAND: $program_name -d DB newnode\n";
-	print "COMMAND: $program_name linecount DIR/FILE\n";
-	print "COMMAND: $program_name seqcount DIR/FILE\n";
-	print "COMMAND: $program_name md5 DIR/FILE\n";
+	print "COMMAND: $program_name -d DB mv FROM TO\n";
+	print "COMMAND: $program_name -d DB newnode > NODE\n";
+	print "COMMAND: $program_name linecount DIR/FILE > TSV\n";
+	print "COMMAND: $program_name seqcount DIR/FILE > TSV\n";
+	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
 	print "COMMAND: $program_name -d DB reindex\n";
 	print "COMMAND: $program_name -d DB download URL\n";
 	print "COMMAND: $program_name -d DB miniconda URL\n";
-	print "COMMAND: $program_name -d DB -f json execute < JSON\n";
+	print "COMMAND: $program_name -d DB -f json command < JSON\n";
 	print "\n";
 	print "COMMAND: $program_name -d DB remove execute\n";
 	print "COMMAND: $program_name -d DB remove log\n";
@@ -147,9 +145,9 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 replace C D","replaced 0");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 replace D E","replaced 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 dump","A	B	E");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 rename test/test.txt test/test3.txt","replaced 0");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test3.txt","replaced 0");
 	testCommand("perl rdf.pl md5 test/test.txt | perl rdf.pl -d test/rdf.sqlite3 import","imported 1");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 rename test/test.txt test/test2.txt","replaced 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test2.txt","replaced 1");
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
 }
@@ -164,16 +162,16 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 }elsif($command eq "test"){
 	test();
 	exit(0);
-}elsif($command eq "file/linecount"){
+}elsif($command eq "linecount"){
 	my $writer=IO::File->new(">&STDOUT");
 	countLines($writer,$opt_r,$opt_f,@ARGV);
 	close($writer);
-}elsif($command eq "file/seqcount"){
+}elsif($command eq "seqcount"){
 	my $writer=IO::File->new(">&STDOUT");
 	countSequences($writer,$opt_r,$opt_f,@ARGV);
 	close($writer);
 	exit(0);
-}elsif($command eq "file/md5"){
+}elsif($command eq "md5"){
 	my $writer=IO::File->new(">&STDOUT");
 	md5Files($writer,$opt_r,$opt_f,@ARGV);
 	close($writer);
@@ -185,18 +183,8 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	if($subject eq "?"){$subject=undef;}
 	if($predicate eq "?"){$predicate=undef;}
 	if($object eq "?"){$object=undef;}
-	my $rdf={};
-	if($iswebdb){
-		my $json={};
-		$json->{"subject"}=$subject;
-		$json->{"predicate"}=$predicate;
-		$json->{"object"}=$object;
-		$rdf=webSelect($database,$json);
-	}else{
-		my $dbh=openDB($database);
-		$rdf=dbSelect($dbh,$subject,$predicate,$object);
-		$dbh->disconnect;
-	}
+	my $json={$subject=>{$predicate=>$object}};
+	my $rdf=($iswebdb)?webSelect($database,$json):dbSelect($database,$subject,$predicate,$object);
 	my $format=defined($opt_f)?$opt_f:"tsv";
 	my $writer=IO::File->new(">&STDOUT");
 	if($format eq "tsv"){outputInColumnFormat($rdf,$writer);}
@@ -215,7 +203,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		if(!defined($predicate)){exit(1);}
 		if(!defined($object)){$object="";while(<STDIN>){$object.=$_;}chomp($object);}
 		my $json={$subject=>{$predicate=>$object}};
-		my $linecount=($iswebdb)?webInsert($database,$json):dbInsert($database,$json);
+		my $linecount=($iswebdb)?webInsert($database,$json):dbInsert($database,$subject,$predicate,$object);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif($opt_f eq "tsv"){
 		my $reader=IO::File->new("-");
@@ -226,7 +214,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		my $reader=IO::File->new("-");
 		my $json=readJson($reader);
 		close($reader);
-		my $linecount=($iswebdb)?webInsert($database,$json):dbInsert($database,$json);
+		my $linecount=($iswebdb)?webInsert($database,$json):jsonInsert($database,$json);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}else{
 		my $reader=IO::File->new("-");
@@ -269,17 +257,11 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	else{my $writer=IO::File->new(">&STDOUT");assembleJsonResults($results,$opt_f,$writer);close($writer);}
 }elsif(lc($command) eq "dump"){
 	my $writer=IO::File->new(">&STDOUT");
-	my $dbh=openDB($database);
-	$dbh->begin_work;
-	dumpDB($dbh,$opt_f,$writer);
-	$dbh->commit;
-	$dbh->disconnect;
+	dumpDB($database,$opt_f,$writer);
 	close($writer);
 }elsif(lc($command) eq "reindex"){
 	my ($fh,$filename)=tempfile;
-	my $dbh=openDB($database);
-	dumpDB($dbh,"tsv",$fh);
-	$dbh->disconnect;
+	dumpDB($database,"tsv",$fh);
 	close($fh);
 	my $newdatabase="$database.tmp";
 	my $reader=IO::File->new($filename);
@@ -305,22 +287,21 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		if($subject eq "?"){$subject=undef;}
 		if($predicate eq "?"){$predicate=undef;}
 		if($object eq "?"){$object=undef;}
-		my $json={$subject=>{$predicate=>$object}};
-		if($iswebdb){webUpdate($database,$json);}
-		else{dbUpdate($database,$json);}
+		if($iswebdb){webUpdate($database,{$subject=>{$predicate=>$object}});}
+		else{dbUpdate($database,$subject,$predicate,$object);}
 	}elsif($opt_f eq "tsv"){
 		my $reader=IO::File->new("-");
 		my ($json,$linecount)=tsvToJson($reader);
 		close($reader);
 		if($iswebdb){webUpdate($database,$json);}
-		else{dbUpdate($database,$json);}
+		else{jsonUpdate($database,$json);}
 		if(!$opt_q){print "updated $linecount\n";}
 	}elsif($opt_f eq "json"){
 		my $reader=IO::File->new("-");
 		my $json=readJson($reader);
 		close($reader);
 		if($iswebdb){webUpdate($database,$json);}
-		else{dbUpdate($database,$json);}
+		else{jsonUpdate($database,$json);}
 	}else{
 		my $reader=IO::File->new("-");
 		my $file=($opt_f=~/\-\>/)?assembleJson($reader,$opt_f):assembleFile($reader,$opt_f);
@@ -334,7 +315,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 			my ($json,$linecount)=tsvToJson($reader);
 			close($reader);
 			if($iswebdb){webUpdate($database,$json);}
-			else{dbUpdate($database,$json);}
+			else{jsonUpdate($database,$json);}
 		}
 	}
 }elsif(lc($command) eq "delete"){
@@ -397,14 +378,12 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		$dbh->disconnect;
 		if(!$opt_q){print "replaced $linecount\n";}
 	}else{
-		my $dbh=openDB($database);
 		my $from=shift(@ARGV);
 		my $to=shift(@ARGV);
-		my $linecount=dbReplace($dbh,$from,$to);
+		my $linecount=dbReplace($database,$from,$to);
 		if(!$opt_q){print "replaced $linecount\n";}
-		$dbh->disconnect;
 	}
-}elsif(lc($command) eq "rename"){
+}elsif(lc($command) eq "mv"){
 	if($opt_f eq "tsv"){
 		my $dbh=openDB($database);
 		my $reader=IO::File->new("-");
@@ -413,20 +392,32 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		$dbh->disconnect;
 		if(!$opt_q){print "renamed $linecount\n";}
 	}else{
-		my $dbh=openDB($database);
-		my $from=shift(@ARGV);
-		my $to=shift(@ARGV);
-		my $linecount=dbReplace($dbh,$from,$to,1);
+		my @froms=@ARGV;
+		if(scalar(@froms<2)){
+			print STDERR "ERROR Need to specify at least two arguments.\n";
+			print STDERR "perl rdf.pl mv SOURCE TARGET\n";
+			exit(1);
+		}
+		my $to=pop(@froms);
+		if($to=~/^(.+)\/\.$/){$to=$1;}
+		elsif($to=~/^(.+)\/$/){$to=$1;}
+		elsif($to=~/^\.$/){$to="";}
+		my $linecount=0;
+		if(-d $to){
+			if($to ne ""){$to="$to/";}
+			foreach my $from(@froms){$linecount+=dbReplace($database,$from,$to.basename($from),1);}
+		}elsif(scalar(@froms)>1){
+			print STDERR "ERROR multiple files were specified and target wasn't a directory.";
+			print STDERR "perl rdf.pl mv SOURCE SOURCE SOURCE DIRECTORY\n";
+			exit(1);
+		}else{
+			$linecount=dbReplace($database,$froms[0],$to,1);
+		}
 		if(!$opt_q){print "replaced $linecount\n";}
-		$dbh->disconnect;
 	}
 }elsif(lc($command) eq "merge"){
 	my ($writer,$file)=tempfile(UNLINK=>1);
-	foreach my $database(@ARGV){
-		my $dbh=openDB($database);
-		dumpDB($dbh,"tsv",$writer);
-		$dbh->disconnect;
-	}
+	foreach my $database(@ARGV){dumpDB($database,"tsv",$writer);}
 	close($writer);
 	my $reader=IO::File->new($file);
 	my $linecount=importDB($database,$reader);
@@ -480,7 +471,7 @@ sub executeComand{
 		my $value=$json->{$key};
 		$rdf->{$nodeid}->{"$url#$key"}=$value;
 	}
-	dbInsert($database,$rdf);
+	jsonInsert($database,$rdf);
 	return $nodeid;
 }
 ############################## mkdirDownload ##############################
@@ -512,7 +503,7 @@ sub checkMinicondaEnv{
 		print STDERR "Creating environment: $environment\n";
 		my $success=system("$command > $logdirectory/$environment.env.stdout 2> $logdirectory/$environment.env.stderr");
 		if($success!=0){print STDERR "Failed to create environment\n";return 1;}
-		dbInsert($database,{$urls->{"conda"}=>{$urls->{"conda/environment"}=>$environment}});
+		dbInsert($database,$urls->{"conda"},$urls->{"conda/environment"},$environment);
 	}
 	return;
 }
@@ -532,7 +523,7 @@ sub installPackage{
 	my $logdirectory=getObject($database,$urls->{"conda"},$urls->{"conda/log"});
 	my $success=system("$command > $logdirectory/$environment.package.stdout 2> $logdirectory/$environment.package.stderr");
 	if($success!=0){print STDERR "Failed to install package $package\n";return 1;}
-	dbInsert($database,{$environment=>{$urls->{"conda/package"}=>$package}});
+	dbInsert($database,$environment,$urls->{"conda/package"},$package);
 	return 0;
 }
 ############################## registerPackages ##############################
@@ -542,7 +533,7 @@ sub registerPackages{
 	if(scalar(@urls)==0){return;}
 	my $json={$urls->{"conda"}=>{$urls->{"conda/install"}=>[]}};
 	foreach my $url(@urls){push(@{$json->{$urls->{"conda"}}->{$urls->{"conda/install"}}},$url);}
-	dbInsert($database,$json);
+	jsonInsert($database,$json);
 }
 ############################## checkMiniconda ##############################
 sub checkMiniconda{
@@ -553,7 +544,7 @@ sub checkMiniconda{
 	if(!defined($url)){
 		$url=getMiniconda3Url();
 		print STDERR "conda Installer: $url\n";
-		dbInsert($database,{$urls->{"conda"}=>{$urls->{"conda/installer"}=>$url}});
+		dbInsert($database,$urls->{"conda"},$urls->{"conda/installer"},$url);
 	}
 	my $path=getObject($database,$url,$urls->{"file"});
 	if(!defined($path)){
@@ -572,13 +563,13 @@ sub checkMiniconda{
 		my $home=$ENV{"HOME"};
 		$directory="$home/conda";
 		if(-e "$directory/bin/conda"){
-			dbInsert($database,{$urls->{"conda"}=>{$urls->{"conda/bin"}=>"$directory/bin/conda"}});
+			dbInsert($database,$urls->{"conda"},$urls->{"conda/bin"},"$directory/bin/conda");
 			return;
 		}
 		$logdirectory="$directory/log";
 		print STDERR "conda Directory: $directory\n";
-		dbInsert($database,{$urls->{"conda"}=>{$urls->{"conda/directory"}=>$directory}});
-		dbInsert($database,{$urls->{"conda"}=>{$urls->{"conda/log"}=>$logdirectory}});
+		dbInsert($database,$urls->{"conda"},$urls->{"conda/directory"},$directory);
+		dbInsert($database,$urls->{"conda"},$urls->{"conda/log"},$logdirectory);
 	}
 	my $command="bash $path -f -b -p $directory";
 	print STDERR "Install Command: $command\n";
@@ -589,8 +580,8 @@ sub checkMiniconda{
 	rename("$basename.stderr","$logdirectory/$basename.stderr");
 	if($success!=0){
 		print STDERR "Failed to install miniconda3\n";
-		dbInsert($database,{$path=>{$urls->{"conda/stdout"}=>"$logdirectory/$basename.stdout"}});
-		dbInsert($database,{$path=>{$urls->{"conda/stderr"}=>"$logdirectory/$basename.stderr"}});
+		dbInsert($database,$path,$urls->{"conda/stdout"},"$logdirectory/$basename.stdout");
+		dbInsert($database,$path,$urls->{"conda/stderr"},"$logdirectory/$basename.stderr");
 		exit(1);
 	}else{
 		dbDelete($database,$path,$urls->{"conda/stdout"},"$logdirectory/$basename.stdout");
@@ -600,14 +591,14 @@ sub checkMiniconda{
 	my $success=system("$binpath > $logdirectory/conda.stdout 2> $logdirectory/conda.stderr");
 	if($success!=0){
 		print STDERR "Failed to execute $binpath\n";
-		dbInsert($database,{$binpath=>{$urls->{"conda/stdout"}=>"$logdirectory/conda.stdout"}});
-		dbInsert($database,{$binpath=>{$urls->{"conda/stderr"}=>"$logdirectory/conda.stderr"}});
+		dbInsert($database,$binpath,$urls->{"conda/stdout"},"$logdirectory/conda.stdout");
+		dbInsert($database,$binpath,$urls->{"conda/stderr"},"$logdirectory/conda.stderr");
 		exit(1);
 	}else{
 		dbDelete($database,$binpath,$urls->{"conda/stdout"},"$logdirectory/conda.stdout");
 		dbDelete($database,$binpath,$urls->{"conda/stderr"},"$logdirectory/conda.stderr");
 	}
-	dbInsert($database,{$urls->{"conda"}=>{$urls->{"conda/bin"}=>"$directory/bin/conda"}});
+	dbInsert($database,$urls->{"conda"},$urls->{"conda/bin"},"$directory/bin/conda");
 }
 ############################## getObject ##############################
 sub getObject{
@@ -615,9 +606,7 @@ sub getObject{
 	my $subject=shift();
 	my $predicate=shift();
 	my $object=shift();
-	my $dbh=openDB($database);
-	my $hash=dbSelect($dbh,$subject,$predicate,$object);
-	$dbh->disconnect;
+	my $hash=dbSelect($database,$subject,$predicate,$object);
 	if(scalar(keys(%{$hash}))==0){return;}
 	my $object=$hash->{$subject}->{$predicate};
 	if(ref($object)ne"ARRAY"){return $object;}
@@ -629,9 +618,7 @@ sub getObjects{
 	my $subject=shift();
 	my $predicate=shift();
 	my $object=shift();
-	my $dbh=openDB($database);
-	my $hash=dbSelect($dbh,$subject,$predicate,$object);
-	$dbh->disconnect;
+	my $hash=dbSelect($database,$subject,$predicate,$object);
 	if(scalar(keys(%{$hash}))==0){return [];}
 	my $object=$hash->{$subject}->{$predicate};
 	if(ref($object)ne"ARRAY"){$object=[$object];}
@@ -645,8 +632,7 @@ sub downloadFiles{
 	foreach my $url(@downloads){
 		my $path=downloadFile($url,mkdirDownload());
 		if(!defined($path)){next;}
-		my $json={$url=>{$urls->{"file"}=>$path}};
-		dbInsert($database,$json);
+		dbInsert($database,$url,$urls->{"file"},$path);
 		push(@files,$path);
 	}
 	return @files;
@@ -705,11 +691,9 @@ sub mergeTemps{
 			my $directory=dirname($lcldb);
 			mkdir($directory);
 			chmod(0777,$directory);
-			my $dbh2=openDB($lcldb);
 			my ($writer,$dump)=tempfile(UNLINK=>1);
-			dumpDB($dbh2,"tsv",$writer);
+			dumpDB($lcldb,"tsv",$writer);
 			close($writer);
-			$dbh2->disconnect;
 			my $reader=IO::File->new($dump);
 			mergeDB($db,$reader);
 			close($reader);
@@ -1032,65 +1016,6 @@ sub checkReponse{
 	if($success){print STDERR "OK\n";}
 	else{print STDERR "FAILED\n";}
 }
-############################## dbSelect ##############################
-sub dbSelect{
-	my $dbh=shift();
-	my $subject=shift();
-	my $predicate=shift();
-	my $object=shift();
-	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
-	my $where="";
-	if($subject ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($subject) eq "ARRAY"){$where.=" e1.subject in(select id from node where data in(\"".join("\",\"",@{$subject})."\"))";}
-		else{$where.=" e1.subject=(select id from node where data='$subject')";}
-	}
-	if($predicate ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($predicate) eq "ARRAY"){$where.=" e1.predicate in(select id from node where data in(\"".join("\",\"",@{$predicate})."\"))";}
-		else{$where.=" e1.predicate=(select id from node where data='$predicate')";}
-	}
-	if($object ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($object) eq "ARRAY"){$where.=" e1.object in(select id from node where data in(\"".join("\",\"",@{$object})."\"))";}
-		else{$where.=" e1.object=(select id from node where data='$object')";}
-	}
-	if($where ne ""){$query.=" where$where";}
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	my $hash={};
-	while(my @rows=$sth->fetchrow_array()){
-		my $subject=$rows[0];
-		my $predicate=$rows[1];
-		my $object=$rows[2];
-		if(!exists($hash->{$subject})){$hash->{$subject}={};}
-		if(!exists($hash->{$subject}->{$predicate})){$hash->{$subject}->{$predicate}=$object;}
-		elsif(ref($hash->{$subject}->{$predicate}) eq "ARRAY"){push(@{$hash->{$subject}->{$predicate}},$object);}
-		else{$hash->{$subject}->{$predicate}=[$hash->{$subject}->{$predicate},$object];}
-	}
-	return $hash;
-}
-############################## dbUpdate ##############################
-sub dbUpdate{
-	my $database=shift();
-	my $json=shift();
-	my $dbh=openDB($database);
-	$dbh->begin_work;
-	updateRDF($dbh,$json);
-	$dbh->commit;
-	$dbh->disconnect;
-}
-############################## dbInsert ##############################
-sub dbInsert{
-	my $database=shift();
-	my $json=shift();
-	my $dbh=openDB($database);
-	$dbh->begin_work;
-	my $linecount=insertRDF($dbh,$json);
-	$dbh->commit;
-	$dbh->disconnect;
-	return $linecount;
-}
 ############################## dbDelete ##############################
 sub dbDelete{
 	my $database=shift();
@@ -1121,18 +1046,34 @@ sub dbDelete{
 	if($linecount eq "0E0"){$linecount=0;}
 	return $linecount;
 }
+############################## dbInsert ##############################
+sub dbInsert{
+	my $database=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $json={$subject=>{$predicate=>$object}};
+	my $dbh=openDB($database);
+	$dbh->begin_work;
+	my $linecount=insertRDF($dbh,$json);
+	$dbh->commit;
+	$dbh->disconnect;
+	return $linecount;
+}
 ############################## dbReplace ##############################
 sub dbReplace{
-	my $dbh=shift();
+	my $database=shift();
 	my $from=shift();
 	my $to=shift();
 	my $rename=shift();
 	my $query="update node set data=\"$to\" where data=\"$from\"";
+	my $dbh=openDB($database);
 	$dbh->begin_work;
 	my $sth=$dbh->prepare($query);
 	my $linecount=$sth->execute();
-	if($linecount eq "0E0"){return 0;}
 	$dbh->commit;
+	$dbh->disconnect;
+	if($linecount eq "0E0"){return 0;}
 	if($rename && -e $from){
 		if($to=~/^(.+)\/\.$/){$to="$1/".basename($from);}
 		mkpath(dirname($to));
@@ -1140,31 +1081,79 @@ sub dbReplace{
 	}
 	return $linecount;
 }
-############################## webSelect ##############################
-sub webSelect{
+############################## dbSelect ##############################
+sub dbSelect{
 	my $database=shift();
-	my $data=shift();
-	my $url=dirname($database)."/moirai.php?command=select.php";
-	my $dbname=basename($database);
-	$data->{"db"}=basename($database);
-	my $request=POST($url,$data);
-	my $agent=LWP::UserAgent->new;
-	my $content=$agent->request($request)->content;
-	my $json=jsonDecode($content);
-	delete($json->{"rdfquery"});
-	return $json;
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $dbh=openDB($database);
+	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
+	my $where="";
+	if($subject ne ""){
+		if(length($where)>0){$where.=" and";}
+		if(ref($subject) eq "ARRAY"){$where.=" e1.subject in(select id from node where data in(\"".join("\",\"",@{$subject})."\"))";}
+		else{$where.=" e1.subject=(select id from node where data='$subject')";}
+	}
+	if($predicate ne ""){
+		if(length($where)>0){$where.=" and";}
+		if(ref($predicate) eq "ARRAY"){$where.=" e1.predicate in(select id from node where data in(\"".join("\",\"",@{$predicate})."\"))";}
+		else{$where.=" e1.predicate=(select id from node where data='$predicate')";}
+	}
+	if($object ne ""){
+		if(length($where)>0){$where.=" and";}
+		if(ref($object) eq "ARRAY"){$where.=" e1.object in(select id from node where data in(\"".join("\",\"",@{$object})."\"))";}
+		else{$where.=" e1.object=(select id from node where data='$object')";}
+	}
+	if($where ne ""){$query.=" where$where";}
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my $hash={};
+	while(my @rows=$sth->fetchrow_array()){
+		my $subject=$rows[0];
+		my $predicate=$rows[1];
+		my $object=$rows[2];
+		if(!exists($hash->{$subject})){$hash->{$subject}={};}
+		if(!exists($hash->{$subject}->{$predicate})){$hash->{$subject}->{$predicate}=$object;}
+		elsif(ref($hash->{$subject}->{$predicate}) eq "ARRAY"){push(@{$hash->{$subject}->{$predicate}},$object);}
+		else{$hash->{$subject}->{$predicate}=[$hash->{$subject}->{$predicate},$object];}
+	}
+	$dbh->disconnect;
+	return $hash;
 }
-############################## webUpdate ##############################
-sub webUpdate{
+############################## dbUpdate ##############################
+sub dbUpdate{
+	my $database=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $json={$subject=>{$predicate=>$object}};
+	my $dbh=openDB($database);
+	$dbh->begin_work;
+	updateRDF($dbh,$json);
+	$dbh->commit;
+	$dbh->disconnect;
+}
+############################## jsonInsert ##############################
+sub jsonInsert{
 	my $database=shift();
 	my $json=shift();
-	my $url=dirname($database)."/moirai.php?command=update";
-	my $dbname=basename($database);
-	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
-	my $request=POST($url,$data);
-	my $agent=LWP::UserAgent->new;
-	my $content=$agent->request($request)->content;
-	print "$content\n";
+	my $dbh=openDB($database);
+	$dbh->begin_work;
+	my $linecount=insertRDF($dbh,$json);
+	$dbh->commit;
+	$dbh->disconnect;
+	return $linecount;
+}
+############################## jsonUpdate ##############################
+sub jsonUpdate{
+	my $database=shift();
+	my $json=shift();
+	my $dbh=openDB($database);
+	$dbh->begin_work;
+	updateRDF($dbh,$json);
+	$dbh->commit;
+	$dbh->disconnect;
 }
 ############################## webDelete ##############################
 sub webDelete{
@@ -1202,6 +1191,32 @@ sub webQuery{
 	my $content=$agent->request($request)->content;
 	my $json=jsonDecode($content);
 	return $json;
+}
+############################## webSelect ##############################
+sub webSelect{
+	my $database=shift();
+	my $json=shift();
+	my $url=dirname($database)."/moirai.php?command=select";
+	my $dbname=basename($database);
+	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
+	my $request=POST($url,$data);
+	my $agent=LWP::UserAgent->new;
+	my $content=$agent->request($request)->content;
+	my $json=jsonDecode($content);
+	delete($json->{"rdfquery"});
+	return $json;
+}
+############################## webUpdate ##############################
+sub webUpdate{
+	my $database=shift();
+	my $json=shift();
+	my $url=dirname($database)."/moirai.php?command=update";
+	my $dbname=basename($database);
+	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
+	my $request=POST($url,$data);
+	my $agent=LWP::UserAgent->new;
+	my $content=$agent->request($request)->content;
+	print "$content\n";
 }
 ############################## queryTotsv ##############################
 sub queryTotsv{
@@ -1439,24 +1454,6 @@ sub readJson{
 	while(<$reader>){chomp;s/\r//g;$json.=$_;}
 	return jsonDecode($json);
 }
-############################## parseRDF ##############################
-sub parseRDF{
-	my $text=shift();
-	my $rdf={};
-	my @lines=split(/,/,$text);
-	foreach my $line(@lines){
-		my @tokens=split(/\>/,$line);
-		if(scalar(@tokens)!=3){next;}
-		my $subject=$tokens[0];
-		my $predicate=$tokens[1];
-		my $object=$tokens[2];
-		if(!exists($rdf->{$subject})){$rdf->{$subject}={};}
-		if(!exists($rdf->{$subject}->{$predicate})){$rdf->{$subject}->{$predicate}=$object;}
-		elsif(ref($rdf->{$subject}->{$predicate}) eq "ARRAY"){push(@{$rdf->{$subject}->{$predicate}},$object);}
-		else{$rdf->{$subject}->{$predicate}=[$rdf->{$subject}->{$predicate},$object];}
-	}
-	return $rdf;
-}
 ############################## parseQuery ##############################
 sub parseQuery{
 	my $statement=shift();
@@ -1641,9 +1638,10 @@ sub getResults{
 }
 ############################## dumpDB ##############################
 sub dumpDB{
-	my $dbh=shift();
+	my $database=shift();
 	my $format=shift();
 	my $writer=shift();
+	my $dbh=openDB($database);
 	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
 	my $where="";
 	my $sth=$dbh->prepare($query);
@@ -1669,81 +1667,7 @@ sub dumpDB{
 			print $writer "$subject\t$predicate\t$object\n";
 		}
 	}
-}
-############################## updateRDF ##############################
-sub updateRDF{
-	my $dbh=shift();
-	my $json=shift();
-	my $linecount=0;
-	if(ref($json)eq"HASH"){}
-	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=updateRDF($j);}return;}
-	else{$json=parseRDF($json);}
-	foreach my $subject(keys(%{$json})){
-		my $subject_id=handleNode($dbh,$subject);
-		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
-			my $predicate_id=handleNode($dbh,$predicate);
-			my $object=$json->{$subject}->{$predicate};
-			if(ref($object)eq"ARRAY"){
-				foreach my $o(@{$object}){
-					my $object_id=handleNode($dbh,$o);
-					$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}elsif(ref($object)eq"HASH"){
-				foreach my $o(keys(%{$object})){
-					my $object_id=handleNode($dbh,$o);
-					$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}else{
-				my $object_id=handleNode($dbh,$object);
-				$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
-			}
-		}
-	}
-	return $linecount;
-}
-############################## replaceTSV ##############################
-sub replaceTSV{
-	my $dbh=shift();
-	my $dbname=shift();
-	my $reader=shift();
-	my $rename=shift();
-	my $delim="\t";
-	my $hash={};
-	my $linecount=0;
-	while(<$reader>){
-		chomp;s/\r//g;
-		my($from,$to)=split(/\t/);
-		if($rename && -e $from){
-			if($to=~/^(.+)\/\.$/){$to="$1/".basename($from);}
-			mkpath(dirname($to));
-			rename($from,$to);
-		}
-		$hash->{$from}=$to;
-		$linecount++;
-	}
-	my $nodes=getNodeIdHash($dbh);
-	my ($nodehandler,$nodefile)=tempfile(UNLINK=>1);
-	foreach my $id(sort{$a<=>$b}keys(%{$nodes})){
-		my $data=$nodes->{$id};
-		if(exists($hash->{$data})){$data=$hash->{$data};}
-		print $nodehandler "$id\t$data\n";
-	}
-	close($nodehandler);
-	my $edges=getEdgeHash($dbh,$delim);
-	my ($edgehandler,$edgefile)=tempfile(UNLINK=>1);
-	foreach my $edge(keys(%{$edges})){print $edgehandler "$edge\n";}
-	close($edgehandler);
-	my ($cmdhandler,$cmdfile)=tempfile(UNLINK=>1);
-	print $cmdhandler ".mode tabs\n";
-	print $cmdhandler ".import $nodefile node\n";
-	print $cmdhandler ".import $edgefile edge\n";
-	close($cmdhandler);
-	$dbh=openDB("$dbname.tmp");
 	$dbh->disconnect;
-	my $command="sqlite3 $dbname.tmp < $cmdfile";
-	system($command);
-	system("mv $dbname.tmp $dbname");
-	return $linecount;
 }
 ############################## deleteTSV ##############################
 sub deleteTSV{
@@ -1795,13 +1719,57 @@ sub deleteTSV{
 	system("mv $dbname.tmp $dbname");
 	return $linecount;
 }
+############################## replaceTSV ##############################
+sub replaceTSV{
+	my $dbh=shift();
+	my $dbname=shift();
+	my $reader=shift();
+	my $rename=shift();
+	my $delim="\t";
+	my $hash={};
+	my $linecount=0;
+	while(<$reader>){
+		chomp;s/\r//g;
+		my($from,$to)=split(/\t/);
+		if($rename && -e $from){
+			if($to=~/^(.+)\/\.$/){$to="$1/".basename($from);}
+			mkpath(dirname($to));
+			rename($from,$to);
+		}
+		$hash->{$from}=$to;
+		$linecount++;
+	}
+	my $nodes=getNodeIdHash($dbh);
+	my ($nodehandler,$nodefile)=tempfile(UNLINK=>1);
+	foreach my $id(sort{$a<=>$b}keys(%{$nodes})){
+		my $data=$nodes->{$id};
+		if(exists($hash->{$data})){$data=$hash->{$data};}
+		print $nodehandler "$id\t$data\n";
+	}
+	close($nodehandler);
+	my $edges=getEdgeHash($dbh,$delim);
+	my ($edgehandler,$edgefile)=tempfile(UNLINK=>1);
+	foreach my $edge(keys(%{$edges})){print $edgehandler "$edge\n";}
+	close($edgehandler);
+	my ($cmdhandler,$cmdfile)=tempfile(UNLINK=>1);
+	print $cmdhandler ".mode tabs\n";
+	print $cmdhandler ".import $nodefile node\n";
+	print $cmdhandler ".import $edgefile edge\n";
+	close($cmdhandler);
+	$dbh=openDB("$dbname.tmp");
+	$dbh->disconnect;
+	my $command="sqlite3 $dbname.tmp < $cmdfile";
+	system($command);
+	system("mv $dbname.tmp $dbname");
+	return $linecount;
+}
 ############################## deleteRDF ##############################
 sub deleteRDF{
 	my $dbh=shift();
 	my $json=shift();
 	my $linecount=0;
 	if(ref($json)eq"HASH"){}
-	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=deleteRDF($j);}return;}
+	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=deleteRDF($dbh,$j);}return;}
 	else{$json=parseRDF($json);}
 	foreach my $subject(keys(%{$json})){
 		my $subject_id=handleNode($dbh,$subject);
@@ -1821,6 +1789,86 @@ sub deleteRDF{
 			}else{
 				my $object_id=handleNode($dbh,$object);
 				$linecount+=deleteEdge($dbh,$subject_id,$predicate_id,$object_id);
+			}
+		}
+	}
+	return $linecount;
+}
+############################## insertRDF ##############################
+sub insertRDF{
+	my $dbh=shift();
+	my $json=shift();
+	my $linecount=0;
+	if(ref($json)eq"HASH"){}
+	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=insertRDF($dbh,$j);}return;}
+	else{$json=parseRDF($json);}
+	foreach my $subject(keys(%{$json})){
+		my $subject_id=handleNode($dbh,$subject);
+		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
+			my $predicate_id=handleNode($dbh,$predicate);
+			my $object=$json->{$subject}->{$predicate};
+			if(ref($object)eq"ARRAY"){
+				foreach my $o(@{$object}){
+					my $object_id=handleNode($dbh,$o);
+					$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
+				}
+			}elsif(ref($object)eq"HASH"){
+				foreach my $o(keys(%{$object})){
+					my $object_id=handleNode($dbh,$o);
+					$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
+				}
+			}else{
+				my $object_id=handleNode($dbh,$object);
+				$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
+			}
+		}
+	}
+	return $linecount;
+}
+############################## parseRDF ##############################
+sub parseRDF{
+	my $text=shift();
+	my $rdf={};
+	my @lines=split(/,/,$text);
+	foreach my $line(@lines){
+		my @tokens=split(/\>/,$line);
+		if(scalar(@tokens)!=3){next;}
+		my $subject=$tokens[0];
+		my $predicate=$tokens[1];
+		my $object=$tokens[2];
+		if(!exists($rdf->{$subject})){$rdf->{$subject}={};}
+		if(!exists($rdf->{$subject}->{$predicate})){$rdf->{$subject}->{$predicate}=$object;}
+		elsif(ref($rdf->{$subject}->{$predicate}) eq "ARRAY"){push(@{$rdf->{$subject}->{$predicate}},$object);}
+		else{$rdf->{$subject}->{$predicate}=[$rdf->{$subject}->{$predicate},$object];}
+	}
+	return $rdf;
+}
+############################## updateRDF ##############################
+sub updateRDF{
+	my $dbh=shift();
+	my $json=shift();
+	my $linecount=0;
+	if(ref($json)eq"HASH"){}
+	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=updateRDF($dbh,$j);}return;}
+	else{$json=parseRDF($json);}
+	foreach my $subject(keys(%{$json})){
+		my $subject_id=handleNode($dbh,$subject);
+		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
+			my $predicate_id=handleNode($dbh,$predicate);
+			my $object=$json->{$subject}->{$predicate};
+			if(ref($object)eq"ARRAY"){
+				foreach my $o(@{$object}){
+					my $object_id=handleNode($dbh,$o);
+					$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
+				}
+			}elsif(ref($object)eq"HASH"){
+				foreach my $o(keys(%{$object})){
+					my $object_id=handleNode($dbh,$o);
+					$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
+				}
+			}else{
+				my $object_id=handleNode($dbh,$object);
+				$linecount+=updateEdge($dbh,$subject_id,$predicate_id,$object_id);
 			}
 		}
 	}
@@ -2088,37 +2136,6 @@ sub escapeCharacter{
 		s/_escape_yen_mark_/\\\\/g;
 	}
 	return wantarray?@out:$out[0];
-}
-############################## insertRDF ##############################
-sub insertRDF{
-	my $dbh=shift();
-	my $json=shift();
-	my $linecount=0;
-	if(ref($json)eq"HASH"){}
-	elsif(ref($json)eq"ARRAY"){foreach my $j(@{$json}){$linecount+=insertRDF($j);}return;}
-	else{$json=parseRDF($json);}
-	foreach my $subject(keys(%{$json})){
-		my $subject_id=handleNode($dbh,$subject);
-		foreach my $predicate(sort{$a cmp $b} keys(%{$json->{$subject}})){
-			my $predicate_id=handleNode($dbh,$predicate);
-			my $object=$json->{$subject}->{$predicate};
-			if(ref($object)eq"ARRAY"){
-				foreach my $o(@{$object}){
-					my $object_id=handleNode($dbh,$o);
-					$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}elsif(ref($object)eq"HASH"){
-				foreach my $o(keys(%{$object})){
-					my $object_id=handleNode($dbh,$o);
-					$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
-				}
-			}else{
-				my $object_id=handleNode($dbh,$object);
-				$linecount+=insertEdge($dbh,$subject_id,$predicate_id,$object_id);
-			}
-		}
-	}
-	return $linecount;
 }
 ############################## jsonEncode ##############################
 sub jsonEncode{

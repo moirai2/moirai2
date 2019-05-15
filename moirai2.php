@@ -42,10 +42,10 @@ if($command=="insert"){
 }else if($command=="select"){
 	$db=filterDatabasePath($_POST["db"]);
 	if($db==null)exit(1);
-	$subject=isset($_POST["subject"])?escapeshellarg($_POST["subject"]):"?";
-	$predicate=isset($_POST["predicate"])?escapeshellarg($_POST["predicate"]):"?";
-	$object=isset($_POST["object"])?escapeshellarg($_POST["object"]):"?";
-	echo `perl rdf.pl -d $db select $subject $predicate $object`;
+	$json=tmpjson($_POST["query"]);
+	if($json==null)exit(1);
+	exec("perl rdf.pl -d $db select < $json",$array);
+	foreach($array as $line){echo "$line\n";}
 //############################## query.php ##############################
 }else if($command=="query"){
 	$db=filterDatabasePath($_POST["db"]);
