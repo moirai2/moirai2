@@ -20,7 +20,11 @@ $program_directory=substr($program_directory,0,-1);
 use vars qw($opt_d $opt_D $opt_e $opt_f $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
 getopts('d:D:e:f:hHl:qr:tw:');
 ############################## URLs ##############################
-# $urls->{"moirai2"}    -> $urls->{"moirai2/download"}     -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+
+# $urls->{"moirai2"} -> $urls->{"moirai2/download"} -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+# "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" -> $urls->{"moirai2/file"} -> "_node1_"
+# Update "_node1_" => "/home/ah3q/Miniconda3-latest-MacOSX-x86_64.sh"
+
 # "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" -> $urls->{"file"} -> download/Miniconda3-latest-MacOSX-x86_64.sh
 # $urls->{"conda"} -> $urls->{"conda/download"}  -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
 # $urls->{"conda"} -> $urls->{"conda/installer"} -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
@@ -28,7 +32,7 @@ getopts('d:D:e:f:hHl:qr:tw:');
 # $urls->{"conda"} -> $urls->{"conda/bin"}       -> "conda/bin/conda"
 my $urls={};
 $urls->{"moirai2"             }="https://moirai2.github.io/schema/moirai2";
-$urls->{"moirai2/download"    }="https://moirai2.github.io/schema/moirai2/download";
+
 $urls->{"conda"               }="https://moirai2.github.io/schema/conda";
 $urls->{"conda/bin"           }="https://moirai2.github.io/schema/conda/bin";
 $urls->{"conda/directory"     }="https://moirai2.github.io/schema/conda/directory";
@@ -42,6 +46,7 @@ $urls->{"conda/package"       }="https://moirai2.github.io/schema/conda/package"
 $urls->{"conda/install"       }="https://moirai2.github.io/schema/conda/install";
 $urls->{"conda/error"         }="https://moirai2.github.io/schema/conda/error";
 $urls->{"conda/test"          }="https://moirai2.github.io/schema/conda/test";
+
 $urls->{"daemon"              }="https://moirai2.github.io/schema/daemon";
 $urls->{"daemon/command"      }="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/control"      }="https://moirai2.github.io/schema/daemon/control";
@@ -49,11 +54,19 @@ $urls->{"daemon/execute"      }="https://moirai2.github.io/schema/daemon/execute
 $urls->{"daemon/execid"       }="https://moirai2.github.io/schema/daemon/execid";
 $urls->{"daemon/timestarted"  }="https://moirai2.github.io/schema/daemon/timestarted";
 $urls->{"daemon/timeended"    }="https://moirai2.github.io/schema/daemon/timeended";
-$urls->{"bin"                 }="https://moirai2.github.io/schema/bin";
+
 $urls->{"file"                }="https://moirai2.github.io/schema/file";
 $urls->{"file/md5"            }="https://moirai2.github.io/schema/file/md5";
 $urls->{"file/linecount"      }="https://moirai2.github.io/schema/file/linecount";
 $urls->{"file/seqcount"       }="https://moirai2.github.io/schema/file/seqcount";
+
+$urls->{"software"}="https://moirai2.github.io/schema/software";#samtools
+$urls->{"software/path"}="https://moirai2.github.io/schema/software/path";#/Users/ah3q/bin/samtools
+$urls->{"software/version"}="https://moirai2.github.io/schema/software/version";#0.1.19-44428cd
+
+$urls->{"download"}="https://moirai2.github.io/schema/download";
+$urls->{"download/datetime"}="https://moirai2.github.io/schema/download/datetime";
+
 ############################## HELP ##############################
 sub help{
 	print "PROGRAM: $program_name\n";
@@ -75,17 +88,17 @@ sub help{
 	print "COMMAND: $program_name -d DB reindex\n";
 	print "COMMAND: $program_name -d DB download URL\n";
 	print "COMMAND: $program_name -d DB miniconda URL\n";
+	print "COMMAND: $program_name -d DB software CMD\n";
 	print "COMMAND: $program_name -d DB -f json command < JSON\n";
+	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "\n";
 	print "COMMAND: $program_name -d DB remove execute\n";
 	print "COMMAND: $program_name -d DB remove log\n";
 	print "COMMAND: $program_name -d DB remove control\n";
 	print "COMMAND: $program_name -d DB remove empty\n";
 	print "COMMAND: $program_name -d DB -D DB2 copy QUERY QUERY2\n";
-	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name -d DB rmdup SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB stats\n";
-	print "COMMAND: $program_name -d DB mergetemp\n";
 	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
@@ -94,7 +107,6 @@ sub help{
 		print "UPDATED: 2019/05/07  Added 'md5' to calculate md5 of files.\n";
 		print "         2019/04/26  Changed name from 'sqlite3.pl' to 'rdf.pl'.\n";
 		print "         2019/03/13  'linecount' and 'seqcount' added to count files.\n";
-		print "         2019/02/18  'mergetemp' added to merge control databases into one.\n";
 		print "         2019/02/13  Get statistics of executions by going through logs.\n";
 		print "         2019/01/28  Insert and query RDF through PHP with HTTP POST added.\n";
 		print "         2019/01/16  Remove 'empty' was added to remove empty node and edges.\n";
@@ -135,7 +147,7 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f json select","{\"D\":{\"E\":\"F\",\"G\":\"H\"}}");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete ? ? H","deleted 1");
 	testCommand("echo 'D\tE\tF'|perl rdf.pl -d test/rdf.sqlite3 -f tsv delete","deleted 1");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 newnode","_node1_");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 newnode","_test/rdf.sqlite3.node1_");
 	testCommand("echo '' > test/test.txt","");
 	testCommand("perl rdf.pl md5 test/test.txt","test/test.txt	".$urls->{"file/md5"}."	d41d8cd98f00b204e9800998ecf8427e");
 	testCommand("perl rdf.pl linecount test/test.txt","test/test.txt	".$urls->{"file/linecount"}."	0");
@@ -169,6 +181,11 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 }elsif($command eq "seqcount"){
 	my $writer=IO::File->new(">&STDOUT");
 	countSequences($writer,$opt_r,$opt_f,@ARGV);
+	close($writer);
+	exit(0);
+}elsif($command eq "filesize"){
+	my $writer=IO::File->new(">&STDOUT");
+	sizeFiles($writer,$opt_r,$opt_f,@ARGV);
 	close($writer);
 	exit(0);
 }elsif($command eq "md5"){
@@ -417,12 +434,16 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	}
 }elsif(lc($command) eq "merge"){
 	my ($writer,$file)=tempfile(UNLINK=>1);
-	foreach my $database(@ARGV){dumpDB($database,"tsv",$writer);}
+	foreach my $database(@ARGV){
+		my $dbh=openDB($database);
+		dumpDB($dbh,"tsv",$writer);
+		$dbh->disconnect;
+	}
 	close($writer);
 	my $reader=IO::File->new($file);
 	my $linecount=importDB($database,$reader);
 	close($reader);
-	if(!$opt_q){print "inserted $linecount\n";}
+	if(!$opt_q){print "insert $linecount\n";}
 }elsif(lc($command) eq "copy"){
 	my $dbh=openDB($database);
 	my ($writer,$file)=tempfile(UNLINK=>1);
@@ -440,8 +461,6 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	print newNode($database)."\n";
 }elsif(lc($command) eq "stats"){
 	computeStatistics($database,$opt_l);
-}elsif(lc($command) eq "mergetemp"){
-	mergeTemps($database);
 }elsif(lc($command) eq "command"){
 	my $reader=IO::File->new("-");
 	my $json=readJson($reader);
@@ -454,6 +473,26 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	checkMiniconda($database);
 	registerPackages($database,@ARGV);
 	installPackages($database);
+}elsif(lc($command) eq "software"){
+	whichSoftware($database,@ARGV);
+}
+############################## checkSoftwares ##############################
+sub checkSoftwares{
+	my $database=shift();
+	my @softwares=getObjects($database,$urls->{"moirai2"},$urls->{"software"});
+	whichSoftware($database,@softwares);
+}
+############################## whichSoftware ##############################
+sub whichSoftware{
+	my @softwares=@_;
+	my $database=shift();
+	my $hash=dbSelect($database,undef,$urls->{"software/path"},undef);
+	foreach my $software(@softwares){
+		if(exists($hash->{$software})){next;}
+		my $path=`which $software`;
+		chomp($path);
+		if($path ne ""){dbInsert($database,$software,,$urls->{"software/path"},$path);}
+	}
 }
 ############################## executeComand ##############################
 sub executeComand{
@@ -619,7 +658,7 @@ sub getObjects{
 	my $predicate=shift();
 	my $object=shift();
 	my $hash=dbSelect($database,$subject,$predicate,$object);
-	if(scalar(keys(%{$hash}))==0){return [];}
+	if(scalar(keys(%{$hash}))==0){return;}
 	my $object=$hash->{$subject}->{$predicate};
 	if(ref($object)ne"ARRAY"){$object=[$object];}
 	return @{$object};
@@ -627,12 +666,14 @@ sub getObjects{
 ############################## downloadFiles ##############################
 sub downloadFiles{
 	my $database=shift();
-	my @downloads=getObjects($database,$urls->{"moirai2"},$urls->{"moirai2/download"});
+	print STDERR "database=$database\n";
+	my @downloads=getObjects($database,$urls->{"moirai2"},$urls->{"download"});
 	my @files=();
 	foreach my $url(@downloads){
+		my $node=getObject($database,$url,$urls->{"file"});
 		my $path=downloadFile($url,mkdirDownload());
 		if(!defined($path)){next;}
-		dbInsert($database,$url,$urls->{"file"},$path);
+		dbReplace($database,$node,$path);
 		push(@files,$path);
 	}
 	return @files;
@@ -641,11 +682,14 @@ sub downloadFiles{
 sub registerDownloads{
 	my @urls=@_;
 	my $database=shift(@urls);
-	if(scalar(@urls)>0){
-		my $json={$urls->{"moirai2"}=>{$urls->{"moirai2/download"}=>[]}};
-		foreach my $url(@urls){push(@{$json->{$urls->{"moirai2"}}->{$urls->{"moirai2/download"}}},$url);}
-		dbInsert($database,$json);
+	my @nodes=();
+	foreach my $url(@urls){
+		my $node=newNode($database);
+		dbInsert($database,$urls->{"moirai2"},$urls->{"download"},$url);
+		dbInsert($database,$url,$urls->{"file"},$node);
+		push(@nodes,$node);
 	}
+	return @nodes;
 }
 ############################## getMiniconda3Url ##############################
 sub getMiniconda3Url{
@@ -676,60 +720,6 @@ sub downloadFile{
 		close(OUT);
 	}elsif($res->is_error){return;}
 	return $filename;
-}
-############################## mergeTemps ##############################
-sub mergeTemps{
-	my $database=shift();
-	my $directory=dirname($database);
-	my $dbs=getTmpDBs("$directory/tmp");
-	foreach my $db(keys(%{$dbs})){
-		my $directory=dirname($db);
-		mkdir($directory);
-		chmod(0777,$directory);
-		my @lcldbs=@{$dbs->{$db}};
-		foreach my $lcldb(@lcldbs){
-			my $directory=dirname($lcldb);
-			mkdir($directory);
-			chmod(0777,$directory);
-			my ($writer,$dump)=tempfile(UNLINK=>1);
-			dumpDB($lcldb,"tsv",$writer);
-			close($writer);
-			my $reader=IO::File->new($dump);
-			mergeDB($db,$reader);
-			close($reader);
-		}
-	}
-	foreach my $db(keys(%{$dbs})){foreach my $lcldb(@{$dbs->{$db}}){unlink($lcldb);rmdir(dirname($lcldb));}}
-}
-############################## getTmpDBs ##############################
-sub getTmpDBs{
-	my $tmpdir=shift();
-	my $dbs={};
-	opendir(DIR,$tmpdir);
-	foreach my $file (readdir(DIR)){
-		if($file=~/^\./){next;}
-		if($file eq ""){next;}
-		my $control=substr($file,0,rindex($file,"."));
-		my $name=$control.".". substr(getDatetime(),4);
-		my $lcldb="$tmpdir/$name/$name.sqlite3";
-		my $dir="$tmpdir/$file";
-		if(!(-d $dir)){next;}
-		opendir(DIR2,$dir);
-		my $db;
-		my $filecount=0;
-		foreach my $file2(readdir(DIR2)){
-			if($file2=~/^\./){next;}
-			elsif($file2=~/\.sqlite3$/){$db="$dir/$file2";}
-			else{$filecount++;}
-		}
-		if($filecount==0&&defined($db)){
-			if(!exists($dbs->{$lcldb})){$dbs->{$lcldb}=[];}
-			push(@{$dbs->{$lcldb}},$db);
-		}
-		closedir(DIR2);
-	}
-	closedir(DIR);
-	return $dbs;
 }
 ############################## computeStatistics ##############################
 sub computeStatistics{
@@ -2364,7 +2354,7 @@ sub newNode{
 	my $database=shift();
 	my $dbh=openDB($database);
 	my $id=nodeMax($dbh)+1;
-	my $name="_node$id"."_";
+	my $name="$database/node$id";
 	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
 	$sth->execute($id,$name);
 	$dbh->disconnect;
@@ -2563,6 +2553,31 @@ sub countLines{
 		else{$count=`cat $file|wc -l`;}
 		if($count=~/(\d+)/){$count=$1;}
 		print $writer "$file\t".$urls->{"file/linecount"}."\t$count\n";
+	}
+}
+############################## sizeFiles ##############################
+sub sizeFiles{
+	my @files=@_;
+	my $writer=shift(@files);
+	my $recursivesearch=shift(@files);
+	my $filesuffix=shift(@files);
+	if(!defined($recursivesearch)){$recursivesearch=-1;}
+	foreach my $file(listFiles($filesuffix,$recursivesearch,@ARGV)){
+		my $md5=`which md5`;
+		my $md5sum=`which md5sum`;
+		if(defined($md5)){
+			chomp($md5);
+			my $sum=`$md5 $file`;
+			chomp($sum);
+			if($sum=~/(\S+)$/){$sum=$1;}
+			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
+		}elsif(defined($md5sum)){
+			chomp($md5sum);
+			my $sum=`$md5sum $file`;
+			chomp($sum);
+			if($sum=~/^(\S+)/){$sum=$1;}
+			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
+		}
 	}
 }
 ############################## md5Files ##############################
