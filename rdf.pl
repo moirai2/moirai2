@@ -20,16 +20,6 @@ $program_directory=substr($program_directory,0,-1);
 use vars qw($opt_d $opt_D $opt_e $opt_f $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
 getopts('d:D:e:f:hHl:qr:tw:');
 ############################## URLs ##############################
-
-# $urls->{"moirai2"} -> $urls->{"moirai2/download"} -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
-# "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" -> $urls->{"moirai2/file"} -> "_node1_"
-# Update "_node1_" => "/home/ah3q/Miniconda3-latest-MacOSX-x86_64.sh"
-
-# "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" -> $urls->{"file"} -> download/Miniconda3-latest-MacOSX-x86_64.sh
-# $urls->{"conda"} -> $urls->{"conda/download"}  -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
-# $urls->{"conda"} -> $urls->{"conda/installer"} -> "https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
-# $urls->{"conda"} -> $urls->{"conda/directory"} -> "conda"
-# $urls->{"conda"} -> $urls->{"conda/bin"}       -> "conda/bin/conda"
 my $urls={};
 $urls->{"moirai2"             }="https://moirai2.github.io/schema/moirai2";
 
@@ -66,7 +56,6 @@ $urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 
 $urls->{"download"}="https://moirai2.github.io/schema/download";
 $urls->{"download/datetime"}="https://moirai2.github.io/schema/download/datetime";
-
 ############################## HELP ##############################
 sub help{
 	print "PROGRAM: $program_name\n";
@@ -91,14 +80,15 @@ sub help{
 	print "COMMAND: $program_name -d DB software CMD\n";
 	print "COMMAND: $program_name -d DB -f json command < JSON\n";
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
+	print "COMMAND: $program_name -d DB object SUB PRE OBJ\n";
 	print "\n";
-	print "COMMAND: $program_name -d DB remove execute\n";
-	print "COMMAND: $program_name -d DB remove log\n";
-	print "COMMAND: $program_name -d DB remove control\n";
-	print "COMMAND: $program_name -d DB remove empty\n";
-	print "COMMAND: $program_name -d DB -D DB2 copy QUERY QUERY2\n";
-	print "COMMAND: $program_name -d DB rmdup SUB PRE OBJ\n";
-	print "COMMAND: $program_name -d DB stats\n";
+	#print "COMMAND: $program_name -d DB remove execute\n";
+	#print "COMMAND: $program_name -d DB remove log\n";
+	#print "COMMAND: $program_name -d DB remove control\n";
+	#print "COMMAND: $program_name -d DB remove empty\n";
+	#print "COMMAND: $program_name -d DB -D DB2 copy QUERY QUERY2\n";
+	#print "COMMAND: $program_name -d DB rmdup SUB PRE OBJ\n";
+	#print "COMMAND: $program_name -d DB stats\n";
 	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
@@ -208,6 +198,24 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	elsif($format eq "json"){outputInJsonFormat($rdf,$writer);}
 	else{outputInAssembleFormat($rdf,$format,$writer);}
 	close($writer);
+}elsif(lc($command) eq "object"){
+	my $subject=shift(@ARGV);
+	my $predicate=shift(@ARGV);
+	my $object=shift(@ARGV);
+	if($subject eq "?"){$subject=undef;}
+	if($predicate eq "?"){$predicate=undef;}
+	if($object eq "?"){$object=undef;}
+	my $json={$subject=>{$predicate=>$object}};
+	my $rdf=($iswebdb)?webSelect($database,$json):dbSelect($database,$subject,$predicate,$object);
+	my @objects=();
+	foreach my $subject(keys(%{$rdf})){
+		foreach my $predicate(keys(%{$rdf->{$subject}})){
+			my $object=$rdf->{$subject}->{$predicate};
+			push(@objects,$object);
+		}
+	}
+	if(scalar(@objects)==1){print $objects[0]."\n";}
+	else{print "(".join(" ",@objects).")\n";}
 }elsif(lc($command) eq "insert"){
 	if(!defined($opt_f)){
 		my $subject=shift(@ARGV);
