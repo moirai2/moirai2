@@ -62,15 +62,6 @@ $urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
 $urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
 $urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
 
-$urls->{"install"}="https://moirai2.github.io/schema/system/install";
-$urls->{"install/test"}="https://moirai2.github.io/schema/system/install/test";
-
-$urls->{"miniconda3"}="https://moirai2.github.io/schema/miniconda3";
-$urls->{"miniconda3/error"}="https://moirai2.github.io/schema/miniconda3/error";
-
-$urls->{"software"}="https://moirai2.github.io/schema/software";
-$urls->{"software/path"}="https://moirai2.github.io/schema/software/path";
-$urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -225,6 +216,9 @@ while(true){
 		foreach my $url(@newurls){
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 			if($job>0){$jobcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
+			elsif($job==0){
+				searchAndDestroy($commands->{$url});
+			}
 		}
 	}
 	$jobs_running=getNumberOfJobsRunning();
@@ -239,6 +233,21 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		my $result=`perl $cwd/rdf.pl -d $rdfdb object $nodeid $cmdurl#$returnvalue`;
 		chomp($result);
 		print "$result\n";
+	}
+}
+############################## searchAndDestroy ##############################
+sub searchAndDestroy{
+	my $command=shift();
+	if(!exists($command->{"selectKeys"})){next;}
+	my @selects=@{$command->{"selectKeys"}};
+	foreach my $select(@selects){
+		my ($subject,$predicate,$object)=@{$select};
+		if($predicate=~/https:\/\/moirai2\.github\.io\/workflow\/([^\/]+)\//){
+			my $workflow=$1;
+			if(exists($workflow->{$workflow})){next;}
+			my $json=getJson("https://moirai2.github.io/workflow/$workflow.json");
+			print_table($json);
+		}
 	}
 }
 ############################## printCommand ##############################
@@ -555,6 +564,7 @@ sub loadCommandFromURL{
 	loadCommandFromURLSub($command,$url);
 	$command->{$urls->{"daemon/command"}}=$url;
 	if($showlog){print STDERR "OK\n";}
+	$commands->{$url}=$command;
 	return $command;
 }
 sub loadCommandFromURLSub{
