@@ -45,6 +45,7 @@ if($command=="insert"){
 	$json=tmpjson($_POST["query"]);
 	if($json==null)exit(1);
 	exec("perl rdf.pl -d $db select < $json",$array);
+	unlink($json);
 	foreach($array as $line){echo "$line\n";}
 //############################## query.php ##############################
 }else if($command=="query"){
@@ -53,6 +54,7 @@ if($command=="insert"){
 	$json=tmpjson($_POST["query"]);
 	if($json==null)exit(1);
 	exec("perl rdf.pl -d $db query < $json",$array);
+	unlink($json);
 	foreach($array as $line){echo "$line\n";}
 //############################## download.php ##############################
 }else if($command=="download"){
@@ -227,7 +229,10 @@ function filterDatabasePath($db){return preg_replace("/[^a-zA-Z0-9\.\_]+/","",$d
 //############################## tmpjson ##############################
 function tmpjson($data){
 	if($data==null)return;
-	$filepath=tempnam("/tmp","");
+	mkdir("tmp");
+	chmod("tmp",0777);
+	$filepath=tempnam("tmp","tmp");
+	#$filepath=tempnam(sys_get_temp_dir(),"");
 	$writer=fopen($filepath,"w");
 	fwrite($writer,$data);
 	fclose($writer);

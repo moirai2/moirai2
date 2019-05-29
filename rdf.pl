@@ -2362,7 +2362,7 @@ sub newNode{
 	my $database=shift();
 	my $dbh=openDB($database);
 	my $id=nodeMax($dbh)+1;
-	my $name="$database/node$id";
+	my $name="$database#node$id";
 	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
 	$sth->execute($id,$name);
 	$dbh->disconnect;

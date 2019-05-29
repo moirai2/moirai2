@@ -30,6 +30,7 @@ $urls->{"daemon/input"}="https://moirai2.github.io/schema/daemon/input";
 $urls->{"daemon/inputs"}="https://moirai2.github.io/schema/daemon/inputs";
 $urls->{"daemon/output"}="https://moirai2.github.io/schema/daemon/output";
 $urls->{"daemon/outputs"}="https://moirai2.github.io/schema/daemon/outputs";
+$urls->{"daemon/return"}="https://moirai2.github.io/schema/daemon/return";
 $urls->{"daemon/bash"}="https://moirai2.github.io/schema/daemon/bash";
 $urls->{"daemon/script"}="https://moirai2.github.io/schema/daemon/script";
 $urls->{"daemon/script/code"}="https://moirai2.github.io/schema/daemon/script/code";
@@ -71,7 +72,8 @@ $urls->{"software"}="https://moirai2.github.io/schema/software";
 $urls->{"software/path"}="https://moirai2.github.io/schema/software/path";
 $urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 ############################## HELP ##############################
-if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0]);exit(0);}
+my $commands={};
+if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
 if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "Program: Executes MOIRAI2 command(s) using a local RDF SQLITE3 database.\n";
@@ -169,14 +171,14 @@ mkdir("$ctrldir/delete");
 mkdir("$ctrldir/completed");
 mkdir("$ctrldir/stdout");
 mkdir("$ctrldir/stderr");
-my $commands={};
 my $executes={};
 my $jsons={};
 my @execurls=();
 my $jobcount=0;
 my $ctrlcount=0;
 my $cmdurl;
-my $cmdnodeid;
+my @nodeids;
+my $returnvalue;
 my $results={};
 if(defined($opt_i)){
 	my @temp=parseQuery($opt_i);
@@ -192,7 +194,8 @@ if(defined($opt_i)){
 }
 if(scalar(@ARGV)>0){
 	$cmdurl=shift(@ARGV);
-	$cmdnodeid=commandProcess($cmdurl,$results,@ARGV);
+	@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);
+	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 if($showlog){
 	print STDERR "# program path   : $program_path\n";
@@ -209,7 +212,7 @@ if($showlog){
 		print STDERR "# job submission : bash\n";
 	}
 	if(defined($cmdurl)){print STDERR "# command URL    : $cmdurl\n";}
-	if(defined($cmdnodeid)){print STDERR "# command NodeID : $cmdnodeid\n";}
+	foreach my $nodeid(@nodeids){if(defined($nodeid)){print STDERR "# command NodeID : $nodeid\n";}}
 	print STDERR "year/mon/date\thr:min:sec\tcontrol\tnewjob\tremain\tinsert\tdelete\tdone\n";
 }
 while(true){
@@ -230,11 +233,10 @@ while(true){
 	if($runmode&&scalar(@execurls)==0&&$jobs_running==0){last;}
 	else{sleep($sleeptime);}
 }
-if(defined($opt_r)){
-	foreach my $return(split(/,/,$opt_r)){
-		my $subject=$cmdnodeid;
-		my $predicate="$cmdurl#$return";
-		my $result=`perl $cwd/rdf.pl -d $rdfdb object $subject $predicate`;
+if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
+	my $returnvalue=$commands->{$cmdurl}->{$urls->{"daemon/return"}};
+	foreach my $nodeid(sort{$a cmp $b}@nodeids){
+		my $result=`perl $cwd/rdf.pl -d $rdfdb object $nodeid $cmdurl#$returnvalue`;
 		chomp($result);
 		print "$result\n";
 	}
@@ -242,7 +244,8 @@ if(defined($opt_r)){
 ############################## printCommand ##############################
 sub printCommand{
 	my $url=shift();
-	my $command=loadCommandFromURL($url);
+	my $commands=shift();
+	my $command=loadCommandFromURL($url,$commands);
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
 	print STDOUT "\n#URL    :".$command->{$urls->{"daemon/command"}}."\n";
@@ -300,8 +303,9 @@ sub promtCommandOutput{
 sub commandProcess{
 	my @arguments=@_;
 	my $url=shift(@arguments);
+	my $commands=shift(@arguments);
 	my $results=shift(@arguments);
-	my $command=loadCommandFromURL($url);
+	my $command=loadCommandFromURL($url,$commands);
 	if(defined($opt_o)){push(@{$command->{"insertKeys"}},@{handleKeys($opt_o,$command)});}
 	$commands->{$url}=$command;
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
@@ -315,6 +319,7 @@ sub commandProcess{
 	if(scalar(@inputs)>0&&scalar(@arguments)==0){@arguments=assignCommand($command);}
 	if(scalar(@arguments)<scalar(@inputs)){exit(1);}
 	my @lines=();
+	my @nodeids=();
 	if(scalar(keys(%{$results}))>0){
 		foreach my $row(@{$results->{"rows"}}){
 			my $variables={};
@@ -330,7 +335,9 @@ sub commandProcess{
 				if(exists($variables->{$argument})){$argument=$variables->{$argument};}
 				$hash->{$input}=$argument;
 			}
-			push(@lines,commandProcessSub($url,$hash));
+			my ($nodeid,@array)=commandProcessSub($url,$hash);
+			push(@nodeids,$nodeid);
+			push(@lines,@array);
 		}
 	}else{
 		my $hash={};
@@ -339,11 +346,14 @@ sub commandProcess{
 			if(scalar(@arguments)==0){last;}
 			$hash->{$output}=shift(@arguments);
 		}
-		push(@lines,commandProcessSub($url,$hash));
+		my ($nodeid,@array)=commandProcessSub($url,$hash);
+		push(@nodeids,$nodeid);
+		push(@lines,@array);
 	}
 	my ($fh,$file)=mkstemps("$ctrldir/insert/XXXXXXXXXX",".insert");
 	foreach my $line(@lines){print $fh "$line\n";}
 	close($fh);
+	return @nodeids;
 }
 sub commandProcessSub{
 	my $url=shift();
@@ -354,7 +364,7 @@ sub commandProcessSub{
 	push(@lines,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t$nodeid");
 	push(@lines,"$nodeid\t".$urls->{"daemon/command"}."\t$url");
 	foreach my $key(keys(%{$hash})){push(@lines,"$nodeid\t$url#$key\t".$hash->{$key});}
-	return @lines;
+	return ($nodeid,@lines);
 }
 ############################## mainProcess ##############################
 sub mainProcess{
@@ -510,6 +520,12 @@ sub getFiles{
 	closedir(DIR);
 	return @files;
 }
+############################## removeDollar ##############################
+sub removeDollar{
+	my $value=shift();
+	if($value=~/^\$(.+)$/){return $1;}
+	return $value;
+}
 ############################## handleHash ##############################
 sub handleHash{
 	my @array=@_;
@@ -520,6 +536,7 @@ sub handleHash{
 ############################## handleArray ##############################
 sub handleArray{
 	my $inputs=shift();
+	if(!defined($inputs)){return [];}
 	if(ref($inputs)ne"ARRAY"){
 		if($inputs=~/,/){my @array=split(/,/,$inputs);$inputs=\@array;}
 		else{$inputs=[$inputs];}
@@ -530,6 +547,8 @@ sub handleArray{
 ############################## loadCommandFromURL ##############################
 sub loadCommandFromURL{
 	my $url=shift();
+	my $commands=shift();
+	if(exists($commands->{$url})){return $commands->{$url};}
 	if($showlog){print STDERR "#Loading $url:\t";}
 	my $command=getJson($url);
 	if(scalar(keys(%{$command}))==0){print "FAILED\n";return;}
@@ -562,6 +581,12 @@ sub loadCommandFromURLSub{
 		$command->{$urls->{"daemon/outputs"}}=handleArray($command->{$urls->{"daemon/outputs"}});
 		$command->{"outputs"}=$command->{$urls->{"daemon/outputs"}};
 	}
+	if(exists($command->{$urls->{"daemon/return"}})){
+		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}});
+		my $hash=handleHash(@{$command->{$urls->{"daemon/output"}}});
+		my $returnvalue=$command->{$urls->{"daemon/return"}};
+		if(!exists($hash->{$returnvalue})){push(@{$command->{$urls->{"daemon/output"}}},$returnvalue);}
+	}
 	if(exists($command->{$urls->{"daemon/output"}})){
 		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}});
 		my @array=();
@@ -585,6 +610,7 @@ sub loadCommandFromURLSub{
 		foreach my $output(@{$command->{"output"}}){push(@array,$output);}
 		$command->{"keys"}=\@array;
 	}
+	if(exists($command->{$urls->{"daemon/return"}})){$command->{$urls->{"daemon/return"}}=removeDollar($command->{$urls->{"daemon/return"}});}
 	if(exists($command->{$urls->{"system/install"}})){$command->{$urls->{"system/install"}}=handleArray($command->{$urls->{"system/install"}});}
 	if(exists($command->{$urls->{"daemon/unzip"}})){$command->{$urls->{"daemon/unzip"}}=handleArray($command->{$urls->{"daemon/unzip"}});}
 	if(exists($command->{$urls->{"daemon/md5"}})){$command->{$urls->{"daemon/md5"}}=handleArray($command->{$urls->{"daemon/md5"}});}
@@ -629,9 +655,7 @@ sub lookForNewCommands{
 	foreach my $row(@{$rows}){
 		my $url=$row->[0];
 		push(@founds,$url);
-		if(exists($commands->{$url})){next;}
-		my $command=loadCommandFromURL($url);
-		if(defined($command)){$commands->{$url}=$command}
+		loadCommandFromURL($url,$commands);
 	}
 	return @founds;
 }
