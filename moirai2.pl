@@ -56,6 +56,7 @@ $urls->{"daemon/required"}="https://moirai2.github.io/schema/daemon/required";
 $urls->{"system"}="https://moirai2.github.io/schema/system";
 $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
 $urls->{"system/upload"}="https://moirai2.github.io/schema/system/upload";
+$urls->{"system/path"}="https://moirai2.github.io/schema/system/path";
 
 $urls->{"file"}="https://moirai2.github.io/schema/file";
 $urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
@@ -246,7 +247,6 @@ sub searchAndDestroy{
 			my $workflow=$1;
 			if(exists($workflow->{$workflow})){next;}
 			my $json=getJson("https://moirai2.github.io/workflow/$workflow.json");
-			print_table($json);
 		}
 	}
 }
