@@ -53,7 +53,7 @@ if($command=="insert"){
 	if($db==null)exit(1);
 	$json=tmpjson($_POST["query"]);
 	if($json==null)exit(1);
-	exec("perl rdf.pl -d $db query < $json",$array);
+	exec("perl rdf.pl -f json -d $db query < $json",$array);
 	unlink($json);
 	foreach($array as $line){echo "$line\n";}
 //############################## download.php ##############################
