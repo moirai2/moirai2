@@ -96,7 +96,6 @@ SQLiteRDFModel.prototype.jsonEscape=function(string){if(string==null)return;retu
 SQLiteRDFModel.prototype.queryRDF=function(json,method){
 	var self=this;
 	if(!("db" in json))json.db=this.db;
-	console.log(json);
 	var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=query",data:json}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.success(function(data){if(method!=null)method(data);});
 }

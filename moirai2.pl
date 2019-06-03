@@ -156,6 +156,7 @@ my $runmode=defined($opt_s)?0:1;
 my $maxjob=defined($opt_m)?$opt_m:5;
 my $ctrldir=Cwd::abs_path(defined($opt_c)?$opt_c:dirname($rdfdb)."/ctrl");
 mkdir("tmp");
+chmod(0777,"tmp");
 mkdir("$ctrldir");
 mkdir("$ctrldir/bash");
 mkdir("$ctrldir/insert");

@@ -229,8 +229,7 @@ function filterDatabasePath($db){return preg_replace("/[^a-zA-Z0-9\.\_]+/","",$d
 //############################## tmpjson ##############################
 function tmpjson($data){
 	if($data==null)return;
-	mkdir("tmp");
-	chmod("tmp",0777);
+	if(!file_exists("tmp")){mkdir("tmp");chmod("tmp",0777);}
 	$filepath=tempnam("tmp","tmp");
 	#$filepath=tempnam(sys_get_temp_dir(),"");
 	$writer=fopen($filepath,"w");
