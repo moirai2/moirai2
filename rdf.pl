@@ -94,7 +94,8 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2019/05/07  Added 'md5' to calculate md5 of files.\n";
+		print "UPDATED: 2019/06/04  Added 'executes' to retrieve execute log informations.\n";
+		print "         2019/05/07  Added 'md5' to calculate md5 of files.\n";
 		print "         2019/04/26  Changed name from 'sqlite3.pl' to 'rdf.pl'.\n";
 		print "         2019/03/13  'linecount' and 'seqcount' added to count files.\n";
 		print "         2019/02/13  Get statistics of executions by going through logs.\n";
@@ -483,6 +484,114 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	installPackages($database);
 }elsif(lc($command) eq "software"){
 	whichSoftware($database,@ARGV);
+}elsif(lc($command) eq "executes"){
+	my $hashtable=retrieveExecutes($database);
+	printExecutesInJson($hashtable);
+}elsif(lc($command) eq "html"){
+	my $hashtable=retrieveExecutes($database);
+	printExecutesInHTML($hashtable);
+}
+############################## printExecutesInHTML ##############################
+sub printExecutesInHTML{
+	my $hashtable=shift();
+	print "<html>\n";
+	print "<head>\n";
+	print "<style type=\"text/css\">h1{text-align:center}table{text-align:center;border-collapse:collapse;}th{border: 1px solid black}td{border: 1px solid black}</style>";
+	print "</head>\n";
+	foreach my $url(sort{$a cmp $b}keys(%{$hashtable})){
+		print "<table>\n";
+		my $temp={};
+		foreach my $node(@{$hashtable->{$url}}){
+			foreach my $key(keys(%{$node})){
+				if($key!~/^\$/){next;}
+				$temp->{substr($key,1)}=1;
+			}
+		}
+		my @keys=sort{$a cmp $b}keys(%{$temp});
+		my $size=scalar(@keys)+3;
+		print "<tr><th colspan=$size><a href=\"$url\">$url</a></th></tr>\n";
+		if(scalar(@keys)>0){print "<tr><th>Start</th><th>End</th><th>Time</th><th>".join("</th><th>",@keys)."</th></tr>\n";}
+		foreach my $node(@{$hashtable->{$url}}){
+			my $start=$node->{$urls->{"daemon/timestarted"}};
+			my $end=$node->{$urls->{"daemon/timeended"}};
+			my $diff=$end-$start;
+			my $startstring=getDate("/",$start)." ".getTime(":",$start);
+			my $endstring=getDate("/",$end)." ".getTime(":",$end);
+			my $line="<tr><td>$startstring</td><td>$endstring</td><td>$diff</td>";
+			foreach my $key(@keys){
+				my $value=$node->{"\$".$key};
+				if(ref($value)eq"ARRAY"){
+					$line.="<td>".join("<br>",@{$value})."</td>"
+				}
+				else{
+					if(-e $value){$line.="<td><a href=\"$value\">$value</a></td>";}
+						else{$line.="<td>$value</td>";}
+				}
+			}
+			$line.="</tr>";
+			print "$line\n";
+		}
+		print "</table>\n";
+	}
+	print "</html>\n";
+}
+############################## printExecutesInJson ##############################
+sub printExecutesInJson{
+	my $hashtable=shift();
+	print "{";
+	my $urlindex=0;
+	foreach my $url(keys(%{$hashtable})){
+		my @datas=();
+		foreach my $node(@{$hashtable->{$url}}){
+			my @values=();
+			foreach my $key(keys(%{$node})){
+				my $line="\"$key\":";
+				my $value=$node->{$key};
+				if(ref($value)eq"ARRAY"){$line.="[\"".join("\",\"",@{$value})."\"]";}
+				else{$line.="\"$value\"";}
+				push(@values,$line);
+			}
+			push(@datas,"{".join(",",@values)."}");
+		}
+		if($urlindex>0){print ",";}
+		print "\"$url\":";
+		if(scalar(@datas)>1){print "[".join(",",@datas)."]";}
+		else{print $datas[0];}
+		$urlindex++;
+	}
+	print "}\n";
+}
+############################## retrieveExecutes ##############################
+sub retrieveExecutes{
+	my $database=shift();
+	my $dbh=openDB($database);
+	my $query="select distinct subject, n2.data, n3.data from edge as e1 left outer join node as n2 on e1.predicate=n2.id left outer join node as n3 on e1.object=n3.id where e1.subject in (select subject from edge where predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\"))";
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my $hash={};
+	my $executes={};
+	while(my @rows=$sth->fetchrow_array()){
+		my $subject=$rows[0];
+		my $predicate=$rows[1];
+		my $object=$rows[2];
+		if($predicate=~/^.+#(.+)$/){$predicate="\$$1";}
+		if($predicate eq $urls->{"daemon/command"}){push(@{$executes->{$object}},$subject);next;}
+		if(!exists($hash->{$subject})){$hash->{$subject}={};}
+		if(!exists($hash->{$subject}->{$predicate})){$hash->{$subject}->{$predicate}=$object;}
+		elsif(ref($hash->{$subject}->{$predicate})eq"ARRAY"){
+			my $match=0;
+			foreach my $obj(@{$hash->{$subject}->{$predicate}}){if($obj eq $object){$match=1;}}
+			if($match==0){push(@{$hash->{$subject}->{$predicate}},$object);}
+		}elsif($hash->{$subject}->{$predicate} ne $object){$hash->{$subject}->{$predicate}=[$hash->{$subject}->{$predicate},$object];}
+	}
+	$dbh->disconnect;
+	my $hashtable={};
+	foreach my $url(keys(%{$executes})){
+		foreach my $nodeid(sort{$a<=>$b}@{$executes->{$url}}){
+			push(@{$hashtable->{$url}},$hash->{$nodeid});
+		}
+	}
+	return $hashtable
 }
 ############################## checkSoftwares ##############################
 sub checkSoftwares{

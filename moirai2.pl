@@ -101,6 +101,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "             Look for RDF databases and run once if filestamps are updated.\n";
 	print "Options: -d  Directory to search for (default='.').\n";
 	print "         -l  Log directory (default='./log').\n";
+	print "         -r  Recursive search through a directory (default='0').\n";
 	print "         -s  Loop second (default='10 sec').\n";
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
@@ -138,8 +139,8 @@ my $newControlQuery="select distinct n.data from edge as e inner join node as n 
 my $executeQuery="select distinct s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
 my $refreshQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/refresh"}."\")";
 my $cwd=Cwd::getcwd();
-my $rdfdb=$opt_d;
 if(scalar(@ARGV)==1&&$ARGV[0] eq "daemon"){autodaemon();exit();}
+my $rdfdb=$opt_d;
 if(!defined($rdfdb)){
 	if(scalar(@ARGV)>0){$rdfdb="rdf.sqlite3";}
 	else{print STDERR "Please specify database by -d option.\n";exit(1);}
@@ -250,6 +251,11 @@ sub searchAndDestroy{
 			my $json=getJson("https://moirai2.github.io/workflow/$workflow.json");
 		}
 	}
+}
+############################## htmlSummary ##############################
+sub htmlSummary{
+	my $rdfdb=shift();
+
 }
 ############################## printCommand ##############################
 sub printCommand{
