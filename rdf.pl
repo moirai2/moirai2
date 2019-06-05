@@ -39,7 +39,6 @@ $urls->{"conda/test"          }="https://moirai2.github.io/schema/conda/test";
 
 $urls->{"daemon"              }="https://moirai2.github.io/schema/daemon";
 $urls->{"daemon/command"      }="https://moirai2.github.io/schema/daemon/command";
-$urls->{"daemon/control"      }="https://moirai2.github.io/schema/daemon/control";
 $urls->{"daemon/execute"      }="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"daemon/execid"       }="https://moirai2.github.io/schema/daemon/execid";
 $urls->{"daemon/timestarted"  }="https://moirai2.github.io/schema/daemon/timestarted";
@@ -88,7 +87,6 @@ sub help{
 	#print "COMMAND: $program_name -d DB remove empty\n";
 	#print "COMMAND: $program_name -d DB -D DB2 copy QUERY QUERY2\n";
 	#print "COMMAND: $program_name -d DB rmdup SUB PRE OBJ\n";
-	#print "COMMAND: $program_name -d DB stats\n";
 	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
@@ -138,7 +136,7 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f json select","{\"D\":{\"E\":\"F\",\"G\":\"H\"}}");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete ? ? H","deleted 1");
 	testCommand("echo 'D\tE\tF'|perl rdf.pl -d test/rdf.sqlite3 -f tsv delete","deleted 1");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 newnode","_test/rdf.sqlite3.node1_");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 newnode","test/rdf.sqlite3#node1");
 	testCommand("echo '' > test/test.txt","");
 	testCommand("perl rdf.pl md5 test/test.txt","test/test.txt	".$urls->{"file/md5"}."	d41d8cd98f00b204e9800998ecf8427e");
 	testCommand("perl rdf.pl linecount test/test.txt","test/test.txt	".$urls->{"file/linecount"}."	0");
@@ -468,8 +466,6 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	if(!$opt_q){print "copied $linecount\n";}
 }elsif(lc($command) eq "newnode"){
 	print newNode($database)."\n";
-}elsif(lc($command) eq "stats"){
-	computeStatistics($database,$opt_l);
 }elsif(lc($command) eq "command"){
 	my $reader=IO::File->new("-");
 	my $json=readJson($reader);
@@ -837,233 +833,6 @@ sub downloadFile{
 		close(OUT);
 	}elsif($res->is_error){return;}
 	return $filename;
-}
-############################## computeStatistics ##############################
-sub computeStatistics{
-	my $database=shift();
-	my $report_exectime=shift();
-	my $dbh=openDB($database);
-	my $controls=getControls($dbh);
-	my $stats=getControlProgress($dbh,$controls);
-	$dbh->disconnect;
-	my $writer;
-	if(defined($report_exectime)){open($writer,">$report_exectime");}
-	foreach my $url(keys(%{$controls})){
-		my $basename=basename($url,".json");
-		my @lcldbs=getLocalDatabases("tmp",$basename);
-		foreach my $lcldb(@lcldbs){
-			my $hash=getExecuteStats($lcldb);
-			handleTimeStatistics($url,$hash,$stats,$writer);
-		}
-	}
-	if(defined($report_exectime)){close($writer);}
-	calculateTotalStatistics($stats);
-	printTotalStatistics($stats);
-}
-############################## calculateTotalStatistics ##############################
-sub calculateTotalStatistics{
-	my $stats=shift();
-	foreach my $ctrlurl(keys(%{$stats})){
-		my $completed=$stats->{$ctrlurl}->{"completed"};
-		my $request=$stats->{$ctrlurl}->{"request"};
-		my $remaining=$request-$completed;
-		$stats->{$ctrlurl}->{"remaining"}=$remaining;
-		my $averagetime=0;
-		foreach my $command(keys(%{$stats->{$ctrlurl}->{"daemon/command"}})){
-			my $count=$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"count"};
-			my $jobdone=$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"jobdone"};
-			my $totaltime=$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"totaltime"};
-			my $avgtime=($jobdone>0)?$totaltime/$jobdone:0;
-			$stats->{$ctrlurl}->{"daemon/command"}->{$command}->{"avgtime"}=$avgtime;
-			$averagetime+=$avgtime*$count;
-		}
-		$stats->{$ctrlurl}->{"averagetime"}=$averagetime;
-		$stats->{$ctrlurl}->{"processedtime"}=$averagetime*$completed;
-		$stats->{$ctrlurl}->{"estimatedtime"}=$averagetime*$remaining;
-	}
-}
-############################## getControlProgress ##############################
-sub getControlProgress{
-	my $dbh=shift();
-	my $controls=shift();
-	my $stats={};
-	foreach my $url(keys(%{$controls})){
-		if(!exists($stats->{$url})){$stats->{$url}={};}
-		my ($total_query,$done_query)=getProgressQueries($controls->{$url});
-		$stats->{$url}->{"request"}=queryCount($dbh,parseQuery($total_query));
-		$stats->{$url}->{"completed"}=queryCount($dbh,removeLastQuery(parseQuery($done_query)));
-		foreach my $command(getProcessCommands($controls->{$url})){
-			if(!exists($stats->{$url}->{"daemon/command"}->{$command})){$stats->{$url}->{"daemon/command"}->{$command}={};}
-			$stats->{$url}->{"daemon/command"}->{$command}->{"count"}++;
-		}
-	}
-	return $stats;
-}
-############################## removeLastQuery ##############################
-sub removeLastQuery{
-	my $query=shift();
-	my $index=index($query,"from");
-	my $select=substr($query,0,$index);
-	$select=substr($select,0,rindex($select,","));
-	return "$select ".substr($query,$index);
-}
-############################## getProcessCommands ##############################
-sub getProcessCommands{
-	my $control=shift();
-	my @array=();
-	foreach my $batch(@{$control->{$urls->{"daemon/batch"}}}){
-		if(!exists($batch->{$urls->{"daemon/process"}})){next();}
-		my @lines=@{$batch->{$urls->{"daemon/process"}}};
-		foreach my $line(@lines){
-			my @tokens=split(/\-\>/,$line);
-			if($tokens[1] eq $urls->{"daemon/command"}){push(@array,$tokens[2]);}
-		}
-	}
-	return wantarray?@array:$array[0];
-}
-############################## getProgressQueries ##############################
-sub getProgressQueries{
-	my $control=shift();
-	my @done=();
-	my @total=();
-	foreach my $select(@{$control->{$urls->{"daemon/control"}}}){
-		if($select=~/^(.+)\-\>\!(.+)$/){
-			push(@done,"$1->$2->\$$2");
-		}else{push(@total,$select);push(@done,$select);}
-	}
-	return(\@total,\@done);
-}
-############################## printTotalStatistics ##############################
-sub printTotalStatistics{
-	my $stats=shift();
-	my $totalProcessedTime=0;
-	my $totalEstimatedTime=0;
-	print "control\tcompleted\tjobs\tprogress%\taverage time\ttotal time spent\testimated process time\n";
-	foreach my $ctrlurl(sort{$a cmp $b}keys(%{$stats})){
-		my $request=$stats->{$ctrlurl}->{"request"};
-		my $completed=$stats->{$ctrlurl}->{"completed"};
-		my $progress=($request>0)?(100*$completed/$request):0;
-		$progress=sprintf("%.1f",$progress)."%";
-		my $processedtime=handleTime($stats->{$ctrlurl}->{"processedtime"});
-		my $estimatedtime=handleTime($stats->{$ctrlurl}->{"estimatedtime"});
-		my $averagetime=handleTime($stats->{$ctrlurl}->{"averagetime"});
-		print "$ctrlurl\t$completed\t$request\t$progress\t$averagetime\t$processedtime\t$estimatedtime\n";
-		$totalProcessedTime+=$stats->{$ctrlurl}->{"processedtime"};
-		$totalEstimatedTime+=$stats->{$ctrlurl}->{"estimatedtime"};
-	}
-	$totalProcessedTime=handleTime($totalProcessedTime);
-	$totalEstimatedTime=handleTime($totalEstimatedTime);
-	print "\t\t\t\t\t$totalProcessedTime\t$totalEstimatedTime\n";
-}
-############################## handleTime ##############################
-sub handleTime{
-	my $second=shift();
-	if($second<100){return sprintf("%d",$second)."sec";}
-	elsif($second<60*100){return sprintf("%d",$second/60)."min";}
-	elsif($second<60*60*100){return sprintf("%.1f",$second/60/60)."hr";}
-	else{return sprintf("%.1f",$second/60/60/24)."day";}
-}
-############################## handleTimeStatistics ##############################
-sub handleTimeStatistics{
-	my $ctrlurl=shift();
-	my $hash=shift();
-	my $stats=shift();
-	my $writer=shift();
-	foreach my $subject(keys(%{$hash})){
-		my $starttime;
-		my $endtime;
-		my $url;
-		foreach my $predicate(keys(%{$hash->{$subject}})){
-			my $object=$hash->{$subject}->{$predicate};
-			if($predicate eq $urls->{"daemon/timestarted"}){$starttime=$object;}
-			elsif($predicate eq $urls->{"daemon/timeended"}){$endtime=$object;}
-			elsif($predicate eq $urls->{"daemon/command"}){$url=$object;}
-		}
-		if(defined($starttime)&&defined($endtime)&&defined($url)){
-			my $time=$endtime-$starttime;
-			$stats->{$ctrlurl}->{"daemon/command"}->{$url}->{"jobdone"}++;
-			$stats->{$ctrlurl}->{"daemon/command"}->{$url}->{"totaltime"}+=$time;
-			if($writer!=null){print $writer "$ctrlurl\t$url\t".getDate("/",$starttime)." ".getTime(":",$starttime)."\t".getDate("/",$endtime)." ".getTime(":",$endtime)."\t$time\n";}
-		}
-	}
-}
-############################## getExecuteStats ##############################
-sub getExecuteStats{
-	my $lcldb=shift();
-	my $hash={};
-	my $dbh=openDB($lcldb);
-	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	while(my @rows=$sth->fetchrow_array()){
-		my $subject=$rows[0];
-		my $predicate=$rows[1];
-		my $object=$rows[2];
-		if($predicate!~/^http\:\/\/localhost\/\~ah3q\/schema\/daemon\//){next;}
-		if(!exists($hash->{$subject})){$hash->{$subject}={};}
-		if(!exists($hash->{$subject}->{$predicate})){$hash->{$subject}->{$predicate}=$object;}
-		elsif(ref($hash->{$subject}->{$predicate})eq"ARRAY"){
-			my $match=0;
-			foreach my $obj(@{$hash->{$subject}->{$predicate}}){if($obj eq $object){$match=1;}}
-			if($match==0){push(@{$hash->{$subject}->{$predicate}},$object);}
-		}elsif($hash->{$subject}->{$predicate} ne $object){$hash->{$subject}->{$predicate}=[$hash->{$subject}->{$predicate},$object];}
-	}
-	$dbh->disconnect;
-	return $hash;
-}
-############################## getControls ##############################
-sub getControls{
-	my $dbh=shift();
-	my $query="select n1.data from edge as e1 left outer join node as n1 on e1.object = n1.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/control"}."\")";
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	my $controls={};
-	while(my $url=$sth->fetchrow_array()){$controls->{$url}=loadJsonFromWeb($url);}
-	return $controls;
-}
-############################## getLocalDatabases ##############################
-sub getLocalDatabases{
-	my @basenames=@_;
-	my $tmpdir=shift(@basenames);
-	my @lcldbs=();
-	my @tmpdirs=getDirectories($tmpdir,\@basenames);
-	foreach my $tmpdir(@tmpdirs){
-		opendir(DIR,$tmpdir);
-		foreach my $file(readdir(DIR)){
-			if($file eq ""){next;}
-			if($file eq "."){next;}
-			if($file eq ".."){next;}
-			if($file=~/\.sqlite3$/){push(@lcldbs,"$tmpdir/$file");}
-		}
-		closedir(DIR);
-	}
-	return wantarray?@lcldbs:$lcldbs[0];
-}
-############################## getDirectories ##############################
-sub getDirectories{
-	my $directory=shift();
-	my $filters=shift();
-	my @directories=();
-	opendir(DIR,$directory);
-	foreach my $file(readdir(DIR)){
-		if($file eq ""){next;}
-		if($file eq "."){next;}
-		if($file eq ".."){next;}
-		if(-d "$directory/$file"){push(@directories,"$directory/$file");}
-	}
-	closedir(DIR);
-	if(defined($filters)){
-		my @array=();
-		foreach my $directory(@directories){
-			my $match=0;
-			foreach my $filter(@{$filters}){
-				if($directory=~/$filter/){$match=1;last;}
-			}
-			if($match){push(@array,$directory);}
-		}
-		@directories=@array;
-	}
-	return wantarray?@directories:\@directories;
 }
 ############################## printQueryResults ##############################
 sub printQueryResults{
@@ -1735,10 +1504,13 @@ sub getResults{
 	my @array=();
 	while(my @rows=$sth->fetchrow_array()){
 		my $hashtable={};
+		my $undefined=0;
 		for(my $i=0;$i<scalar(@{$variables});$i++){
+			if($rows[$i]eq"_undef_"){$undefined=1;last;}
 			my $variable=$variables->[$i];
 			$hashtable->{$variable}=$rows[$i];
 		}
+		if($undefined){next;}
 		push(@array,$hashtable);
 	}
 	return \@array;

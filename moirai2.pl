@@ -25,6 +25,7 @@ $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
 $urls->{"daemon/select"}="https://moirai2.github.io/schema/daemon/select";
 $urls->{"daemon/insert"}="https://moirai2.github.io/schema/daemon/insert";
 $urls->{"daemon/delete"}="https://moirai2.github.io/schema/daemon/delete";
+$urls->{"daemon/update"}="https://moirai2.github.io/schema/daemon/update";
 $urls->{"daemon/import"}="https://moirai2.github.io/schema/daemon/import";
 $urls->{"daemon/input"}="https://moirai2.github.io/schema/daemon/input";
 $urls->{"daemon/inputs"}="https://moirai2.github.io/schema/daemon/inputs";
@@ -41,7 +42,6 @@ $urls->{"daemon/qsubopt"}="https://moirai2.github.io/schema/daemon/qsubopt";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/control"}="https://moirai2.github.io/schema/daemon/control";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
-$urls->{"daemon/refresh"}="https://moirai2.github.io/schema/daemon/refresh";
 $urls->{"daemon/stderr"}="https://moirai2.github.io/schema/daemon/stderr";
 $urls->{"daemon/stdout"}="https://moirai2.github.io/schema/daemon/stdout";
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
@@ -135,9 +135,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 }
 ############################## MAIN ##############################
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
-my $newControlQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/control"}."\")";
 my $executeQuery="select distinct s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
-my $refreshQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/refresh"}."\")";
 my $cwd=Cwd::getcwd();
 if(scalar(@ARGV)==1&&$ARGV[0] eq "daemon"){autodaemon();exit();}
 my $rdfdb=$opt_d;
@@ -162,11 +160,12 @@ mkdir("$ctrldir");
 mkdir("$ctrldir/bash");
 mkdir("$ctrldir/insert");
 mkdir("$ctrldir/delete");
+mkdir("$ctrldir/update");
 mkdir("$ctrldir/completed");
 mkdir("$ctrldir/stdout");
 mkdir("$ctrldir/stderr");
+my $workflows={};
 my $executes={};
-my $jsons={};
 my @execurls=();
 my $jobcount=0;
 my $ctrlcount=0;
@@ -207,7 +206,7 @@ if($showlog){
 	}
 	if(defined($cmdurl)){print STDERR "# command URL    : $cmdurl\n";}
 	foreach my $nodeid(@nodeids){if(defined($nodeid)){print STDERR "# command NodeID : $nodeid\n";}}
-	print STDERR "year/mon/date\thr:min:sec\tcontrol\tnewjob\tremain\tinsert\tdelete\tdone\n";
+	print STDERR "year/mon/date\thr:min:sec\tcontrol\tnewjob\tremain\tinsert\tdelete\tupdate\tdone\n";
 }
 while(true){
 	my $jobs_running=getNumberOfJobsRunning();
@@ -247,15 +246,11 @@ sub searchAndDestroy{
 		my ($subject,$predicate,$object)=@{$select};
 		if($predicate=~/https:\/\/moirai2\.github\.io\/workflow\/([^\/]+)\//){
 			my $workflow=$1;
-			if(exists($workflow->{$workflow})){next;}
+			if(exists($workflows->{$workflow})){next;}
 			my $json=getJson("https://moirai2.github.io/workflow/$workflow.json");
+			$workflows->{$workflow}=$json;
 		}
 	}
-}
-############################## htmlSummary ##############################
-sub htmlSummary{
-	my $rdfdb=shift();
-
 }
 ############################## printCommand ##############################
 sub printCommand{
@@ -434,12 +429,13 @@ sub controlAll{
 	my $completed=controlCompleted();
 	my $inserted=controlInsert($rdfdb);
 	my $deleted=controlDelete($rdfdb);
+	my $update=controlUpdate($rdfdb);
 	my $date=getDate("/");
 	my $time=getTime(":");
 	my @execurls=keys(%{$executes});
 	my $remaining=0;
 	foreach my $url(@execurls){my $count=scalar(@{$executes->{$url}});if($count>0){$remaining++;}}
-	if($showlog){print STDERR "$date\t$time\t$ctrlcount\t$jobcount\t$remaining\t$inserted\t$deleted\t$completed\n";}
+	if($showlog){print STDERR "$date\t$time\t$ctrlcount\t$jobcount\t$remaining\t$inserted\t$deleted\t$update\t$completed\n";}
 }
 ############################## throwJobs ##############################
 sub throwJobs{
@@ -496,6 +492,18 @@ sub controlCompleted{
 	my $count=scalar(@files);
 	if($count==0){return 0;}
 	foreach my $file(@files){system("bash $file");unlink($file);}
+	return $count;
+}
+############################## controlUpdate ##############################
+sub controlUpdate{
+	my $rdfdb=shift();
+	my @files=getFiles("$ctrldir/update");
+	if(scalar(@files)==0){return 0;}
+	my $command="cat ".join(" ",@files)."|perl $cwd/rdf.pl -d $rdfdb -f tsv update";
+	my $count=`$command`;
+	foreach my $file(@files){unlink($file);}
+	$count=~/(\d+)/;
+	$count=$1;
 	return $count;
 }
 ############################## controlDelete ##############################
@@ -636,6 +644,7 @@ sub loadCommandFromURLSub{
 	if(exists($command->{$urls->{"daemon/seqcount"}})){$command->{$urls->{"daemon/seqcount"}}=handleArray($command->{$urls->{"daemon/seqcount"}});}
 	if(exists($command->{$urls->{"daemon/import"}})){if(ref($command->{$urls->{"daemon/import"}}) ne "ARRAY"){$command->{$urls->{"daemon/import"}}=[$command->{$urls->{"daemon/import"}}];}}
 	if(exists($command->{$urls->{"daemon/insert"}})){$command->{"insertKeys"}=handleKeys($command->{$urls->{"daemon/insert"}},$command);}
+	if(exists($command->{$urls->{"daemon/update"}})){$command->{"updateKeys"}=handleKeys($command->{$urls->{"daemon/update"}},$command);}
 	if(exists($command->{$urls->{"daemon/delete"}})){$command->{"deleteKeys"}=handleKeys($command->{$urls->{"daemon/delete"}},$command);}
 	if(exists($command->{$urls->{"daemon/bash"}})){
 		$command->{"bashCode"}=handleCode($command->{$urls->{"daemon/bash"}});
@@ -811,6 +820,7 @@ sub initExecute{
 	$variables->{"stdoutfile"}="$dirname.stdout";
 	$variables->{"insertfile"}="$dirname.insert";
 	$variables->{"deletefile"}="$dirname.delete";
+	$variables->{"updatefile"}="$dirname.update";
 	$variables->{"completedfile"}="$dirname.completed";
 	$variables->{"dirname"}=$dirname;
 	$variables->{"localdb"}="$cwd/$tmpdir/rdf.sqlite3";
@@ -831,13 +841,14 @@ sub bashCommand{
 	my $stdoutfile="$cwd/$tmpdir/".$variables->{"stdoutfile"};
 	my $insertfile="$cwd/$tmpdir/".$variables->{"insertfile"};
 	my $deletefile="$cwd/$tmpdir/".$variables->{"deletefile"};
+	my $updatefile="$cwd/$tmpdir/".$variables->{"updatefile"};
 	my $completedfile="$cwd/$tmpdir/".$variables->{"completedfile"};
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
 	print OUT "set -eu\n";
 	print OUT "########## system ##########\n";
 	my @systemvars=("cmdurl","dirname","rdfdb","cwd","nodeid","tmpdir");
-	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","insertfile","completedfile");
+	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
 	my @unusedvars=();
 	my @outputvars=(@{$command->{"output"}});
 	if(exists($command->{"batchmode"})){push(@systemvars,"localdb");}
@@ -1029,6 +1040,11 @@ sub bashCommand{
 			}
 		}
 	}
+	if(scalar(@{$command->{"updateKeys"}})>0){
+		print OUT "cat<<EOF>>\$tmpdir/\$updatefile\n";
+		foreach my $row(@{$command->{"updateKeys"}}){print OUT join("\t",@{$row})."\n";}
+		print OUT "EOF\n";
+	}
 	if(scalar(@{$command->{"deleteKeys"}})>0){
 		print OUT "cat<<EOF>>\$tmpdir/\$deletefile\n";
 		foreach my $row(@{$command->{"deleteKeys"}}){print OUT join("\t",@{$row})."\n";}
@@ -1051,7 +1067,7 @@ sub bashCommand{
 	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$cwd/$importfile $ctrldir/insert/$nodeid.import\n";$importcount++;}
 	print OUT "mv \$cwd/\$tmpdir/\$completedfile $ctrldir/completed/\$dirname.sh\n";
 	close(OUT);
-	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$bashfile,\@scriptfiles,$tmpdir,$cwd);
+	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$updatefile,$bashfile,\@scriptfiles,$tmpdir,$cwd);
 	if(exists($variables->{"bashfile"})){push(@{$bashFiles},[$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"bashfile"},$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"stdoutfile"},$variables->{"cwd"}."/".$variables->{"tmpdir"}."/".$variables->{"stderrfile"}]);}
 }
 ############################## existsArray ##############################
@@ -1225,6 +1241,7 @@ sub writeCompleteFile{
 	my $stderrfile=shift();
 	my $insertfile=shift();
 	my $deletefile=shift();
+	my $updatefile=shift();
 	my $bashfile=shift();
 	my $scriptfiles=shift();
 	my $tmpdir=shift();
@@ -1258,6 +1275,13 @@ sub writeCompleteFile{
 	print OUT "mv $deletefile $ctrldir/delete/.\n";
 	print OUT "fi\n";
 	print OUT "fi\n";
+	print OUT "if [ -s $updatefile ];then\n";
+	print OUT "if [ \$keep = 1 ];then\n";
+	print OUT "ln -s $updatefile $ctrldir/update/.\n";
+	print OUT "else\n";
+	print OUT "mv $updatefile $ctrldir/update/.\n";
+	print OUT "fi\n";
+	print OUT "fi\n";
 	print OUT "if [ \$keep = 0 ];then\n";
 	print OUT "rm -f $bashfile\n";
 	foreach my $scriptfile(@{$scriptfiles}){print OUT "rm -f $scriptfile\n";}
@@ -1266,6 +1290,7 @@ sub writeCompleteFile{
 	print OUT "rmdir $tmpdir/ctrl/completed > /dev/null 2>&1\n";
 	print OUT "rmdir $tmpdir/ctrl/delete > /dev/null 2>&1\n";
 	print OUT "rmdir $tmpdir/ctrl/insert > /dev/null 2>&1\n";
+	print OUT "rmdir $tmpdir/ctrl/update > /dev/null 2>&1\n";
 	print OUT "rmdir $tmpdir/ctrl/stderr > /dev/null 2>&1\n";
 	print OUT "rmdir $tmpdir/ctrl/stdout > /dev/null 2>&1\n";
 	print OUT "rmdir $tmpdir/ctrl/ > /dev/null 2>&1\n";
