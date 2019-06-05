@@ -245,6 +245,7 @@ sub searchAndDestroy{
 	foreach my $select(@selects){
 		my ($subject,$predicate,$object)=@{$select};
 		if($predicate=~/https:\/\/moirai2\.github\.io\/workflow\/([^\/]+)\//){
+			print STDERR "$predicate\n";
 			my $workflow=$1;
 			if(exists($workflows->{$workflow})){next;}
 			my $json=getJson("https://moirai2.github.io/workflow/$workflow.json");
