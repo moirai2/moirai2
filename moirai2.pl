@@ -40,7 +40,7 @@ $urls->{"daemon/maxjob"}="https://moirai2.github.io/schema/daemon/maxjob";
 $urls->{"daemon/singlethread"}="https://moirai2.github.io/schema/daemon/singlethread";
 $urls->{"daemon/qsubopt"}="https://moirai2.github.io/schema/daemon/qsubopt";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
-$urls->{"daemon/control"}="https://moirai2.github.io/schema/daemon/control";
+$urls->{"daemon/workflow"}="https://moirai2.github.io/schema/daemon/workflow";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"daemon/stderr"}="https://moirai2.github.io/schema/daemon/stderr";
 $urls->{"daemon/stdout"}="https://moirai2.github.io/schema/daemon/stdout";
@@ -62,7 +62,6 @@ $urls->{"file"}="https://moirai2.github.io/schema/file";
 $urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
 $urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
 $urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
-
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -166,6 +165,7 @@ mkdir("$ctrldir/stdout");
 mkdir("$ctrldir/stderr");
 my $workflows={};
 my $executes={};
+my $workflows={};
 my @execurls=();
 my $jobcount=0;
 my $ctrlcount=0;
@@ -187,7 +187,10 @@ if(defined($opt_i)){
 }
 if(scalar(@ARGV)>0){
 	$cmdurl=shift(@ARGV);
-	@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);
+	if($cmdurl=~/\/workflow\/.+json$/){
+		my @lines=workflowProcess($cmdurl,$commands,$workflows);
+		print_table(\@lines);
+	}else{@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);}
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 if($showlog){
@@ -206,7 +209,7 @@ if($showlog){
 	}
 	if(defined($cmdurl)){print STDERR "# command URL    : $cmdurl\n";}
 	foreach my $nodeid(@nodeids){if(defined($nodeid)){print STDERR "# command NodeID : $nodeid\n";}}
-	print STDERR "year/mon/date\thr:min:sec\tcontrol\tnewjob\tremain\tinsert\tdelete\tupdate\tdone\n";
+	print STDERR "year/mon/date\thr:min:sec\tworkflow\tnewjob\tremain\tinsert\tdelete\tupdate\tdone\n";
 }
 while(true){
 	my $jobs_running=getNumberOfJobsRunning();
@@ -218,9 +221,6 @@ while(true){
 		foreach my $url(@newurls){
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 			if($job>0){$jobcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
-			elsif($job==0){
-				searchAndDestroy($commands->{$url});
-			}
 		}
 	}
 	$jobs_running=getNumberOfJobsRunning();
@@ -235,22 +235,6 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		my $result=`perl $cwd/rdf.pl -d $rdfdb object $nodeid $cmdurl#$returnvalue`;
 		chomp($result);
 		print "$result\n";
-	}
-}
-############################## searchAndDestroy ##############################
-sub searchAndDestroy{
-	my $command=shift();
-	if(!exists($command->{"selectKeys"})){next;}
-	my @selects=@{$command->{"selectKeys"}};
-	foreach my $select(@selects){
-		my ($subject,$predicate,$object)=@{$select};
-		if($predicate=~/https:\/\/moirai2\.github\.io\/workflow\/([^\/]+)\//){
-			print STDERR "$predicate\n";
-			my $workflow=$1;
-			if(exists($workflows->{$workflow})){next;}
-			my $json=getJson("https://moirai2.github.io/workflow/$workflow.json");
-			$workflows->{$workflow}=$json;
-		}
 	}
 }
 ############################## printCommand ##############################
@@ -311,6 +295,45 @@ sub promtCommandOutput{
 	if($value eq ""){return;}
 	return $value;
 }
+############################## workflowProcess ##############################
+sub workflowProcess{
+	my $cmdurl=shift();
+	my $commands=shift();
+	my $workflows=shift();
+	my $nodeid=shift();
+	if(!defined($nodeid)){$nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;}
+	my $workflow=loadWorkflowFromURL($cmdurl,$workflows);
+	my $command=loadCommandFromURL($cmdurl,$commands);
+	print STDERR "cmdurl=$cmdurl\n";
+	my @lines=("$nodeid->".$urls->{"daemon/workflow"}."->$cmdurl");
+	if(exists($command->{"updateKeys"})){
+		foreach my $update(@{$command->{"updateKeys"}}){
+			my ($subject,$predicate,$object)=@{$update};
+			if(exists($workflow->{$predicate})){
+				foreach my $url(keys(%{$workflow->{$predicate}})){
+					my $object=$workflow->{$predicate}->{$url};
+					if(ref($object)ne"ARRAY"){$object=[$object];}
+					foreach my $o(@{$object}){
+						if(!exists($workflow->{$o})){next;}
+						foreach my $url(keys(%{$workflow->{$o}})){
+							push(@lines,workflowProcess($url,$commands,$workflows,$nodeid));
+						}
+					}
+				}
+			}
+		}
+	}
+	return @lines;
+}
+############################## loadWorkflowFromURL ##############################
+sub loadWorkflowFromURL{
+	my $url=shift();
+	my $workflows=shift();
+	if($url=~/https:\/\/moirai2\.github\.io\/workflow\/([^\/]+)\//){$url="https://moirai2.github.io/workflow/$1.json";}
+	if(exists($workflows->{$url})){return $workflows->{$url};}
+	$workflows->{$url}=getJson($url);
+	return $workflows->{$url};
+}
 ############################## commandProcess ##############################
 sub commandProcess{
 	my @arguments=@_;
@@ -318,8 +341,8 @@ sub commandProcess{
 	my $commands=shift(@arguments);
 	my $results=shift(@arguments);
 	my $command=loadCommandFromURL($url,$commands);
-	if(defined($opt_o)){push(@{$command->{"insertKeys"}},@{handleKeys($opt_o,$command)});}
 	$commands->{$url}=$command;
+	if(defined($opt_o)){push(@{$command->{"insertKeys"}},@{handleKeys($opt_o,$command)});}
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
 	if($showlog){
@@ -1306,19 +1329,7 @@ sub handleKeys{
 	my @statements;
 	if(ref($statement) eq "ARRAY"){@statements=@{$statement};}
 	else{@statements=split(",",$statement);}
-	foreach my $line (@statements){
-		my @tokens=split(/->/,$line);
-		push(@array,\@tokens);
-		foreach my $token(@tokens){
-			if($token=~/^\$(\w+)$/){
-				my $key=$1;
-				my $found=0;
-				foreach my $input(@{$command->{"input"}}){if($key eq $input){$found=1;}}
-				foreach my $output(@{$command->{"output"}}){if($key eq $output){$found=1;}}
-				if($found==0){push(@{$command->{"output"}},$key);}
-			}
-		}
-	}
+	foreach my $line (@statements){my @tokens=split(/->/,$line);push(@array,\@tokens);}
 	return \@array;
 }
 ############################## parseQuery ##############################
