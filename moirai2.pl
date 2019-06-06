@@ -134,7 +134,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 }
 ############################## MAIN ##############################
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
-my $executeQuery="select distinct s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
+my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/workflow"}."\")";
 my $cwd=Cwd::getcwd();
 if(scalar(@ARGV)==1&&$ARGV[0] eq "daemon"){autodaemon();exit();}
 my $rdfdb=$opt_d;
@@ -165,7 +165,6 @@ mkdir("$ctrldir/stdout");
 mkdir("$ctrldir/stderr");
 my $workflows={};
 my $executes={};
-my $workflows={};
 my @execurls=();
 my $jobcount=0;
 my $ctrlcount=0;
@@ -187,10 +186,8 @@ if(defined($opt_i)){
 }
 if(scalar(@ARGV)>0){
 	$cmdurl=shift(@ARGV);
-	if($cmdurl=~/\/workflow\/.+json$/){
-		my @lines=workflowProcess($cmdurl,$commands,$workflows);
-		print_table(\@lines);
-	}else{@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);}
+	if($cmdurl=~/\/workflow\/.+json$/){writeInserts(workflowProcess($cmdurl,$commands,$workflows));}
+	else{@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);}
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 if($showlog){
@@ -217,6 +214,9 @@ while(true){
 	$jobcount=0;
 	$ctrlcount=0;
 	if($jobs_running<$maxjob){
+		my @workflows=lookForNewCommands($rdfdb,$newWorkflowQuery,$commands);
+		my $job=handleWorkflows($rdfdb,\@workflows,$commands);
+		if($job>0){next;}
 		my @newurls=lookForNewCommands($rdfdb,$newExecuteQuery,$commands);
 		foreach my $url(@newurls){
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
@@ -235,6 +235,49 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		my $result=`perl $cwd/rdf.pl -d $rdfdb object $nodeid $cmdurl#$returnvalue`;
 		chomp($result);
 		print "$result\n";
+	}
+}
+############################## handleWorkflows ##############################
+sub handleWorkflows{
+	my $rdfdb=shift();
+	my $workflows=shift();
+	my $commands=shift();
+	my @inserts=();
+	my @deletes=();
+	my $executes={};
+	foreach my $workflow(@{$workflows}){
+		my $command=$commands->{$workflow};
+		getExecuteJobsSelect($rdfdb,$command,$executes);
+	}
+	my $count=0;
+	foreach my $url(keys(%{$executes})){
+		my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;
+		chomp($nodeid);
+		push(@inserts,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t$nodeid");
+		push(@inserts,"$nodeid\t".$urls->{"daemon/command"}."\t$url");
+		foreach my $variable(@{$executes->{$url}}){push(@deletes,$variable->{"root"}."\t".$urls->{"daemon/workflow"}."\t$url");}
+		$count++;
+	}
+	writeInserts(@inserts);
+	writeDeletes(@deletes);
+	return $count;
+}
+############################## writeDeletes ##############################
+sub writeDeletes{
+	my @lines=@_;
+	if(scalar(@lines)>0){
+		my ($fh,$file)=mkstemps("$ctrldir/delete/XXXXXXXXXX",".insert");
+		foreach my $line(@lines){print $fh "$line\n";}
+		close($fh);
+	}
+}
+############################## writeInserts ##############################
+sub writeInserts{
+	my @lines=@_;
+	if(scalar(@lines)>0){
+		my ($fh,$file)=mkstemps("$ctrldir/insert/XXXXXXXXXX",".insert");
+		foreach my $line(@lines){print $fh "$line\n";}
+		close($fh);
 	}
 }
 ############################## printCommand ##############################
@@ -301,24 +344,21 @@ sub workflowProcess{
 	my $commands=shift();
 	my $workflows=shift();
 	my $nodeid=shift();
-	if(!defined($nodeid)){$nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;}
+	if(!defined($nodeid)){$nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);}
 	my $workflow=loadWorkflowFromURL($cmdurl,$workflows);
 	my $command=loadCommandFromURL($cmdurl,$commands);
-	print STDERR "cmdurl=$cmdurl\n";
-	my @lines=("$nodeid->".$urls->{"daemon/workflow"}."->$cmdurl");
-	if(exists($command->{"updateKeys"})){
-		foreach my $update(@{$command->{"updateKeys"}}){
-			my ($subject,$predicate,$object)=@{$update};
-			if(exists($workflow->{$predicate})){
-				foreach my $url(keys(%{$workflow->{$predicate}})){
-					my $object=$workflow->{$predicate}->{$url};
-					if(ref($object)ne"ARRAY"){$object=[$object];}
-					foreach my $o(@{$object}){
-						if(!exists($workflow->{$o})){next;}
-						foreach my $url(keys(%{$workflow->{$o}})){
-							push(@lines,workflowProcess($url,$commands,$workflows,$nodeid));
-						}
-					}
+	my @lines=("$nodeid\t".$urls->{"daemon/workflow"}."\t$cmdurl");
+	if(!exists($command->{"insertKeys"})){return;}
+	foreach my $update(@{$command->{"insertKeys"}}){
+		my ($subject,$predicate,$object)=@{$update};
+		if(!exists($workflow->{$predicate})){next;}
+		foreach my $url(keys(%{$workflow->{$predicate}})){
+			my $object=$workflow->{$predicate}->{$url};
+			if(ref($object)ne"ARRAY"){$object=[$object];}
+			foreach my $o(@{$object}){
+				if(!exists($workflow->{$o})){next;}
+				foreach my $url(keys(%{$workflow->{$o}})){
+					push(@lines,workflowProcess($url,$commands,$workflows,$nodeid));
 				}
 			}
 		}
@@ -329,7 +369,7 @@ sub workflowProcess{
 sub loadWorkflowFromURL{
 	my $url=shift();
 	my $workflows=shift();
-	if($url=~/https:\/\/moirai2\.github\.io\/workflow\/([^\/]+)\//){$url="https://moirai2.github.io/workflow/$1.json";}
+	if($url=~/^(.+)\/workflow\/([^\/]+)\//){$url="$1/workflow/$2.json";}
 	if(exists($workflows->{$url})){return $workflows->{$url};}
 	$workflows->{$url}=getJson($url);
 	return $workflows->{$url};
@@ -353,7 +393,7 @@ sub commandProcess{
 	}
 	if(scalar(@inputs)>0&&scalar(@arguments)==0){@arguments=assignCommand($command);}
 	if(scalar(@arguments)<scalar(@inputs)){exit(1);}
-	my @lines=();
+	my @inserts=();
 	my @nodeids=();
 	if(scalar(keys(%{$results}))>0){
 		foreach my $row(@{$results->{"rows"}}){
@@ -372,7 +412,7 @@ sub commandProcess{
 			}
 			my ($nodeid,@array)=commandProcessSub($url,$hash);
 			push(@nodeids,$nodeid);
-			push(@lines,@array);
+			push(@inserts,@array);
 		}
 	}else{
 		my $hash={};
@@ -383,23 +423,21 @@ sub commandProcess{
 		}
 		my ($nodeid,@array)=commandProcessSub($url,$hash);
 		push(@nodeids,$nodeid);
-		push(@lines,@array);
+		push(@inserts,@array);
 	}
-	my ($fh,$file)=mkstemps("$ctrldir/insert/XXXXXXXXXX",".insert");
-	foreach my $line(@lines){print $fh "$line\n";}
-	close($fh);
+	writeInserts(@inserts);
 	return @nodeids;
 }
 sub commandProcessSub{
 	my $url=shift();
 	my $hash=shift();
-	my @lines=();
+	my @inserts=();
 	my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;
 	chomp($nodeid);
-	push(@lines,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t$nodeid");
-	push(@lines,"$nodeid\t".$urls->{"daemon/command"}."\t$url");
-	foreach my $key(keys(%{$hash})){push(@lines,"$nodeid\t$url#$key\t".$hash->{$key});}
-	return ($nodeid,@lines);
+	push(@inserts,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t$nodeid");
+	push(@inserts,"$nodeid\t".$urls->{"daemon/command"}."\t$url");
+	foreach my $key(keys(%{$hash})){push(@inserts,"$nodeid\t$url#$key\t".$hash->{$key});}
+	return ($nodeid,@inserts);
 }
 ############################## mainProcess ##############################
 sub mainProcess{
@@ -432,16 +470,8 @@ sub mainProcess{
 		throwJobs($bashFiles,$use_qsub,$qsubopt,$url,1);
 		if(scalar(@{$executes->{$url}})>0){push(@{$execurls},$url);}
 	}
-	if(scalar(@deletes)>0){
-		my ($fh,$file)=mkstemps("$ctrldir/delete/XXXXXXXXXX",".delete");
-		foreach my $delete(@deletes){print $fh "$delete\n";}
-		close($fh);
-	}
-	if(scalar(@inserts)>0){
-		my ($fh,$file)=mkstemps("$ctrldir/insert/XXXXXXXXXX",".insert");
-		foreach my $insert(@inserts){print $fh "$insert\n";}
-		close($fh);
-	}
+	writeDeletes(@deletes);
+	writeInserts(@inserts);
 	return $thrown;
 }
 ############################## controlAll ##############################
@@ -648,7 +678,7 @@ sub loadCommandFromURLSub{
 	}
 	if(scalar(@{$command->{"input"}})==0&&!exists($command->{$urls->{"daemon/select"}})){$command->{$urls->{"daemon/select"}}="";}
 	if(exists($command->{$urls->{"daemon/select"}})){
-		my @temp=parseQuery($command->{$urls->{"daemon/select"}},$urls->{"daemon"}."->".$urls->{"daemon/execute"}."->\$nodeid,\$nodeid->".$urls->{"daemon/command"}."->$url");
+		my @temp=parseQuery($command->{$urls->{"daemon/select"}},"\$root->".$urls->{"daemon/workflow"}."->$url");
 		$command->{"rdfQuery"}=$temp[0];
 		$command->{"keys"}=$temp[1];
 		$command->{"input"}=$temp[2];
