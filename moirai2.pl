@@ -206,7 +206,7 @@ if($showlog){
 	}
 	if(defined($cmdurl)){print STDERR "# command URL    : $cmdurl\n";}
 	foreach my $nodeid(@nodeids){if(defined($nodeid)){print STDERR "# command NodeID : $nodeid\n";}}
-	print STDERR "year/mon/date\thr:min:sec\tworkflow\tnewjob\tremain\tinsert\tdelete\tupdate\tdone\n";
+	print STDERR "year/mon/date\thr:min:sec\twork\tnewjob\tremain\tinsert\tdelete\tupdate\tdone\n";
 }
 while(true){
 	my $jobs_running=getNumberOfJobsRunning();
@@ -214,19 +214,21 @@ while(true){
 	$jobcount=0;
 	$ctrlcount=0;
 	if($jobs_running<$maxjob){
-		my @workflows=lookForNewCommands($rdfdb,$newWorkflowQuery,$commands);
-		my $job=handleWorkflows($rdfdb,\@workflows,$commands);
-		if($job>0){next;}
-		my @newurls=lookForNewCommands($rdfdb,$newExecuteQuery,$commands);
-		foreach my $url(@newurls){
+		foreach my $url(lookForNewCommands($rdfdb,$newExecuteQuery,$commands)){
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 			if($job>0){$jobcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
+		}
+		if($jobcount==0){
+			foreach my $url(lookForNewCommands($rdfdb,$newWorkflowQuery,$commands)){
+				my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
+				if($job>0){$ctrlcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
+			}
 		}
 	}
 	$jobs_running=getNumberOfJobsRunning();
 	mainProcess(\@execurls,$commands,$executes,$maxjob-$jobs_running);
 	$jobs_running=getNumberOfJobsRunning();
-	if($runmode&&scalar(@execurls)==0&&$jobs_running==0){last;}
+	if($runmode&&scalar(@execurls)==0&&$jobs_running==0&&$jobcount==0){last;}
 	else{sleep($sleeptime);}
 }
 if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
@@ -236,31 +238,6 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		chomp($result);
 		print "$result\n";
 	}
-}
-############################## handleWorkflows ##############################
-sub handleWorkflows{
-	my $rdfdb=shift();
-	my $workflows=shift();
-	my $commands=shift();
-	my @inserts=();
-	my @deletes=();
-	my $executes={};
-	foreach my $workflow(@{$workflows}){
-		my $command=$commands->{$workflow};
-		getExecuteJobsSelect($rdfdb,$command,$executes);
-	}
-	my $count=0;
-	foreach my $url(keys(%{$executes})){
-		my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;
-		chomp($nodeid);
-		push(@inserts,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t$nodeid");
-		push(@inserts,"$nodeid\t".$urls->{"daemon/command"}."\t$url");
-		foreach my $variable(@{$executes->{$url}}){push(@deletes,$variable->{"root"}."\t".$urls->{"daemon/workflow"}."\t$url");}
-		$count++;
-	}
-	writeInserts(@inserts);
-	writeDeletes(@deletes);
-	return $count;
 }
 ############################## writeDeletes ##############################
 sub writeDeletes{
@@ -461,7 +438,8 @@ sub mainProcess{
 				if(!$singlethread&&$maxjob<=0){last;}
 				my $variables=shift(@{$executes->{$url}});
 				initExecute($rdfdb,$command,$variables);
-				push(@deletes,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t".$variables->{"nodeid"});
+				if(exists($command->{"selectKeys"})){push(@deletes,$variables->{"root"}."\t".$urls->{"daemon/workflow"}."\t$url");}
+				else{push(@deletes,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t".$variables->{"nodeid"});}
 				bashCommand($command,$variables,$bashFiles);
 				$maxjob--;
 				$thrown++;
@@ -676,9 +654,10 @@ sub loadCommandFromURLSub{
 		}
 		$command->{"output"}=\@array;
 	}
-	if(scalar(@{$command->{"input"}})==0&&!exists($command->{$urls->{"daemon/select"}})){$command->{$urls->{"daemon/select"}}="";}
-	if(exists($command->{$urls->{"daemon/select"}})){
-		my @temp=parseQuery($command->{$urls->{"daemon/select"}},"\$root->".$urls->{"daemon/workflow"}."->$url");
+	if($url=~/^(.+)\/workflow\/([^\/]+)\//){
+		if(ref($command->{$urls->{"daemon/select"}})ne"ARRAY"){$command->{$urls->{"daemon/select"}}=[$command->{$urls->{"daemon/select"}}];}
+		push(@{$command->{$urls->{"daemon/select"}}},"\$root->".$urls->{"daemon/workflow"}."->$url");
+		my @temp=parseQuery($command->{$urls->{"daemon/select"}});
 		$command->{"rdfQuery"}=$temp[0];
 		$command->{"keys"}=$temp[1];
 		$command->{"input"}=$temp[2];
@@ -774,8 +753,8 @@ sub getExecuteJobsNodeid{
 		my $nodeid=$row->[1];
 		my $predicate=$row->[2];
 		my $object=$row->[3];
-		if($object eq $url){next;}
 		if(!exists($variables->{$nodeid})){$variables->{$nodeid}={};$variables->{$nodeid}->{"nodeid"}=$nodeid;}
+		if($object eq $url){next;}
 		if($predicate=~/^$url#(.+)$/){
 			my $key=$1;
 			if(!exists($variables->{$nodeid}->{$key})){$variables->{$nodeid}->{$key}=$object;}
@@ -846,8 +825,8 @@ sub getExecuteJobsSelect{
 	}
 	foreach my $line(@{$command->{"selectKeys"}}){
 		my @tokens=@{$line};
-		if($tokens[1] eq $urls->{"daemon/execute"}){
-			my $nodekey=substr($tokens[2],1);
+		if($tokens[1] eq $urls->{"daemon/workflow"}){
+			my $nodekey=substr($tokens[0],1);
 			foreach my $variables(@{$executes->{$url}}){$variables->{"nodeid"}=$variables->{$nodekey};}
 		}
 	}
@@ -1359,7 +1338,19 @@ sub handleKeys{
 	my @statements;
 	if(ref($statement) eq "ARRAY"){@statements=@{$statement};}
 	else{@statements=split(",",$statement);}
-	foreach my $line (@statements){my @tokens=split(/->/,$line);push(@array,\@tokens);}
+	foreach my $line (@statements){
+		my @tokens=split(/->/,$line);
+		push(@array,\@tokens);
+		foreach my $token(@tokens){
+			if($token=~/^\$(\w+)$/){
+				my $key=$1;
+				my $found=0;
+				foreach my $input(@{$command->{"input"}}){if($key eq $input){$found=1;}}
+				foreach my $output(@{$command->{"output"}}){if($key eq $output){$found=1;}}
+				if($found==0){push(@{$command->{"output"}},$key);}
+			}
+		}
+	}
 	return \@array;
 }
 ############################## parseQuery ##############################
