@@ -186,7 +186,15 @@ if(defined($opt_i)){
 }
 if(scalar(@ARGV)>0){
 	$cmdurl=shift(@ARGV);
-	if($cmdurl=~/\/workflow\/.+json$/){writeInserts(workflowProcess($cmdurl,$commands,$workflows));}
+	if($cmdurl=~/\/workflow\/.+json$/){
+		my $workflows={};
+		my $urls=[];
+		my $requireds=[];
+		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$urls,$requireds);
+		my $variables=promptRequireds($workflow,@{$requireds});
+		promtWorkflows(@{$urls});
+		setupWorkflows($nodeid,$urls,$variables);
+	}
 	else{@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);}
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
@@ -238,6 +246,56 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		chomp($result);
 		print "$result\n";
 	}
+}
+############################## setupWorkflows ##############################
+sub setupWorkflows{
+	my $nodeid=shift();
+	my $workflows=shift();
+	my $requireds=shift();
+	my @lines=();
+	foreach my $workflow(@{$workflows}){push(@lines,"$nodeid\t".$urls->{"daemon/workflow"}."\t$workflow");}
+	while(my ($key,$val)=each(%{$requireds})){push(@lines,"$nodeid\t$key\t$val");}
+	writeInserts(@lines);
+}
+############################## promptRequireds ##############################
+sub promptRequireds{
+	my @urls=@_;
+	my $workflow=shift(@urls);
+	my $size=scalar(@urls);
+	my $hash={};
+	if($size==0){return {};}
+	print STDERR "Please define these values:\n";
+	for(my $i=0;$i<$size;$i++){
+		my $url=$urls[$size-$i-1];
+		my $question="[$i] $url";
+		my $default="";
+		if(exists($workflow->{$url})){
+			$default=$workflow->{$url};
+			$question.="[$default]";
+		}
+		$question.="?";
+		print STDERR "$question ";
+		while(<STDIN>){
+			chomp();
+			my $prompt=$_;
+			if($prompt eq ""){$prompt=$default;}
+			if($prompt eq ""){print STDERR "$question ";next;}
+			$hash->{$url}=$prompt;
+			last;
+		}
+	}
+	return $hash;
+}
+############################## promtWorkflows ##############################
+sub promtWorkflows{
+	my @urls=@_;
+	print STDERR "\nThese commands will be executed:\n";
+	my $size=scalar(@urls);
+	for(my $i=0;$i<$size;$i++){my $url=$urls[$size-$i-1];print STDERR "[$i] $url\n";}
+	print STDERR "Do you want to continue [y/n]? ";
+	my $prompt=<STDIN>;
+	chomp($prompt);
+	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){exit(0);}
 }
 ############################## writeDeletes ##############################
 sub writeDeletes{
@@ -320,11 +378,13 @@ sub workflowProcess{
 	my $cmdurl=shift();
 	my $commands=shift();
 	my $workflows=shift();
+	my $urls=shift();
+	my $requireds=shift();
 	my $nodeid=shift();
 	if(!defined($nodeid)){$nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);}
 	my $workflow=loadWorkflowFromURL($cmdurl,$workflows);
 	my $command=loadCommandFromURL($cmdurl,$commands);
-	my @lines=("$nodeid\t".$urls->{"daemon/workflow"}."\t$cmdurl");
+	push(@{$urls},$cmdurl);
 	if(!exists($command->{"insertKeys"})){return;}
 	foreach my $update(@{$command->{"insertKeys"}}){
 		my ($subject,$predicate,$object)=@{$update};
@@ -333,14 +393,13 @@ sub workflowProcess{
 			my $object=$workflow->{$predicate}->{$url};
 			if(ref($object)ne"ARRAY"){$object=[$object];}
 			foreach my $o(@{$object}){
-				if(!exists($workflow->{$o})){next;}
-				foreach my $url(keys(%{$workflow->{$o}})){
-					push(@lines,workflowProcess($url,$commands,$workflows,$nodeid));
-				}
+				if($o eq ""){next;}
+				if(!exists($workflow->{$o})){push(@{$requireds},$o);next;}
+				foreach my $url(keys(%{$workflow->{$o}})){workflowProcess($url,$commands,$workflows,$urls,$requireds,$nodeid);}
 			}
 		}
 	}
-	return @lines;
+	return ($nodeid,$workflow);
 }
 ############################## loadWorkflowFromURL ##############################
 sub loadWorkflowFromURL{
@@ -662,6 +721,7 @@ sub loadCommandFromURLSub{
 		$command->{"keys"}=$temp[1];
 		$command->{"input"}=$temp[2];
 		$command->{"selectKeys"}=handleKeys($command->{$urls->{"daemon/select"}});
+		$command->{"isworkflow"}=1;
 	}else{
 		my @array=();
 		foreach my $input(@{$command->{"input"}}){push(@array,$input);}
@@ -685,6 +745,22 @@ sub loadCommandFromURLSub{
 	}
 	if(!exists($command->{$urls->{"daemon/maxjob"}})){$command->{$urls->{"daemon/maxjob"}}=1;}
 	if(exists($command->{$urls->{"daemon/script"}})){handleScript($command);}
+	handleOutput($command);
+}
+############################## handleOutput ##############################
+sub handleOutput{
+	my $command=shift();
+	my @statements=(@{$command->{"insertKeys"}},@{$command->{"deleteKeys"}},@{$command->{"updateKeys"}});
+	foreach my $tokens(@statements){
+		foreach my $token(@{$tokens}){
+			if($token=~/^\$(\w+)$/){
+				my $key=$1;
+				if(existsArray($command->{"input"},$key)){next;}
+				if(existsArray($command->{"output"},$key)){next;}
+				push(@{$command->{"output"}},$key);
+			}
+		}
+	}
 }
 ############################## handleScript ##############################
 sub handleScript{
@@ -844,7 +920,7 @@ sub initExecute{
 	$variables->{"cmdurl"}=$url;
 	my $dirname=basename($url,".json");
 	$variables->{"rdfdb"}=$rdfdb;
-	my $tmpdir=mkdtemp("tmp/$dirname.XXXXXXXXXX");
+	my $tmpdir=(exists($command->{"isworkflow"}))?mkdtemp("tmp/wf.$dirname.XXXXXXXXXX"):mkdtemp("tmp/cmd.$dirname.XXXXXXXXXX");
 	chmod(0777,$tmpdir);
 	$variables->{"tmpdir"}=$tmpdir;
 	my $dirname=substr($tmpdir,4);
@@ -923,11 +999,13 @@ sub bashCommand{
 	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
 	my $inputs=$command->{"inputs"};
 	print OUT "\$nodeid\t".$urls->{"daemon/command"}."\t\$cmdurl\n";
-	foreach my $input(@{$command->{"input"}}){
-		if(exists($inputs->{$input})){foreach my $value(@{$variables->{$input}}){print OUT "\$nodeid\t\$cmdurl#$input\t$value\n";}}
-		else{print OUT "\$nodeid\t\$cmdurl#$input\t\$$input\n";}
+	if(!exists($command->{"isworkflow"})){
+		foreach my $input(@{$command->{"input"}}){
+			if(exists($inputs->{$input})){foreach my $value(@{$variables->{$input}}){print OUT "\$nodeid\t\$cmdurl#$input\t$value\n";}}
+			else{print OUT "\$nodeid\t\$cmdurl#$input\t\$$input\n";}
+		}
+		print OUT "\$nodeid\t".$urls->{"daemon/timestarted"}."\t`date +%s`\n";
 	}
-	print OUT "\$nodeid\t".$urls->{"daemon/timestarted"}."\t`date +%s`\n";
 	print OUT "EOF\n";
 	my @unzips=();
 	if(exists($command->{$urls->{"daemon/unzip"}})){
@@ -1019,14 +1097,18 @@ sub bashCommand{
 	}
 	print OUT "########## database ##########\n";
 	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
-	print OUT "\$nodeid\t".$urls->{"daemon/timeended"}."\t`date +%s`\n";
-	foreach my $output(@{$command->{"output"}}){print OUT "\$nodeid\t\$cmdurl#$output\t\$$output\n";}
+	if(!exists($command->{"isworkflow"})){
+		print OUT "\$nodeid\t".$urls->{"daemon/timeended"}."\t`date +%s`\n";
+		foreach my $output(@{$command->{"output"}}){print OUT "\$nodeid\t\$cmdurl#$output\t\$$output\n";}
+	}
 	if(scalar(@{$command->{"insertKeys"}})>0){foreach my $row(@{$command->{"insertKeys"}}){print OUT join("\t",@{$row})."\n";}}
 	print OUT "EOF\n";
-	foreach my $output(@{$command->{"outputs"}}){
-		print OUT "for e in \${$output"."[\@]} ; do\n";
-		print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$e\">>\$tmpdir/\$insertfile\n";
-		print OUT "done\n";
+	if(!exists($command->{"isworkflow"})){
+		foreach my $output(@{$command->{"outputs"}}){
+			print OUT "for e in \${$output"."[\@]} ; do\n";
+			print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$e\">>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+		}
 	}
 	if(exists($command->{"batchmode"})){print OUT "perl \$cwd/rdf.pl -d \$localdb dump >> \$tmpdir/\$insertfile\nrm \$localdb\n";}
 	if(exists($command->{$urls->{"daemon/linecount"}})){
@@ -1338,18 +1420,9 @@ sub handleKeys{
 	my @statements;
 	if(ref($statement) eq "ARRAY"){@statements=@{$statement};}
 	else{@statements=split(",",$statement);}
-	foreach my $line (@statements){
+	foreach my $line(@statements){
 		my @tokens=split(/->/,$line);
 		push(@array,\@tokens);
-		foreach my $token(@tokens){
-			if($token=~/^\$(\w+)$/){
-				my $key=$1;
-				my $found=0;
-				foreach my $input(@{$command->{"input"}}){if($key eq $input){$found=1;}}
-				foreach my $output(@{$command->{"output"}}){if($key eq $output){$found=1;}}
-				if($found==0){push(@{$command->{"output"}},$key);}
-			}
-		}
 	}
 	return \@array;
 }

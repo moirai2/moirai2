@@ -779,7 +779,6 @@ sub getObjects{
 ############################## downloadFiles ##############################
 sub downloadFiles{
 	my $database=shift();
-	print STDERR "database=$database\n";
 	my @downloads=getObjects($database,$urls->{"moirai2"},$urls->{"download"});
 	my @files=();
 	foreach my $url(@downloads){
