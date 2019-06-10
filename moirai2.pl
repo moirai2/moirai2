@@ -236,7 +236,7 @@ while(true){
 	$ctrlcount=0;
 	if($jobs_running<$maxjob){
 		foreach my $url(lookForNewCommands($rdfdb,$newExecuteQuery,$commands)){
-			if(checkSoftwareSetting($commands->{$url})==0){next;}
+			#if(checkSoftwareSetting($commands->{$url})==0){next;}
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 			if($job>0){$jobcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
 		}
