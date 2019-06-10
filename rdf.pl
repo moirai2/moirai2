@@ -23,20 +23,6 @@ getopts('d:D:e:f:hHl:qr:tw:');
 my $urls={};
 $urls->{"moirai2"             }="https://moirai2.github.io/schema/moirai2";
 
-$urls->{"conda"               }="https://moirai2.github.io/schema/conda";
-$urls->{"conda/bin"           }="https://moirai2.github.io/schema/conda/bin";
-$urls->{"conda/directory"     }="https://moirai2.github.io/schema/conda/directory";
-$urls->{"conda/log"           }="https://moirai2.github.io/schema/conda/log";
-$urls->{"conda/download"      }="https://moirai2.github.io/schema/conda/download";
-$urls->{"conda/environment"   }="https://moirai2.github.io/schema/conda/environment";
-$urls->{"conda/installer"     }="https://moirai2.github.io/schema/conda/installer";
-$urls->{"conda/stdout"        }="https://moirai2.github.io/schema/conda/stdout";
-$urls->{"conda/stderr"        }="https://moirai2.github.io/schema/conda/stderr";
-$urls->{"conda/package"       }="https://moirai2.github.io/schema/conda/package";
-$urls->{"conda/install"       }="https://moirai2.github.io/schema/conda/install";
-$urls->{"conda/error"         }="https://moirai2.github.io/schema/conda/error";
-$urls->{"conda/test"          }="https://moirai2.github.io/schema/conda/test";
-
 $urls->{"daemon"              }="https://moirai2.github.io/schema/daemon";
 $urls->{"daemon/command"      }="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/execute"      }="https://moirai2.github.io/schema/daemon/execute";
@@ -75,18 +61,11 @@ sub help{
 	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
 	print "COMMAND: $program_name -d DB reindex\n";
 	print "COMMAND: $program_name -d DB download URL\n";
-	print "COMMAND: $program_name -d DB miniconda URL\n";
 	print "COMMAND: $program_name -d DB software CMD\n";
 	print "COMMAND: $program_name -d DB -f json command < JSON\n";
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name -d DB object SUB PRE OBJ\n";
 	print "\n";
-	#print "COMMAND: $program_name -d DB remove execute\n";
-	#print "COMMAND: $program_name -d DB remove log\n";
-	#print "COMMAND: $program_name -d DB remove control\n";
-	#print "COMMAND: $program_name -d DB remove empty\n";
-	#print "COMMAND: $program_name -d DB -D DB2 copy QUERY QUERY2\n";
-	#print "COMMAND: $program_name -d DB rmdup SUB PRE OBJ\n";
 	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
@@ -473,11 +452,9 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	print executeComand($database,$json)."\n";
 }elsif(lc($command) eq "download"){
 	registerDownloads($database,@ARGV);
-	downloadFiles($database);
-}elsif(lc($command) eq "miniconda"){
-	checkMiniconda($database);
-	registerPackages($database,@ARGV);
-	installPackages($database);
+	my @files=downloadFiles($database);
+	if(scalar(@files)>1){print "(".join(" ",@files).")\n";}
+	else{print $files[0]."\n";}
 }elsif(lc($command) eq "software"){
 	whichSoftware($database,@ARGV);
 }elsif(lc($command) eq "executes"){
@@ -589,12 +566,6 @@ sub retrieveExecutes{
 	}
 	return $hashtable
 }
-############################## checkSoftwares ##############################
-sub checkSoftwares{
-	my $database=shift();
-	my @softwares=getObjects($database,$urls->{"moirai2"},$urls->{"software"});
-	whichSoftware($database,@softwares);
-}
 ############################## whichSoftware ##############################
 sub whichSoftware{
 	my @softwares=@_;
@@ -628,130 +599,6 @@ sub executeComand{
 }
 ############################## mkdirDownload ##############################
 sub mkdirDownload{my $path="download/".time();mkdir("download");mkdir($path);return $path}
-############################## installPackages ##############################
-sub installPackages{
-	my $database=shift();
-	my $condabin=getObject($database,$urls->{"conda"},$urls->{"conda/bin"});
-	my @installs=getObjects($database,$urls->{"conda"},$urls->{"conda/install"});
-	foreach my $install(@installs){
-		my @tokens=split(/\/+/,$install);
-		my $package=pop(@tokens);
-		my $channel=pop(@tokens);
-		my $environment=$package;
-		if($channel eq "anaconda"){$channel=undef;}
-		else{$environment="$package";if(checkMinicondaEnv($database,$condabin,$environment)){exit(1);};}
-		if(installPackage($database,$condabin,$environment,$channel,$package)){exit(1);}
-		dbDelete($database,$urls->{"conda"},$urls->{"conda/install"},$install);
-	}
-}
-############################## checkMinicondaEnv ##############################
-sub checkMinicondaEnv{
-	my $database=shift();
-	my $condabin=shift();
-	my $environment=shift();
-	if(!defined(getObject($database,$urls->{"conda"},$urls->{"conda/environment"},$environment))){
-		my $logdirectory=getObject($database,$urls->{"conda"},$urls->{"conda/log"});
-		my $command="$condabin create -y -n $environment";
-		print STDERR "Creating environment: $environment\n";
-		my $success=system("$command > $logdirectory/$environment.env.stdout 2> $logdirectory/$environment.env.stderr");
-		if($success!=0){print STDERR "Failed to create environment\n";return 1;}
-		dbInsert($database,$urls->{"conda"},$urls->{"conda/environment"},$environment);
-	}
-	return;
-}
-############################## installPackage ##############################
-sub installPackage{
-	my $database=shift();
-	my $condabin=shift();
-	my $environment=shift();
-	my $channel=shift();
-	my $package=shift();
-	print STDERR "Installing package: $package\n";
-	my $command="$condabin install -y";
-	if(defined($environment)){$command.=" -n $environment";}
-	if(defined($channel)){$command.=" -c $channel";}
-	$command.=" $package";
-	print STDERR ">$command\n";
-	my $logdirectory=getObject($database,$urls->{"conda"},$urls->{"conda/log"});
-	my $success=system("$command > $logdirectory/$environment.package.stdout 2> $logdirectory/$environment.package.stderr");
-	if($success!=0){print STDERR "Failed to install package $package\n";return 1;}
-	dbInsert($database,$environment,$urls->{"conda/package"},$package);
-	return 0;
-}
-############################## registerPackages ##############################
-sub registerPackages{
-	my @urls=@_;
-	my $database=shift(@urls);
-	if(scalar(@urls)==0){return;}
-	my $json={$urls->{"conda"}=>{$urls->{"conda/install"}=>[]}};
-	foreach my $url(@urls){push(@{$json->{$urls->{"conda"}}->{$urls->{"conda/install"}}},$url);}
-	jsonInsert($database,$json);
-}
-############################## checkMiniconda ##############################
-sub checkMiniconda{
-	my $database=shift();
-	my $binpath=getObject($database,$urls->{"conda"},$urls->{"conda/bin"});
-	if(defined($binpath)){return $binpath;}
-	my $url=getObject($database,$urls->{"conda"},$urls->{"conda/installer"});
-	if(!defined($url)){
-		$url=getMiniconda3Url();
-		print STDERR "conda Installer: $url\n";
-		dbInsert($database,$urls->{"conda"},$urls->{"conda/installer"},$url);
-	}
-	my $path=getObject($database,$url,$urls->{"file"});
-	if(!defined($path)){
-		registerDownloads($database,$url);
-		downloadFiles($database);
-		$path=getObject($database,$url,$urls->{"file"});
-		print STDERR "Downloaded: $path\n";
-	}
-	if(!defined($path)){
-		print STDERR "Couldn't download $url\n";
-		exit(1);
-	}
-	my $directory=getObject($database,$urls->{"conda"},$urls->{"conda/directory"});
-	my $logdirectory=getObject($database,$urls->{"conda"},$urls->{"conda/log"});
-	if(!defined($directory)){
-		my $home=$ENV{"HOME"};
-		$directory="$home/conda";
-		if(-e "$directory/bin/conda"){
-			dbInsert($database,$urls->{"conda"},$urls->{"conda/bin"},"$directory/bin/conda");
-			return;
-		}
-		$logdirectory="$directory/log";
-		print STDERR "conda Directory: $directory\n";
-		dbInsert($database,$urls->{"conda"},$urls->{"conda/directory"},$directory);
-		dbInsert($database,$urls->{"conda"},$urls->{"conda/log"},$logdirectory);
-	}
-	my $command="bash $path -f -b -p $directory";
-	print STDERR "Install Command: $command\n";
-	my $basename=basename($path);
-	my $success=system("$command > $basename.stdout 2> $basename.stderr");
-	mkdir($logdirectory);
-	rename("$basename.stdout","$logdirectory/$basename.stdout");
-	rename("$basename.stderr","$logdirectory/$basename.stderr");
-	if($success!=0){
-		print STDERR "Failed to install miniconda3\n";
-		dbInsert($database,$path,$urls->{"conda/stdout"},"$logdirectory/$basename.stdout");
-		dbInsert($database,$path,$urls->{"conda/stderr"},"$logdirectory/$basename.stderr");
-		exit(1);
-	}else{
-		dbDelete($database,$path,$urls->{"conda/stdout"},"$logdirectory/$basename.stdout");
-		dbDelete($database,$path,$urls->{"conda/stderr"},"$logdirectory/$basename.stderr");
-	}
-	$binpath="$directory/bin/conda";
-	my $success=system("$binpath > $logdirectory/conda.stdout 2> $logdirectory/conda.stderr");
-	if($success!=0){
-		print STDERR "Failed to execute $binpath\n";
-		dbInsert($database,$binpath,$urls->{"conda/stdout"},"$logdirectory/conda.stdout");
-		dbInsert($database,$binpath,$urls->{"conda/stderr"},"$logdirectory/conda.stderr");
-		exit(1);
-	}else{
-		dbDelete($database,$binpath,$urls->{"conda/stdout"},"$logdirectory/conda.stdout");
-		dbDelete($database,$binpath,$urls->{"conda/stderr"},"$logdirectory/conda.stderr");
-	}
-	dbInsert($database,$urls->{"conda"},$urls->{"conda/bin"},"$directory/bin/conda");
-}
 ############################## getObject ##############################
 sub getObject{
 	my $database=shift();
@@ -802,18 +649,6 @@ sub registerDownloads{
 		push(@nodes,$node);
 	}
 	return @nodes;
-}
-############################## getMiniconda3Url ##############################
-sub getMiniconda3Url{
-	my $uname=`uname -a`;
-	my $os="Linux";
-	if($uname=~/Darwin/){$os="MacOSX";}
-	elsif($uname=~/Windows/){$os="Windows";}
-	my $processor="x86";
-	if($uname=~/86_64/){$processor="x86_64";}
-	my $version=3;
-	my $suffix=($os eq "Windows")?".exe":".sh";
-	return "https://repo.anaconda.com/miniconda/Miniconda$version-latest-$os-$processor$suffix";
 }
 ############################## downloadFile ##############################
 sub downloadFile{

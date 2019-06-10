@@ -17,8 +17,8 @@ $program_directory=substr($program_directory,0,-1);
 my $program_path=Cwd::abs_path($program_directory)."/$program_name";
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_q $opt_Q $opt_r $opt_s);
-getopts('c:d:hHi:lm:qo:Q:r:s:');
+use vars qw($opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_q $opt_r $opt_s);
+getopts('c:d:hHi:lm:qo:r:s:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -51,17 +51,22 @@ $urls->{"daemon/md5"}="https://moirai2.github.io/schema/daemon/md5";
 $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
-$urls->{"daemon/required"}="https://moirai2.github.io/schema/daemon/required";
+$urls->{"daemon/software"}="https://moirai2.github.io/schema/daemon/software";
 
 $urls->{"system"}="https://moirai2.github.io/schema/system";
 $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
 $urls->{"system/upload"}="https://moirai2.github.io/schema/system/upload";
 $urls->{"system/path"}="https://moirai2.github.io/schema/system/path";
+$urls->{"system/software"}="https://moirai2.github.io/schema/system/software";
 
 $urls->{"file"}="https://moirai2.github.io/schema/file";
 $urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
 $urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
 $urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
+
+$urls->{"software"}="https://moirai2.github.io/software";
+$urls->{"workflow"}="https://moirai2.github.io/workflow";
+
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -91,7 +96,6 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -m  Max number of jobs to throw (default='5').\n";
 	print "         -o  Output query (default='none').\n";
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
-	print "         -Q  Export specified bin directory when throwing with qsub(default='\$HOME/bin').\n";
 	print "         -r  Return value (default='none').\n";
 	print "         -s  Loop second (default='no loop').\n";
 	print "\n";
@@ -147,12 +151,13 @@ my $sleeptime=defined($opt_s)?$opt_s:10;
 my $use_qsub=$opt_q;
 my $home=`echo \$HOME`;
 chomp($home);
-my $qsubbin=defined($opt_Q)?$opt_Q:"$home/bin";
-$qsubbin.=":$cwd/miniconda3/bin";
 my $showlog=$opt_l;
 my $runmode=defined($opt_s)?0:1;
 my $maxjob=defined($opt_m)?$opt_m:5;
 my $ctrldir=Cwd::abs_path(defined($opt_c)?$opt_c:dirname($rdfdb)."/ctrl");
+my $exportpath="$cwd/bin:$home/bin:\$PATH";
+mkdir("bin");
+chmod(0777,"bin");
 mkdir("tmp");
 chmod(0777,"tmp");
 mkdir("$ctrldir");
@@ -186,16 +191,24 @@ if(defined($opt_i)){
 }
 if(scalar(@ARGV)>0){
 	$cmdurl=shift(@ARGV);
-	if($cmdurl=~/\/workflow\/.+json$/){
-		my $workflows={};
+	if($cmdurl=~/\/software\/.+json$/){
 		my $urls=[];
 		my $requireds=[];
-		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$urls,$requireds);
+		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$urls,$requireds,$urls->{"system/software"});
 		my $variables=promptRequireds($workflow,@{$requireds});
 		promtWorkflows(@{$urls});
 		setupWorkflows($nodeid,$urls,$variables);
+	}elsif($cmdurl=~/\/workflow\/.+json$/){
+		my $urls=[];
+		my $requireds=[];
+		my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);
+		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$urls,$requireds,$nodeid);
+		my $variables=promptRequireds($workflow,@{$requireds});
+		promtWorkflows(@{$urls});
+		setupWorkflows($nodeid,$urls,$variables);
+	}else{
+		@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);
 	}
-	else{@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);}
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 if($showlog){
@@ -206,9 +219,9 @@ if($showlog){
 	else{print STDERR "# run mode       : normal\n";}
 	print STDERR "# sleeptime      : $sleeptime sec\n";
 	print STDERR "# max job        : $maxjob job".(($maxjob>1)?"s":"")."\n";
+	print STDERR "# export path    : $exportpath\n";
 	if(defined($use_qsub)){
 		print STDERR "# job submission : qsub\n";
-		print STDERR "# qsub bin       : $qsubbin\n";
 	}else{
 		print STDERR "# job submission : bash\n";
 	}
@@ -218,15 +231,17 @@ if($showlog){
 }
 while(true){
 	my $jobs_running=getNumberOfJobsRunning();
-	controlAll($rdfdb,$executes,$ctrlcount,$jobcount);
+	controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);
 	$jobcount=0;
 	$ctrlcount=0;
 	if($jobs_running<$maxjob){
 		foreach my $url(lookForNewCommands($rdfdb,$newExecuteQuery,$commands)){
+			if(checkSoftwareSetting($commands->{$url})==0){next;}
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 			if($job>0){$jobcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
 		}
 		if($jobcount==0){
+			controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);
 			foreach my $url(lookForNewCommands($rdfdb,$newWorkflowQuery,$commands)){
 				my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 				if($job>0){$ctrlcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
@@ -246,6 +261,38 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		chomp($result);
 		print "$result\n";
 	}
+}
+############################## checkRDFObject ##############################
+sub checkRDFObject{
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $result=`perl $cwd/rdf.pl -d $subject $predicate $object`;
+	chomp($result);
+	return $result;
+}
+############################## checkSoftwareSetting ##############################
+sub checkSoftwareSetting{
+	my $command=shift();
+	if(!exists($command->{$urls->{"daemon/software"}})){return 1;}
+	my @softwares=@{$command->{$urls->{"daemon/software"}}};
+	my @inserts=();
+	my $ok=1;
+	foreach my $software(@softwares){
+		my $url=$urls->{"software"}."/$software";
+		if(checkRDFObject($rdfdb,$url,"$url/bin") ne ""){next;}
+		my $result=`which $software`;
+		chomp($result);
+		push(@inserts,$urls->{"system"}."\t".$urls->{"system/software"}."\t$url");
+		if($result ne ""){
+			push(@inserts,"$url\t$url/bin\t$result");
+		}else{
+			push(@inserts,$urls->{"system/software"}."\t".$urls->{"daemon/workflow"}."\t$url/bin.json");
+			$ok=0;
+		}
+	}
+	if(scalar(@inserts)>0){writeInserts(@inserts);}
+	return $ok;
 }
 ############################## setupWorkflows ##############################
 sub setupWorkflows{
@@ -271,7 +318,7 @@ sub promptRequireds{
 		my $default="";
 		if(exists($workflow->{$url})){
 			$default=$workflow->{$url};
-			$question.="[$default]";
+			$question.=" [$default]";
 		}
 		$question.="?";
 		print STDERR "$question ";
@@ -322,23 +369,24 @@ sub printCommand{
 	my $command=loadCommandFromURL($url,$commands);
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
-	print STDOUT "\n#URL    :".$command->{$urls->{"daemon/command"}}."\n";
-	my $cmdline="#Command:".basename($command->{$urls->{"daemon/command"}});
+	print STDOUT "\n#URL     :".$command->{$urls->{"daemon/command"}}."\n";
+	my $cmdline="#Command :".basename($command->{$urls->{"daemon/command"}});
 	if(scalar(@inputs)>0){$cmdline.=" [".join("] [",@inputs)."]";}
 	if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
 	print STDOUT "$cmdline\n";
-	if(scalar(@inputs)>0){print STDOUT "#Input  :".join(" ",@{$command->{"input"}})."\n";}
-	if(scalar(@outputs)>0){print STDOUT "#Output :".join(" ",@{$command->{"output"}})."\n";}
-	print STDOUT "#Bash   :";
+	if(exists($command->{$urls->{"daemon/software"}})){print STDOUT "#Software:".join(", ",@{$command->{$urls->{"daemon/software"}}})."\n";}
+	if(scalar(@inputs)>0){print STDOUT "#Input   :".join(", ",@{$command->{"input"}})."\n";}
+	if(scalar(@outputs)>0){print STDOUT "#Output  :".join(", ",@{$command->{"output"}})."\n";}
+	print STDOUT "#Bash    :";
 	my $index=0;
-	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){if($index++>0){print STDOUT "        :"}print STDOUT "$line\n";}
-	if($command->{$urls->{"daemon/maxjob"}}>1){print STDOUT "#Maxjob :".$command->{$urls->{"daemon/maxjob"}}."\n";}
-	if(exists($command->{$urls->{"daemon/singlethread"}})){print STDOUT "#Single :".($command->{$urls->{"daemon/singlethread"}}?"true":"false")."\n";}
-	if(exists($command->{$urls->{"daemon/qsubopt"}})){print STDOUT "#QsubOpt:".$command->{$urls->{"daemon/qsubopt"}}."\n";}
+	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){if($index++>0){print STDOUT "         :"}print STDOUT "$line\n";}
+	if($command->{$urls->{"daemon/maxjob"}}>1){print STDOUT "#Maxjob  :".$command->{$urls->{"daemon/maxjob"}}."\n";}
+	if(exists($command->{$urls->{"daemon/singlethread"}})){print STDOUT "#Single  :".($command->{$urls->{"daemon/singlethread"}}?"true":"false")."\n";}
+	if(exists($command->{$urls->{"daemon/qsubopt"}})){print STDOUT "#QsubOpt :".$command->{$urls->{"daemon/qsubopt"}}."\n";}
 	if(exists($command->{$urls->{"daemon/script"}})){
 		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
-			print STDOUT "#Script :".$script->{$urls->{"daemon/script/name"}}."\n";
-			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print STDOUT "        :$line\n";}
+			print STDOUT "#Script  :".$script->{$urls->{"daemon/script/name"}}."\n";
+			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print STDOUT "         :$line\n";}
 		}
 	}
 	print STDOUT "\n";
@@ -381,7 +429,6 @@ sub workflowProcess{
 	my $urls=shift();
 	my $requireds=shift();
 	my $nodeid=shift();
-	if(!defined($nodeid)){$nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);}
 	my $workflow=loadWorkflowFromURL($cmdurl,$workflows);
 	my $command=loadCommandFromURL($cmdurl,$commands);
 	push(@{$urls},$cmdurl);
@@ -394,7 +441,7 @@ sub workflowProcess{
 			if(ref($object)ne"ARRAY"){$object=[$object];}
 			foreach my $o(@{$object}){
 				if($o eq ""){next;}
-				if(!exists($workflow->{$o})){push(@{$requireds},$o);next;}
+				if(!exists($workflow->{$o})||ref($workflow->{$o})ne"HASH"){push(@{$requireds},$o);next;}
 				foreach my $url(keys(%{$workflow->{$o}})){workflowProcess($url,$commands,$workflows,$urls,$requireds,$nodeid);}
 			}
 		}
@@ -511,8 +558,8 @@ sub mainProcess{
 	writeInserts(@inserts);
 	return $thrown;
 }
-############################## controlAll ##############################
-sub controlAll{
+############################## controlProcess ##############################
+sub controlProcess{
 	my $rdfdb=shift();
 	my $executes=shift();
 	my $ctrlcount=shift();
@@ -544,9 +591,9 @@ sub throwJobs{
 	if($use_qsub){
 		print $fh "#\$ -e $error_file\n";
 		print $fh "#\$ -o $log_file\n";
-		print $fh "PATH=$qsubbin:\$PATH\n";
-		print $fh "export PATH\n";
 	}
+	print $fh "PATH=$exportpath\n";
+	print $fh "export PATH\n";
 	foreach my $files(@{$bashFiles}){
 		my ($bashFile,$stdoutFile,$stderrFile)=@{$files};
 		print $fh "bash $bashFile > $stdoutFile 2> $stderrFile\n";
@@ -729,13 +776,13 @@ sub loadCommandFromURLSub{
 		$command->{"keys"}=\@array;
 	}
 	if(exists($command->{$urls->{"daemon/return"}})){$command->{$urls->{"daemon/return"}}=removeDollar($command->{$urls->{"daemon/return"}});}
-	if(exists($command->{$urls->{"system/install"}})){$command->{$urls->{"system/install"}}=handleArray($command->{$urls->{"system/install"}});}
 	if(exists($command->{$urls->{"daemon/unzip"}})){$command->{$urls->{"daemon/unzip"}}=handleArray($command->{$urls->{"daemon/unzip"}});}
 	if(exists($command->{$urls->{"daemon/md5"}})){$command->{$urls->{"daemon/md5"}}=handleArray($command->{$urls->{"daemon/md5"}});}
 	if(exists($command->{$urls->{"daemon/filesize"}})){$command->{$urls->{"daemon/filesize"}}=handleArray($command->{$urls->{"daemon/filesize"}});}
 	if(exists($command->{$urls->{"daemon/linecount"}})){$command->{$urls->{"daemon/linecount"}}=handleArray($command->{$urls->{"daemon/linecount"}});}
 	if(exists($command->{$urls->{"daemon/seqcount"}})){$command->{$urls->{"daemon/seqcount"}}=handleArray($command->{$urls->{"daemon/seqcount"}});}
 	if(exists($command->{$urls->{"daemon/import"}})){if(ref($command->{$urls->{"daemon/import"}}) ne "ARRAY"){$command->{$urls->{"daemon/import"}}=[$command->{$urls->{"daemon/import"}}];}}
+	if(exists($command->{$urls->{"daemon/software"}})){$command->{$urls->{"daemon/software"}}=handleArray($command->{$urls->{"daemon/software"}});}
 	if(exists($command->{$urls->{"daemon/insert"}})){$command->{"insertKeys"}=handleKeys($command->{$urls->{"daemon/insert"}},$command);}
 	if(exists($command->{$urls->{"daemon/update"}})){$command->{"updateKeys"}=handleKeys($command->{$urls->{"daemon/update"}},$command);}
 	if(exists($command->{$urls->{"daemon/delete"}})){$command->{"deleteKeys"}=handleKeys($command->{$urls->{"daemon/delete"}},$command);}
@@ -1026,16 +1073,6 @@ sub bashCommand{
 						push(@unzips,"\$tmpdir/$basename");
 					}
 				}
-			}
-		}
-	}
-	if(exists($command->{$urls->{"system/install"}})){
-		foreach my $url(@{$command->{$urls->{"system/install"}}}){
-			if($url=~/^https\:\/\/anaconda\.org\/(.+)$/){
-				my $environment=$1;
-				$environment=~s/\//_/g;
-				my $command="perl $cwd/rdf.pl -d $rdfdb -e $environment miniconda $url";
-				print STDERR "$command\n";
 			}
 		}
 	}
