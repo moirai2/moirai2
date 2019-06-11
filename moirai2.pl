@@ -140,7 +140,6 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
 my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/workflow"}."\")";
 my $newSoftwareQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/software"}."\")";
-
 my $cwd=Cwd::getcwd();
 if(scalar(@ARGV)==1&&$ARGV[0] eq "daemon"){autodaemon();exit();}
 my $rdfdb=$opt_d;
@@ -196,18 +195,19 @@ if(scalar(@ARGV)>0){
 	if($cmdurl=~/\/software\/.+json$/){
 		my $outputs=[];
 		my $requireds=[];
-		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$urls->{"system/software"});
-		my $variables=promptRequireds($workflow,@{$requireds});
+		my $nodeid=dirname($cmdurl);
+		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
+		my $variables=promptRequireds(@{$requireds});
 		promtWorkflows(@{$outputs});
 		setupWorkflows($nodeid,$outputs,$variables);
 	}elsif($cmdurl=~/\/workflow\/.+json$/){
-		my $urls=[];
+		my $outputs=[];
 		my $requireds=[];
 		my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);
-		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$urls,$requireds,$nodeid);
-		my $variables=promptRequireds($workflow,@{$requireds});
-		promtWorkflows(@{$urls});
-		setupWorkflows($nodeid,$urls,$variables);
+		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
+		my $variables=promptRequireds(@{$requireds});
+		promtWorkflows(@{$outputs});
+		setupWorkflows($nodeid,$outputs,$variables);
 	}else{
 		@nodeids=commandProcess($cmdurl,$commands,$results,@ARGV);
 	}
@@ -309,7 +309,6 @@ sub setupWorkflows{
 ############################## promptRequireds ##############################
 sub promptRequireds{
 	my @urls=@_;
-	my $workflow=shift(@urls);
 	my $size=scalar(@urls);
 	my $hash={};
 	if($size==0){return {};}
@@ -318,6 +317,7 @@ sub promptRequireds{
 		my $url=$urls[$size-$i-1];
 		my $question="[$i] $url";
 		my $default="";
+		my $workflow=loadWorkflowFromURL($url,$workflows);
 		if(exists($workflow->{$url})){
 			$default=$workflow->{$url};
 			$question.=" [$default]";
@@ -443,8 +443,9 @@ sub workflowProcess{
 			if(ref($object)ne"ARRAY"){$object=[$object];}
 			foreach my $o(@{$object}){
 				if($o eq ""){next;}
-				if(!exists($workflow->{$o})||ref($workflow->{$o})ne"HASH"){push(@{$requireds},$o);next;}
-				foreach my $url(keys(%{$workflow->{$o}})){workflowProcess($url,$commands,$workflows,$urls,$requireds,$nodeid);}
+				my $workflow2=loadWorkflowFromURL($o,$workflows);
+				if(!exists($workflow2->{$o})||ref($workflow2->{$o})ne"HASH"){push(@{$requireds},$o);next;}
+				foreach my $url(keys(%{$workflow2->{$o}})){workflowProcess($url,$commands,$workflows,$urls,$requireds,$nodeid);}
 			}
 		}
 	}
@@ -455,6 +456,7 @@ sub loadWorkflowFromURL{
 	my $url=shift();
 	my $workflows=shift();
 	if($url=~/^(.+)\/workflow\/([^\/]+)\//){$url="$1/workflow/$2.json";}
+	elsif($url=~/^(.+)\/software\/([^\/]+)\//){$url="$1/software/$2.json";}
 	if(exists($workflows->{$url})){return $workflows->{$url};}
 	$workflows->{$url}=getJson($url);
 	return $workflows->{$url};
@@ -855,7 +857,6 @@ sub getExecuteJobs{
 	my $rdfdb=shift();
 	my $command=shift();
 	my $executes=shift();
-	print_table($command);
 	if(exists($command->{$urls->{"daemon/select"}})){return getExecuteJobsSelect($rdfdb,$command,$executes);}
 	else{return getExecuteJobsNodeid($rdfdb,$command,$executes);}
 }

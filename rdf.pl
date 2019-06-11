@@ -35,9 +35,9 @@ $urls->{"file/md5"            }="https://moirai2.github.io/schema/file/md5";
 $urls->{"file/linecount"      }="https://moirai2.github.io/schema/file/linecount";
 $urls->{"file/seqcount"       }="https://moirai2.github.io/schema/file/seqcount";
 
-$urls->{"software"}="https://moirai2.github.io/schema/software";#samtools
-$urls->{"software/path"}="https://moirai2.github.io/schema/software/path";#/Users/ah3q/bin/samtools
-$urls->{"software/version"}="https://moirai2.github.io/schema/software/version";#0.1.19-44428cd
+$urls->{"software"}="https://moirai2.github.io/schema/software";
+$urls->{"software/path"}="https://moirai2.github.io/schema/software/path";
+$urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 
 $urls->{"download"}="https://moirai2.github.io/schema/download";
 $urls->{"download/datetime"}="https://moirai2.github.io/schema/download/datetime";
