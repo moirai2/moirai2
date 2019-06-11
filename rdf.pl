@@ -41,6 +41,9 @@ $urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 
 $urls->{"download"}="https://moirai2.github.io/schema/download";
 $urls->{"download/datetime"}="https://moirai2.github.io/schema/download/datetime";
+
+$urls->{"miniconda3"}="https://moirai2.github.io/software/miniconda3";
+$urls->{"miniconda3/bin"}="https://moirai2.github.io/software/miniconda3/bin";
 ############################## HELP ##############################
 sub help{
 	print "PROGRAM: $program_name\n";
@@ -65,6 +68,7 @@ sub help{
 	print "COMMAND: $program_name -d DB -f json command < JSON\n";
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name -d DB object SUB PRE OBJ\n";
+	print "COMMAND: $program_name -d DB conda\n";
 	print "\n";
 	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
@@ -463,6 +467,24 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 }elsif(lc($command) eq "html"){
 	my $hashtable=retrieveExecutes($database);
 	printExecutesInHTML($hashtable);
+}elsif(lc($command) eq "conda"){
+	whichConda($database);
+}
+############################## whichConda ##############################
+sub whichConda{
+	my $database=shift();
+	my $hash=dbSelect($database,undef,$urls->{"software/path"},undef);
+	my $condabin=`which conda`;
+	chomp($condabin);
+	if($condabin eq ""){return;}
+	my $condadir=dirname(dirname($condabin));
+	my $json={$urls->{"miniconda3"}=>{$urls->{"miniconda3/bin"}=>$condabin}};
+	my $dbh=openDB($database);
+	$dbh->begin_work;
+	my $linecount=insertRDF($dbh,$json);
+	$dbh->commit;
+	$dbh->disconnect;
+	print "$condabin\n";
 }
 ############################## printExecutesInHTML ##############################
 sub printExecutesInHTML{
@@ -569,13 +591,20 @@ sub retrieveExecutes{
 ############################## whichSoftware ##############################
 sub whichSoftware{
 	my @softwares=@_;
-	my $database=shift();
+	my $database=shift(@softwares);
 	my $hash=dbSelect($database,undef,$urls->{"software/path"},undef);
 	foreach my $software(@softwares){
-		if(exists($hash->{$software})){next;}
+		if(exists($hash->{$software})){
+			my $path=$hash->{$software}->{$urls->{"software/path"}};
+			print "$path\n";
+			next;
+		}
 		my $path=`which $software`;
 		chomp($path);
-		if($path ne ""){dbInsert($database,$software,,$urls->{"software/path"},$path);}
+		if($path ne ""){
+			dbInsert($database,$software,$urls->{"software/path"},$path);
+			print "$path\n";
+		}
 	}
 }
 ############################## executeComand ##############################

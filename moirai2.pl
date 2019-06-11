@@ -41,6 +41,7 @@ $urls->{"daemon/singlethread"}="https://moirai2.github.io/schema/daemon/singleth
 $urls->{"daemon/qsubopt"}="https://moirai2.github.io/schema/daemon/qsubopt";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/workflow"}="https://moirai2.github.io/schema/daemon/workflow";
+$urls->{"daemon/software"}="https://moirai2.github.io/schema/daemon/software";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"daemon/stderr"}="https://moirai2.github.io/schema/daemon/stderr";
 $urls->{"daemon/stdout"}="https://moirai2.github.io/schema/daemon/stdout";
@@ -51,7 +52,6 @@ $urls->{"daemon/md5"}="https://moirai2.github.io/schema/daemon/md5";
 $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
-$urls->{"daemon/software"}="https://moirai2.github.io/schema/daemon/software";
 
 $urls->{"system"}="https://moirai2.github.io/schema/system";
 $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
@@ -139,6 +139,8 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 ############################## MAIN ##############################
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
 my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/workflow"}."\")";
+my $newSoftwareQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/software"}."\")";
+
 my $cwd=Cwd::getcwd();
 if(scalar(@ARGV)==1&&$ARGV[0] eq "daemon"){autodaemon();exit();}
 my $rdfdb=$opt_d;
@@ -192,12 +194,12 @@ if(defined($opt_i)){
 if(scalar(@ARGV)>0){
 	$cmdurl=shift(@ARGV);
 	if($cmdurl=~/\/software\/.+json$/){
-		my $urls=[];
+		my $outputs=[];
 		my $requireds=[];
-		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$urls,$requireds,$urls->{"system/software"});
+		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$urls->{"system/software"});
 		my $variables=promptRequireds($workflow,@{$requireds});
-		promtWorkflows(@{$urls});
-		setupWorkflows($nodeid,$urls,$variables);
+		promtWorkflows(@{$outputs});
+		setupWorkflows($nodeid,$outputs,$variables);
 	}elsif($cmdurl=~/\/workflow\/.+json$/){
 		my $urls=[];
 		my $requireds=[];
@@ -760,7 +762,7 @@ sub loadCommandFromURLSub{
 		}
 		$command->{"output"}=\@array;
 	}
-	if($url=~/^(.+)\/workflow\/([^\/]+)\//){
+	if($url=~/^(.+)\/(workflow|software)\/([^\/]+)\//){
 		if(ref($command->{$urls->{"daemon/select"}})ne"ARRAY"){$command->{$urls->{"daemon/select"}}=[$command->{$urls->{"daemon/select"}}];}
 		push(@{$command->{$urls->{"daemon/select"}}},"\$root->".$urls->{"daemon/workflow"}."->$url");
 		my @temp=parseQuery($command->{$urls->{"daemon/select"}});
@@ -853,6 +855,7 @@ sub getExecuteJobs{
 	my $rdfdb=shift();
 	my $command=shift();
 	my $executes=shift();
+	print_table($command);
 	if(exists($command->{$urls->{"daemon/select"}})){return getExecuteJobsSelect($rdfdb,$command,$executes);}
 	else{return getExecuteJobsNodeid($rdfdb,$command,$executes);}
 }
