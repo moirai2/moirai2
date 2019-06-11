@@ -318,10 +318,7 @@ sub promptRequireds{
 		my $question="[$i] $url";
 		my $default="";
 		my $workflow=loadWorkflowFromURL($url,$workflows);
-		if(exists($workflow->{$url})){
-			$default=$workflow->{$url};
-			$question.=" [$default]";
-		}
+		if(exists($workflow->{$url})){$question.=" [".$workflow->{$url}."]";}
 		$question.="?";
 		print STDERR "$question ";
 		while(<STDIN>){
