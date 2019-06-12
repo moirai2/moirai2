@@ -17,33 +17,33 @@ my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_d $opt_D $opt_e $opt_f $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
-getopts('d:D:e:f:hHl:qr:tw:');
+use vars qw($opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
+getopts('d:D:e:f:g:hHl:qr:tw:');
 ############################## URLs ##############################
 my $urls={};
-$urls->{"moirai2"             }="https://moirai2.github.io/schema/moirai2";
+$urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
+$urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
+$urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
+$urls->{"daemon/execid"}="https://moirai2.github.io/schema/daemon/execid";
+$urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
+$urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
 
-$urls->{"daemon"              }="https://moirai2.github.io/schema/daemon";
-$urls->{"daemon/command"      }="https://moirai2.github.io/schema/daemon/command";
-$urls->{"daemon/execute"      }="https://moirai2.github.io/schema/daemon/execute";
-$urls->{"daemon/execid"       }="https://moirai2.github.io/schema/daemon/execid";
-$urls->{"daemon/timestarted"  }="https://moirai2.github.io/schema/daemon/timestarted";
-$urls->{"daemon/timeended"    }="https://moirai2.github.io/schema/daemon/timeended";
-
-$urls->{"file"                }="https://moirai2.github.io/schema/file";
-$urls->{"file/md5"            }="https://moirai2.github.io/schema/file/md5";
-$urls->{"file/linecount"      }="https://moirai2.github.io/schema/file/linecount";
-$urls->{"file/seqcount"       }="https://moirai2.github.io/schema/file/seqcount";
+$urls->{"file"}="https://moirai2.github.io/schema/file";
+$urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
+$urls->{"file/filesize"}="https://moirai2.github.io/schema/file/filesize";
+$urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
+$urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
 
 $urls->{"software"}="https://moirai2.github.io/schema/software";
-$urls->{"software/path"}="https://moirai2.github.io/schema/software/path";
+$urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
 $urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 
-$urls->{"download"}="https://moirai2.github.io/schema/download";
-$urls->{"download/datetime"}="https://moirai2.github.io/schema/download/datetime";
+$urls->{"system"}="https://moirai2.github.io/schema/system";
+$urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
 
 $urls->{"miniconda3"}="https://moirai2.github.io/software/miniconda3";
 $urls->{"miniconda3/bin"}="https://moirai2.github.io/software/miniconda3/bin";
+
 ############################## HELP ##############################
 sub help{
 	print "PROGRAM: $program_name\n";
@@ -69,17 +69,17 @@ sub help{
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name -d DB object SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB conda\n";
+	print "COMMAND: $program_name -d DB ls DIR/FILE\n";
 	print "\n";
 	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2019/06/04  Added 'executes' to retrieve execute log informations.\n";
+		print "UPDATED: 2019/06/04  Added 'executes' and 'html' to retrieve execute log informations.\n";
 		print "         2019/05/07  Added 'md5' to calculate md5 of files.\n";
 		print "         2019/04/26  Changed name from 'sqlite3.pl' to 'rdf.pl'.\n";
 		print "         2019/03/13  'linecount' and 'seqcount' added to count files.\n";
-		print "         2019/02/13  Get statistics of executions by going through logs.\n";
 		print "         2019/01/28  Insert and query RDF through PHP with HTTP POST added.\n";
 		print "         2019/01/16  Remove 'empty' was added to remove empty node and edges.\n";
 		print "         2019/01/10  'rmdup' was added to remove duplicated edges.\n";
@@ -132,6 +132,7 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test3.txt","replaced 0");
 	testCommand("perl rdf.pl md5 test/test.txt | perl rdf.pl -d test/rdf.sqlite3 import","imported 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test2.txt","replaced 1");
+	unlink("test/test2.txt");
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
 }
@@ -147,23 +148,72 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	test();
 	exit(0);
 }elsif($command eq "linecount"){
-	my $writer=IO::File->new(">&STDOUT");
-	countLines($writer,$opt_r,$opt_f,@ARGV);
-	close($writer);
+	my @files=();
+	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@ARGV;}
+	if(defined($opt_d)){
+		my ($writer,$file)=tempfile(UNLINK=>1);
+		countLines($writer,$opt_r,$opt_g,@files);
+		close($writer);
+		my $reader=IO::File->new($file);
+		my $linecount=importDB($database,$reader);
+		close($reader);
+	}else{
+		my $writer=IO::File->new(">&STDOUT");
+		countLines($writer,$opt_r,$opt_g,@files);
+		close($writer);
+	}
+	exit(0);
 }elsif($command eq "seqcount"){
-	my $writer=IO::File->new(">&STDOUT");
-	countSequences($writer,$opt_r,$opt_f,@ARGV);
-	close($writer);
+	my @files=();
+	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@ARGV;}
+	if(defined($opt_d)){
+		my ($writer,$file)=tempfile(UNLINK=>1);
+		countSequences($writer,$opt_r,$opt_g,@files);
+		close($writer);
+		my $reader=IO::File->new($file);
+		my $linecount=importDB($database,$reader);
+		close($reader);
+	}else{
+		my $writer=IO::File->new(">&STDOUT");
+		countSequences($writer,$opt_r,$opt_g,@files);
+		close($writer);
+	}
 	exit(0);
 }elsif($command eq "filesize"){
-	my $writer=IO::File->new(">&STDOUT");
-	sizeFiles($writer,$opt_r,$opt_f,@ARGV);
-	close($writer);
+	my @files=();
+	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@ARGV;}
+	if(defined($opt_d)){
+		my ($writer,$file)=tempfile(UNLINK=>1);
+		sizeFiles($writer,$opt_r,$opt_g,@files);
+		close($writer);
+		my $reader=IO::File->new($file);
+		my $linecount=importDB($database,$reader);
+		close($reader);
+	}else{
+		my $writer=IO::File->new(">&STDOUT");
+		sizeFiles($writer,$opt_r,$opt_g,@files);
+		close($writer);
+	}
 	exit(0);
 }elsif($command eq "md5"){
-	my $writer=IO::File->new(">&STDOUT");
-	md5Files($writer,$opt_r,$opt_f,@ARGV);
-	close($writer);
+	my @files=();
+	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@ARGV;}
+	if(defined($opt_d)){
+		my ($writer,$file)=tempfile(UNLINK=>1);
+		md5Files($writer,$opt_r,$opt_g,@files);
+		close($writer);
+		my $reader=IO::File->new($file);
+		my $linecount=importDB($database,$reader);
+		close($reader);
+	}else{
+		my $writer=IO::File->new(">&STDOUT");
+		md5Files($writer,$opt_r,$opt_g,@files);
+		close($writer);
+	}
 	exit(0);
 }elsif(lc($command) eq "select"){
 	my $subject=shift(@ARGV);
@@ -277,15 +327,6 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	unlink($filename);
 	rename("$database.tmp",$database);
 	if(!$opt_q){print "reindexed $linecount\n";}
-}elsif($command eq "remove"){
-	my $dbh=openDB($database);
-	foreach my $arg (@ARGV){
-		if($arg eq "daemon/execute"){removeExecute($dbh);}
-		elsif($arg eq "daemon/control"){removeControl($dbh);}
-		elsif($arg eq "log"){removeLog($dbh);}
-		elsif($arg eq "empty"){removeEmpty($dbh,$database);}
-	}
-	$dbh->disconnect;
 }elsif(lc($command) eq "update"){
 	if(!defined($opt_f)){
 		my $subject=shift(@ARGV);
@@ -469,11 +510,55 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	printExecutesInHTML($hashtable);
 }elsif(lc($command) eq "conda"){
 	whichConda($database);
+}elsif(lc($command) eq "ls"){
+	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
+}
+############################## basenames ##############################
+sub basenames{
+	my $file=$_[0];
+	my @out=();
+	if($file=~/^(.+)\/([^\/]+)$/){
+		$out[0]=$1;
+		$out[1]=$2;
+	}elsif($file =~/^(.*)\/$/){
+		$out[0]=$1;
+		$out[1]="";
+	}else{
+		$out[0]="";
+		$out[1]=$file;
+	}
+	if($out[1]=~/^(.+)\.([^\.]+)$/){
+		$out[2]=$1;
+		$out[3]=$2;
+	}else{
+		$out[2]=$out[1];
+		$out[3]="";
+	}
+	return wantarray?@out:$out[1];
+}
+############################## ls ##############################
+sub ls{
+	my @files=@_;
+	my $database=shift(@files);
+	my $format=shift(@files);
+	my $filegrep=shift(@files);
+	my $recursive=shift(@files);
+	if(scalar(@files)==0){push(@files,".");}
+	if(defined($format)){
+		foreach my $path(listFiles($filegrep,$recursive,@files)){
+			my @outputs=basenames($path);
+			print_table(\@outputs);
+		}
+	}else{
+		foreach my $path(listFiles($filegrep,$recursive,@files)){
+			print "$path\n";
+		}
+	}
 }
 ############################## whichConda ##############################
 sub whichConda{
 	my $database=shift();
-	my $hash=dbSelect($database,undef,$urls->{"software/path"},undef);
+	my $hash=dbSelect($database,undef,$urls->{"software/bin"},undef);
 	my $condabin=`which conda`;
 	chomp($condabin);
 	if($condabin eq ""){return;}
@@ -592,17 +677,17 @@ sub retrieveExecutes{
 sub whichSoftware{
 	my @softwares=@_;
 	my $database=shift(@softwares);
-	my $hash=dbSelect($database,undef,$urls->{"software/path"},undef);
+	my $hash=dbSelect($database,undef,$urls->{"software/bin"},undef);
 	foreach my $software(@softwares){
 		if(exists($hash->{$software})){
-			my $path=$hash->{$software}->{$urls->{"software/path"}};
+			my $path=$hash->{$software}->{$urls->{"software/bin"}};
 			print "$path\n";
 			next;
 		}
 		my $path=`which $software`;
 		chomp($path);
 		if($path ne ""){
-			dbInsert($database,$software,$urls->{"software/path"},$path);
+			dbInsert($database,$software,$urls->{"software/bin"},$path);
 			print "$path\n";
 		}
 	}
@@ -655,7 +740,7 @@ sub getObjects{
 ############################## downloadFiles ##############################
 sub downloadFiles{
 	my $database=shift();
-	my @downloads=getObjects($database,$urls->{"moirai2"},$urls->{"download"});
+	my @downloads=getObjects($database,$urls->{"system"},$urls->{"system/download"});
 	my @files=();
 	foreach my $url(@downloads){
 		my $node=getObject($database,$url,$urls->{"file"});
@@ -673,7 +758,7 @@ sub registerDownloads{
 	my @nodes=();
 	foreach my $url(@urls){
 		my $node=newNode($database);
-		dbInsert($database,$urls->{"moirai2"},$urls->{"download"},$url);
+		dbInsert($database,$urls->{"system"},$urls->{"system/download"},$url);
 		dbInsert($database,$url,$urls->{"file"},$node);
 		push(@nodes,$node);
 	}
@@ -993,75 +1078,6 @@ sub assembleFile{
 	}
 	close($writer);
 	return $file;
-}
-############################## removeControl ##############################
-sub removeControl{
-	my $dbh=shift();
-	$dbh->begin_work;
-	my $query="delete from edge where predicate=(select id from node where data=\"".$urls->{"daemon/control"}."\")";
-	my $sth=$dbh->prepare($query);
-	my $linecount=$sth->execute();
-	$dbh->commit;
-	if($linecount eq "0E0"){$linecount=0;}
-	return $linecount;
-}
-############################## removeExecute ##############################
-sub removeExecute{
-	my $dbh=shift();
-	$dbh->begin_work;
-	my $query="delete from edge where predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
-	my $sth=$dbh->prepare($query);
-	my $linecount=$sth->execute();
-	$dbh->commit;
-	if($linecount eq "0E0"){$linecount=0;}
-	return $linecount;
-}
-############################## removeLog ##############################
-sub removeLog{
-	my $dbh=shift();
-	$dbh->begin_work;
-	my $query="delete from edge where subject in (select object from edge where predicate=(select id from node where data=\"".$urls->{"daemon/execid"}."\"))";
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	$query="delete from edge where predicate=(select id from node where data=\"".$urls->{"daemon/execid"}."\")";
-	$sth=$dbh->prepare($query);
-	$sth->execute();
-	$dbh->commit;
-}
-############################## removeEmpty ##############################
-sub removeEmpty{
-	my $dbh=shift();
-	my $dbname=shift();
-	$dbh->begin_work;
-	my $query="delete from node where data=\"\"";
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	$dbh->commit;
-	my $id2node=getNodeIdHash($dbh);
-	my ($edgehandler,$edgefile)=tempfile(UNLINK=>1);
-	my $sth=$dbh->prepare("SELECT subject,predicate,object FROM edge");
-	$sth->execute();
-	my @row=();
-	while(@row=$sth->fetchrow_array()){
-		my $subid=$row[0];
-		my $preid=$row[1];
-		my $objid=$row[2];
-		my $subject=$id2node->{$subid};
-		my $predicate=$id2node->{$preid};
-		my $object=$id2node->{$objid};
-		if(!defined($subject)){next;}
-		if(!defined($predicate)){next;}
-		if(!defined($object)){next;}
-		print $edgehandler "$subject\t$predicate\t$object\n";
-	}
-	close($edgehandler);
-	my $newdatabase="$database.tmp";
-	my $reader=IO::File->new($edgefile);
-	my $linecount=importDB($newdatabase,$reader);
-	$dbh->disconnect;
-	unlink($database);
-	rename($newdatabase,$database);
-	return $linecount;
 }
 ############################## importDB ##############################
 sub importDB{
@@ -2266,37 +2282,37 @@ sub getTime{
 }
 ############################## listFiles ##############################
 sub listFiles{
-	my @input_directories=@_;
-	my $file_suffix=shift(@input_directories);
-	my $recursive_search=shift(@input_directories);
-	my @input_files=();
-	foreach my $input_directory (@input_directories){
-		if(-f $input_directory){push(@input_files,$input_directory);next;}
-		elsif(-l $input_directory){push(@input_files,$input_directory);next;}
-		opendir(DIR,$input_directory);
+	my @inputdirectories=@_;
+	my $filegrep=shift(@inputdirectories);
+	my $recursivesearch=shift(@inputdirectories);
+	my @inputfiles=();
+	foreach my $inputdirectory (@inputdirectories){
+		if(-f $inputdirectory){push(@inputfiles,$inputdirectory);next;}
+		elsif(-l $inputdirectory){push(@inputfiles,$inputdirectory);next;}
+		opendir(DIR,$inputdirectory);
 		foreach my $file(readdir(DIR)){
 			if($file eq "."){next;}
 			if($file eq ".."){next;}
 			if($file eq ""){next;}
-			$file="$input_directory/$file";
+			$file=($inputdirectory eq ".")?$file:"$inputdirectory/$file";
 			if(-d $file){
-				if($recursive_search!=0){push(@input_files,listFiles($file_suffix,$recursive_search-1,$file));}
+				if($recursivesearch!=0){push(@inputfiles,listFiles($filegrep,$recursivesearch-1,$file));}
 				next;
-			}elsif($file!~/$file_suffix$/){next;}
-			push(@input_files,$file);
+			}elsif($file!~/$filegrep$/){next;}
+			push(@inputfiles,$file);
 		}
 		closedir(DIR);
 	}
-	return @input_files;
+	return @inputfiles;
 }
 ############################## countLines ##############################
 sub countLines{
 	my @files=@_;
 	my $writer=shift(@files);
+	my $filegrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	my $filesuffix=shift(@files);
 	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filesuffix,$recursivesearch,@ARGV)){
+	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
 		my $count=0;
 		if($file=~/\.bam$/){$count=`samtools view $file|wc -l`;}
 		elsif($file=~/\.sam$/){$count=`samtools view $file|wc -l`;}
@@ -2311,35 +2327,22 @@ sub countLines{
 sub sizeFiles{
 	my @files=@_;
 	my $writer=shift(@files);
+	my $filegrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	my $filesuffix=shift(@files);
 	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filesuffix,$recursivesearch,@ARGV)){
-		my $md5=`which md5`;
-		my $md5sum=`which md5sum`;
-		if(defined($md5)){
-			chomp($md5);
-			my $sum=`$md5 $file`;
-			chomp($sum);
-			if($sum=~/(\S+)$/){$sum=$1;}
-			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
-		}elsif(defined($md5sum)){
-			chomp($md5sum);
-			my $sum=`$md5sum $file`;
-			chomp($sum);
-			if($sum=~/^(\S+)/){$sum=$1;}
-			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
-		}
+	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
+		my $size=-s $file;
+		print $writer "$file\t".$urls->{"file/filesize"}."\t$size\n";
 	}
 }
 ############################## md5Files ##############################
 sub md5Files{
 	my @files=@_;
 	my $writer=shift(@files);
+	my $filegrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	my $filesuffix=shift(@files);
 	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filesuffix,$recursivesearch,@ARGV)){
+	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
 		my $md5=`which md5`;
 		my $md5sum=`which md5sum`;
 		if(defined($md5)){
@@ -2361,10 +2364,10 @@ sub md5Files{
 sub countSequences{
 	my @files=@_;
 	my $writer=shift(@files);
+	my $filegrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	my $filesuffix=shift(@files);
 	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filesuffix,$recursivesearch,@ARGV)){
+	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
 		my $count=0;
 		if($file=~/\.bam$/){
 			my $paired=`samtools view $file|head -n 1|perl -ne 'if(\$_&2){print \"0\";}else{print \"1\";}'`;

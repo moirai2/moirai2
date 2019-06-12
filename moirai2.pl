@@ -18,7 +18,7 @@ my $program_path=Cwd::abs_path($program_directory)."/$program_name";
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
 use vars qw($opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_q $opt_r $opt_s);
-getopts('c:d:hHi:lm:qo:r:s:');
+getopts('c:d:hHi:lm:o:qr:s:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -53,20 +53,19 @@ $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
 
+$urls->{"file"}="https://moirai2.github.io/schema/file";
+$urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
+$urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
+$urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
+
 $urls->{"system"}="https://moirai2.github.io/schema/system";
 $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
 $urls->{"system/upload"}="https://moirai2.github.io/schema/system/upload";
 $urls->{"system/path"}="https://moirai2.github.io/schema/system/path";
 $urls->{"system/software"}="https://moirai2.github.io/schema/system/software";
 
-$urls->{"file"}="https://moirai2.github.io/schema/file";
-$urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
-$urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
-$urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
-
 $urls->{"software"}="https://moirai2.github.io/software";
 $urls->{"workflow"}="https://moirai2.github.io/workflow";
-
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -91,10 +90,10 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "Options: -c  Path to control directory (default='./ctrl').\n";
 	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
-	print "         -i  Input query (default='none').\n";
+	print "         -i  Input query for select (default='none').\n";
 	print "         -l  Show STDERR and STDOUT logs (default='none').\n";
 	print "         -m  Max number of jobs to throw (default='5').\n";
-	print "         -o  Output query (default='none').\n";
+	print "         -o  Output query for insert (default='none').\n";
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
 	print "         -r  Return value (default='none').\n";
 	print "         -s  Loop second (default='no loop').\n";
