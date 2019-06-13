@@ -52,7 +52,7 @@ sub help{
 	print "COMMAND: $program_name -d DB insert SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB update SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB delete SUB PRE OBJ\n";
-	print "COMMAND: $program_name -d DB object SUB PRE OBJ\n";
+	print "COMMAND: $program_name -d DB object SUB PRE OBJ > VARIABLE\n";
 	print "COMMAND: $program_name -d DB import < TSV\n";
 	print "COMMAND: $program_name -d DB dump > TSV\n";
 	print "COMMAND: $program_name -d DB -f json dump > JSON\n";
@@ -67,13 +67,13 @@ sub help{
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name -d DB conda\n";
 	print "COMMAND: $program_name -d DB ls < STDIN\n";
-	print "\n";
 	print "COMMAND: $program_name linecount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name seqcount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
 	print "COMMAND: $program_name ls DIR/FILE > TSV\n";
 	print "\n";
-	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
+	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
+	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
@@ -228,9 +228,6 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	my $subject=shift(@ARGV);
 	my $predicate=shift(@ARGV);
 	my $object=shift(@ARGV);
-	if($subject eq "?"){$subject=undef;}
-	if($predicate eq "?"){$predicate=undef;}
-	if($object eq "?"){$object=undef;}
 	my $json={$subject=>{$predicate=>$object}};
 	my $rdf=($iswebdb)?webSelect($database,$json):dbSelect($database,$subject,$predicate,$object);
 	my $format=defined($opt_f)?$opt_f:"tsv";
@@ -514,17 +511,24 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	if(scalar(@files)>1){print "(".join(" ",@files).")\n";}
 	else{print $files[0]."\n";}
 }elsif(lc($command) eq "executes"){
-	my $hashtable=retrieveExecutes($database);
-	printExecutesInJson($hashtable);
+	printExecutesInJson(retrieveExecutes($database));
 }elsif(lc($command) eq "html"){
-	my $hashtable=retrieveExecutes($database);
-	printExecutesInHTML($hashtable);
+	printExecutesInHTML(retrieveExecutes($database));
 }elsif(lc($command) eq "conda"){
 	whichConda($database);
 }elsif(lc($command) eq "software"){
 	whichSoftware($database,@ARGV);
 }elsif(lc($command) eq "ls"){
 	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
+}elsif(lc($command) eq "table"){
+	importTable($database);
+}
+############################## importTable ##############################
+sub importTable{
+	my $database=shift();
+	if(scalar(@ARGV)==0){
+
+	}
 }
 ############################## basenames ##############################
 sub basenames{
@@ -563,9 +567,15 @@ sub ls{
 			print_table(\@outputs);
 		}
 	}else{
-		foreach my $path(listFiles($filegrep,$recursive,@files)){
-			print "$path\n";
-		}
+		my @files=listFiles($filegrep,$recursive,@files);
+		if(defined($opt_d)){
+			my ($writer,$file)=tempfile(UNLINK=>1);
+			foreach my $file(@files){print $writer $urls->{"file"}."$file\n";}
+			close($writer);
+			my $reader=IO::File->new($file);
+			my $linecount=importDB($database,$reader);
+			close($reader);
+		}else{foreach my $file(@files){print "$file\n";}}
 	}
 }
 ############################## whichConda ##############################
@@ -861,19 +871,11 @@ sub dbDelete{
 	my $object=shift();
 	my $query="delete from edge";
 	my @wheres=();
-	if(defined($subject)){
-		if(ref($subject) eq "ARRAY"){push(@wheres,"subject in(select id from node where data in(\"".join("\",\"",@{$subject})."\"))");}
-		else{push(@wheres,"subject=(select id from node where data='$subject')");}
-	}
-	if(defined($predicate)){
-		if(ref($predicate) eq "ARRAY"){push(@wheres,"predicate in(select id from node where data in(\"".join("\",\"",@{$predicate})."\"))");}
-		else{push(@wheres,"predicate=(select id from node where data='$predicate')");}
-	}
-	if(defined($object)){
-		if(ref($object) eq "ARRAY"){push(@wheres,"object in(select id from node where data in(\"".join("\",\"",@{$object})."\"))");}
-		else{push(@wheres,"object=(select id from node where data='$object')");}
-	}
-	if(scalar(@wheres)>0){$query.=" where ".join(" and ",@wheres);}
+	if($subject ne "" && $subject ne "%"){push(@wheres,createWhere("subject",$subject));}
+	if($predicate ne "" && $predicate ne "%"){push(@wheres,createWhere("predicate",$predicate));}
+	if($object ne "" && $object ne "%"){push(@wheres,createWhere("object",$object));}
+	if(scalar(@wheres)==0){return;}
+	$query.=" where ".join(" and ",@wheres);
 	my $dbh=openDB($database);
 	$dbh->begin_work;
 	my $sth=$dbh->prepare($query);
@@ -918,6 +920,16 @@ sub dbReplace{
 	}
 	return $linecount;
 }
+############################## createWhere ##############################
+sub createWhere{
+	my $label=shift();
+	my $object=shift();
+	my $where="";
+	if(ref($object) eq "ARRAY"){$where.=" e1.$label in(select id from node where data in (\"".join("\",\"",@{$object})."\"))";}
+	elsif($object=~/\%/){$where.=" e1.$label in (select id from node where data like '$object')";}
+	else{$where.=" e1.$label=(select id from node where data='$object')";}
+	return $where;
+}
 ############################## dbSelect ##############################
 sub dbSelect{
 	my $database=shift();
@@ -926,23 +938,11 @@ sub dbSelect{
 	my $object=shift();
 	my $dbh=openDB($database);
 	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
-	my $where="";
-	if($subject ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($subject) eq "ARRAY"){$where.=" e1.subject in(select id from node where data in(\"".join("\",\"",@{$subject})."\"))";}
-		else{$where.=" e1.subject=(select id from node where data='$subject')";}
-	}
-	if($predicate ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($predicate) eq "ARRAY"){$where.=" e1.predicate in(select id from node where data in(\"".join("\",\"",@{$predicate})."\"))";}
-		else{$where.=" e1.predicate=(select id from node where data='$predicate')";}
-	}
-	if($object ne ""){
-		if(length($where)>0){$where.=" and";}
-		if(ref($object) eq "ARRAY"){$where.=" e1.object in(select id from node where data in(\"".join("\",\"",@{$object})."\"))";}
-		else{$where.=" e1.object=(select id from node where data='$object')";}
-	}
-	if($where ne ""){$query.=" where$where";}
+	my @wheres=();
+	if($subject ne "" && $subject ne "%"){push(@wheres,createWhere("subject",$subject));}
+	if($predicate ne "" && $predicate ne "%"){push(@wheres,createWhere("predicate",$predicate));}
+	if($object ne "" && $object ne "%"){push(@wheres,createWhere("object",$object));}
+	if(scalar(@wheres)>0){$query.=" where".join(" and ",@wheres);}
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
 	my $hash={};
