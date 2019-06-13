@@ -52,6 +52,7 @@ sub help{
 	print "COMMAND: $program_name -d DB insert SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB update SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB delete SUB PRE OBJ\n";
+	print "COMMAND: $program_name -d DB object SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB import < TSV\n";
 	print "COMMAND: $program_name -d DB dump > TSV\n";
 	print "COMMAND: $program_name -d DB -f json dump > JSON\n";
@@ -59,17 +60,18 @@ sub help{
 	print "COMMAND: $program_name -d DB replace FROM TO\n";
 	print "COMMAND: $program_name -d DB mv FROM TO\n";
 	print "COMMAND: $program_name -d DB newnode > NODE\n";
+	print "COMMAND: $program_name -d DB reindex\n";
+	print "COMMAND: $program_name -d DB download URL\n";
+	print "COMMAND: $program_name -d DB software URL\n";
+	print "COMMAND: $program_name -d DB -f json command < JSON\n";
+	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
+	print "COMMAND: $program_name -d DB conda\n";
+	print "COMMAND: $program_name -d DB ls < STDIN\n";
+	print "\n";
 	print "COMMAND: $program_name linecount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name seqcount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
-	print "COMMAND: $program_name -d DB reindex\n";
-	print "COMMAND: $program_name -d DB download URL\n";
-	print "COMMAND: $program_name -d DB software CMD\n";
-	print "COMMAND: $program_name -d DB -f json command < JSON\n";
-	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
-	print "COMMAND: $program_name -d DB object SUB PRE OBJ\n";
-	print "COMMAND: $program_name -d DB conda\n";
-	print "COMMAND: $program_name -d DB ls DIR/FILE\n";
+	print "COMMAND: $program_name ls DIR/FILE > TSV\n";
 	print "\n";
 	print "   NOTE:  Use '?' for undefined subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
@@ -132,6 +134,13 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test3.txt","replaced 0");
 	testCommand("perl rdf.pl md5 test/test.txt | perl rdf.pl -d test/rdf.sqlite3 import","imported 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test2.txt","replaced 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete ? ".$urls->{"file/md5"}." ?","deleted 1");
+	testCommand("echo \"A\tB\tB\nA\tB\tC\nA\tC\tD\" | perl rdf.pl -d test/rdf.sqlite3 -f tsv insert","inserted 3");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object","(B C D E)");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A","(B C D E)");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B","(B C E)");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B C","C");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A C","D");
 	unlink("test/test2.txt");
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
@@ -149,7 +158,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	exit(0);
 }elsif($command eq "linecount"){
 	my @files=();
-	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@ARGV;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
@@ -166,7 +175,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	exit(0);
 }elsif($command eq "seqcount"){
 	my @files=();
-	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@ARGV;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
@@ -183,7 +192,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	exit(0);
 }elsif($command eq "filesize"){
 	my @files=();
-	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@ARGV;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
@@ -200,7 +209,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	exit(0);
 }elsif($command eq "md5"){
 	my @files=();
-	if(scalar(@files)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@ARGV;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
@@ -243,11 +252,15 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	foreach my $subject(keys(%{$rdf})){
 		foreach my $predicate(keys(%{$rdf->{$subject}})){
 			my $object=$rdf->{$subject}->{$predicate};
-			push(@objects,$object);
+			if(ref($object)eq"ARRAY"){foreach my $o(@{$object}){push(@objects,$o);}}
+			else{push(@objects,$object);}
 		}
 	}
 	if(scalar(@objects)==1){print $objects[0]."\n";}
-	else{print "(".join(" ",@objects).")\n";}
+	else{
+		@objects=sort{$a cmp $b}@objects;
+		print "(".join(" ",@objects).")\n";
+	}
 }elsif(lc($command) eq "insert"){
 	if(!defined($opt_f)){
 		my $subject=shift(@ARGV);
@@ -500,8 +513,6 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	my @files=downloadFiles($database);
 	if(scalar(@files)>1){print "(".join(" ",@files).")\n";}
 	else{print $files[0]."\n";}
-}elsif(lc($command) eq "software"){
-	whichSoftware($database,@ARGV);
 }elsif(lc($command) eq "executes"){
 	my $hashtable=retrieveExecutes($database);
 	printExecutesInJson($hashtable);
@@ -510,6 +521,8 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	printExecutesInHTML($hashtable);
 }elsif(lc($command) eq "conda"){
 	whichConda($database);
+}elsif(lc($command) eq "software"){
+	whichSoftware($database,@ARGV);
 }elsif(lc($command) eq "ls"){
 	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
 }
