@@ -317,7 +317,7 @@ sub promptRequireds{
 		my $question="[$i] $url";
 		my $default="";
 		my $workflow=loadWorkflowFromURL($url,$workflows);
-		if(exists($workflow->{$url})){$question.=" [".$workflow->{$url}."]";}
+		if(exists($workflow->{$url})){$default=$workflow->{$url};$question.=" [$default]";}
 		$question.="?";
 		print STDERR "$question ";
 		while(<STDIN>){
@@ -451,8 +451,10 @@ sub workflowProcess{
 sub loadWorkflowFromURL{
 	my $url=shift();
 	my $workflows=shift();
-	if($url=~/^(.+)\/workflow\/([^\/]+)\//){$url="$1/workflow/$2.json";}
-	elsif($url=~/^(.+)\/software\/([^\/]+)\//){$url="$1/software/$2.json";}
+	if($url=~/^(.+)\/workflow\/(.+)\/.+\.json$/){$url="$1/workflow/$2.json";}
+	elsif($url=~/^(.+)\/workflow\/(.+)\/[^\/]+$/){$url="$1/workflow/$2.json";}
+	elsif($url=~/^(.+)\/software\/(.+)\/.+\.json$/){$url="$1/software/$2.json";}
+	elsif($url=~/^(.+)\/software\/(.+)\/[^\/]+$/){$url="$1/software/$2.json";}
 	if(exists($workflows->{$url})){return $workflows->{$url};}
 	$workflows->{$url}=getJson($url);
 	return $workflows->{$url};
@@ -808,7 +810,7 @@ sub loadCommandFromURLSub{
 	if(!exists($command->{$urls->{"daemon/maxjob"}})){$command->{$urls->{"daemon/maxjob"}}=1;}
 	if(exists($command->{$urls->{"daemon/script"}})){handleScript($command);}
 	if(scalar(keys($default))>0){$command->{"default"}=$default;}
-	handleOutput($command);
+	#handleOutput($command);
 }
 ############################## handleOutput ##############################
 sub handleOutput{
@@ -1096,7 +1098,7 @@ sub bashCommand{
 	foreach my $line(@{$command->{"bashCode"}}){print OUT "$line\n";}
 	foreach my $output(@{$command->{"output"}}){
 		my $count=0;
-		if(exists($variables->{$output})){
+		if(exists($variables->{$output})&&$output ne $variables->{$output}){
 			my $value=$variables->{$output};
 			if($count==0){print OUT "########## move ##########\n";}
 			print OUT "mv \$$output $value\n";
