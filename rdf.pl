@@ -29,6 +29,7 @@ $urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestart
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
 
 $urls->{"file"}="https://moirai2.github.io/schema/file";
+$urls->{"file/line"}="https://moirai2.github.io/schema/file/line";
 $urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
 $urls->{"file/filesize"}="https://moirai2.github.io/schema/file/filesize";
 $urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
@@ -39,6 +40,7 @@ $urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
 $urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 
 $urls->{"system"}="https://moirai2.github.io/schema/system";
+$urls->{"system/file"}="https://moirai2.github.io/schema/system/file";
 $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
 
 $urls->{"miniconda3"}="https://moirai2.github.io/software/miniconda3";
@@ -520,15 +522,72 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	whichSoftware($database,@ARGV);
 }elsif(lc($command) eq "ls"){
 	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
-}elsif(lc($command) eq "table"){
-	importTable($database);
+}elsif(lc($command) eq "imtable"){
+	my ($writer,$file)=tempfile(UNLINK=>1);
+	foreach my $file(@ARGV){importTable($file,$writer);}
+	close($writer);
+	my $reader=IO::File->new($file);
+	my $linecount=importDB($database,$reader);
+	close($reader);
+	if(!$opt_q){print "imported $linecount\n";}
+}elsif(lc($command) eq "extable"){
+	my ($writer,$tmp)=tempfile(UNLINK=>1);
+	dumpDB($database,undef,$writer);
+	close($writer);
+	foreach my $file(@ARGV){exportTable($database,$tmp,$file);}
+}
+############################## exportTable ##############################
+sub exportTable{
+	my $database=shift();
+	my $tmp=shift();
+	my $file=shift();
+	my $rows={};
+	my $columns={};
+	my $reader=IO::File->new($tmp);
+	while(<$reader>){
+		chomp;
+		if($_=~/\t$file#row(\d+)\t(.+)$/){$rows->{$2}=$1;}
+		elsif($_=~/\t$file#column(\d+)\t(.+)$/){$columns->{$2}=$1;}
+	}
+	close($reader);
+	my $labels={};
+	my $reader=IO::File->new($tmp);
+	my $hash={};
+	while(<$reader>){
+		chomp;
+		my ($subject,$predicate,$object)=split(/\t/);
+		if(!exists($labels->{$predicate})){$labels->{$predicate}=scalar(keys(%{$labels}));}
+		my $index=$labels->{$predicate};
+		if(!exists($hash->{$subject})){$hash->{$subject}=[];}
+		$hash->{$subject}->[$index]=$object;
+	}
+	close($reader);
+	my @columns=sort{$labels->{$a}<=>$labels->{$b}}keys(%{$labels});
+	foreach my $column(@columns){if($column=~/^$file#(.+)$/){$column=$1;}}
+	print join("\t",@columns)."\n";
 }
 ############################## importTable ##############################
 sub importTable{
-	my $database=shift();
-	if(scalar(@ARGV)==0){
-
+	my $file=shift();
+	my $writer=shift();
+	my $reader=IO::File->new($file);
+	print $writer $urls->{"system"}."\t".$urls->{"system/file"}."\t$file\n";
+	my $line=<$reader>;
+	chomp($line);
+	my @labels=split(/\t/,$line);
+	for(my $i=0;$i<scalar(@labels);$i++){print $writer "$file\t$file#column$i\t".$labels[$i]."\n";}
+	for(my $index=0;<$reader>;$index++){
+		chomp;
+		my @tokens=split(/\t/);
+		my $key=$tokens[0];
+		print $writer "$file\t$file#row$index\t$key\n";
+		for(my $i=0;$i<scalar(@tokens);$i++){
+			my $label=$labels[$i];
+			my $token=$tokens[$i];
+			print $writer "$key\t$label\t$token\n";
+		}
 	}
+	close($reader);
 }
 ############################## basenames ##############################
 sub basenames{
@@ -2131,16 +2190,6 @@ sub handleNode{
 	if($id!=""){return $id;}
 	return insertNode($dbh,$data);
 }
-sub newNode{
-	my $database=shift();
-	my $dbh=openDB($database);
-	my $id=nodeMax($dbh)+1;
-	my $name="$database#node$id";
-	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
-	$sth->execute($id,$name);
-	$dbh->disconnect;
-	return $name;
-}
 sub insertNode{
 	my $dbh=shift();
 	my $data=shift();
@@ -2206,6 +2255,16 @@ sub getEdges{
 	my $array=[];
 	while(my @rows=$sth->fetchrow_array()){push(@{$array},\@rows);}
 	return $array;
+}
+sub newNode{
+	my $database=shift();
+	my $dbh=openDB($database);
+	my $id=nodeMax($dbh)+1;
+	my $name="$database#node$id";
+	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
+	$sth->execute($id,$name);
+	$dbh->disconnect;
+	return $name;
 }
 ############################## HTTP ##############################
 sub getHttpContent{
