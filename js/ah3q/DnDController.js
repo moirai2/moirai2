@@ -13,6 +13,7 @@ DnDController.prototype.initialize=function(){
 	this.dom.addEventListener("drop",function(event){event.stopPropagation();event.preventDefault();self.dropped(event);},true);
 }
 DnDController.prototype.appendChild=function(element){this.dom.appendChild(element);}
+DnDController.prototype.acceptServerPath=function(boolean){if(boolean==null)boolean=true;this.acceptServerPath=boolean;return this;}
 DnDController.prototype.whenFileIsDroppedRead=function(boolean){if(boolean==null)boolean=true;this.readFromFile=boolean;return this;}
 DnDController.prototype.whenUrlIsDroppedRead=function(boolean){if(boolean==null)boolean=true;this.readFromUrl=boolean;return this;}
 DnDController.prototype.whenUrlIsDroppedSave=function(boolean){if(boolean==null)boolean=true;this.saveFromUrl=boolean;return this;}
@@ -41,6 +42,10 @@ DnDController.prototype.dropped=function(event){
 			}else{
 				this.dom.dispatchEvent(new CustomEvent("urlWasDropped",{detail:{x:x,y:y,url:url}}));
 			}
+		}else if(this.acceptServerPath&&text.startsWith("/")){
+			var url=text;
+			var filename=this.utility.filename(text);
+			this.utility.symlinkFile(text,function(path){self.dom.dispatchEvent(new CustomEvent("fileWasSaved",{detail:{x:x,y:y,url:url,path:path,filename:filename}}));});
 		}else{
 			this.dom.dispatchEvent(new CustomEvent("textWasDropped",{detail:{x:x,y:y,text:text}}));
 		}

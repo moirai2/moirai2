@@ -697,14 +697,28 @@ sub handleHash{
 }
 ############################## handleArray ##############################
 sub handleArray{
-	my $inputs=shift();
-	if(!defined($inputs)){return [];}
-	if(ref($inputs)ne"ARRAY"){
-		if($inputs=~/,/){my @array=split(/,/,$inputs);$inputs=\@array;}
-		else{$inputs=[$inputs];}
+	my $array=shift();
+	my $defaults=shift();
+	if(!defined($defaults)){$defaults={};}
+	if(!defined($array)){return [];}
+	if(ref($array)ne"ARRAY"){
+		if($array=~/,/){my @temp=split(/,/,$array);$array=\@temp;}
+		else{$array=[$array];}
 	}
-	foreach my $input(@{$inputs}){if($input=~/^\$(.+)$/){$input=$1;};}
-	return $inputs;
+	my @temps=();
+	foreach my $variable(@{$array}){
+		if(ref($variable)eq"HASH"){
+			foreach my $key(keys(%{$variable})){
+				my $value=$variable->{$key};
+				if($key=~/^\$(.+)$/){$key=$1;}
+				push(@temps,$key);
+				$defaults->{$key}=$value;
+			}
+			next;
+		}elsif($variable=~/^\$(.+)$/){$variable=$1;}
+		push(@temps,$variable)
+	}
+	return \@temps;
 }
 ############################## loadCommandFromURL ##############################
 sub loadCommandFromURL{
@@ -725,13 +739,14 @@ sub loadCommandFromURLSub{
 	my $url=shift();
 	$command->{"input"}=[];
 	$command->{"output"}=[];
+	my $default={};
 	if(exists($command->{$urls->{"daemon/inputs"}})){
-		$command->{$urls->{"daemon/inputs"}}=handleArray($command->{$urls->{"daemon/inputs"}});
+		$command->{$urls->{"daemon/inputs"}}=handleArray($command->{$urls->{"daemon/inputs"}},$default);
 		$command->{"inputs"}=handleHash(@{$command->{$urls->{"daemon/inputs"}}});
 		if(!exists($command->{$urls->{"daemon/input"}})){$command->{$urls->{"daemon/input"}}=$command->{$urls->{"daemon/inputs"}};}
 	}
 	if(exists($command->{$urls->{"daemon/input"}})){
-		$command->{$urls->{"daemon/input"}}=handleArray($command->{$urls->{"daemon/input"}});
+		$command->{$urls->{"daemon/input"}}=handleArray($command->{$urls->{"daemon/input"}},$default);
 		my @array=();
 		foreach my $input(@{$command->{$urls->{"daemon/input"}}}){push(@array,$input);}
 		if(exists($command->{$urls->{"daemon/inputs"}})){
@@ -741,17 +756,17 @@ sub loadCommandFromURLSub{
 		$command->{"input"}=\@array;
 	}
 	if(exists($command->{$urls->{"daemon/outputs"}})){
-		$command->{$urls->{"daemon/outputs"}}=handleArray($command->{$urls->{"daemon/outputs"}});
+		$command->{$urls->{"daemon/outputs"}}=handleArray($command->{$urls->{"daemon/outputs"}},$default);
 		$command->{"outputs"}=$command->{$urls->{"daemon/outputs"}};
 	}
 	if(exists($command->{$urls->{"daemon/return"}})){
-		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}});
+		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}},$default);
 		my $hash=handleHash(@{$command->{$urls->{"daemon/output"}}});
 		my $returnvalue=$command->{$urls->{"daemon/return"}};
 		if(!exists($hash->{$returnvalue})){push(@{$command->{$urls->{"daemon/output"}}},$returnvalue);}
 	}
 	if(exists($command->{$urls->{"daemon/output"}})){
-		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}});
+		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}},$default);
 		my @array=();
 		foreach my $output(@{$command->{$urls->{"daemon/output"}}}){push(@array,$output);}
 		if(exists($command->{$urls->{"daemon/outputs"}})){
@@ -792,6 +807,7 @@ sub loadCommandFromURLSub{
 	}
 	if(!exists($command->{$urls->{"daemon/maxjob"}})){$command->{$urls->{"daemon/maxjob"}}=1;}
 	if(exists($command->{$urls->{"daemon/script"}})){handleScript($command);}
+	if(scalar(keys($default))>0){$command->{"default"}=$default;}
 	handleOutput($command);
 }
 ############################## handleOutput ##############################

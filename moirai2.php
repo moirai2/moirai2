@@ -56,6 +56,22 @@ if($command=="insert"){
 	exec("perl rdf.pl -d $db query < $json",$array);
 	unlink($json);
 	foreach($array as $line){echo "$line\n";}
+//############################## symlink.php ##############################
+}else if($command=="symlink"){
+	$url=(isset($_POST["url"])&&strlen($_POST["url"])>0)?htmlspecialchars($_POST["url"]):NULL;
+	if($url==NULL)exit();
+	$filename=(isset($_POST["filename"])&&strlen($_POST["filename"])>0)?htmlspecialchars($_POST["filename"]):NULL;
+	if($filename==null)$filename=basename($url);
+	$symlinkdir="symlink";
+	if(!file_exists($symlinkdir))mkdir($symlinkdir);
+	chmod($symlinkdir,0777);
+	$directory="$symlinkdir/".time();
+	if(!file_exists($directory))mkdir($directory);
+	chmod($directory,0777);
+	$path="$directory/$filename";
+	system("ln -s $url $path");
+	echo $path;
+
 //############################## download.php ##############################
 }else if($command=="download"){
 	try{
