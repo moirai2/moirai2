@@ -52,6 +52,7 @@ $urls->{"daemon/md5"}="https://moirai2.github.io/schema/daemon/md5";
 $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
+$urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
 
 $urls->{"file"}="https://moirai2.github.io/schema/file";
 $urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
@@ -373,11 +374,14 @@ sub printCommand{
 	if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
 	print STDOUT "$cmdline\n";
 	if(exists($command->{$urls->{"daemon/software"}})){print STDOUT "#Software:".join(", ",@{$command->{$urls->{"daemon/software"}}})."\n";}
+	if(exists($command->{$urls->{"daemon/select"}})){print STDOUT "#Select  :".join("\n         :",@{$command->{$urls->{"daemon/select"}}})."\n";}
+	if(exists($command->{$urls->{"daemon/insert"}})&&scalar(@{$command->{$urls->{"daemon/insert"}}})>0){print STDOUT "#Insert  :".join("\n         :",@{$command->{$urls->{"daemon/insert"}}})."\n";}
 	if(scalar(@inputs)>0){print STDOUT "#Input   :".join(", ",@{$command->{"input"}})."\n";}
 	if(scalar(@outputs)>0){print STDOUT "#Output  :".join(", ",@{$command->{"output"}})."\n";}
 	print STDOUT "#Bash    :";
 	my $index=0;
 	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){if($index++>0){print STDOUT "         :"}print STDOUT "$line\n";}
+	if(exists($command->{$urls->{"daemon/description"}})){print STDOUT "#Summary :".join(", ",@{$command->{$urls->{"daemon/description"}}})."\n";}
 	if($command->{$urls->{"daemon/maxjob"}}>1){print STDOUT "#Maxjob  :".$command->{$urls->{"daemon/maxjob"}}."\n";}
 	if(exists($command->{$urls->{"daemon/singlethread"}})){print STDOUT "#Single  :".($command->{$urls->{"daemon/singlethread"}}?"true":"false")."\n";}
 	if(exists($command->{$urls->{"daemon/qsubopt"}})){print STDOUT "#QsubOpt :".$command->{$urls->{"daemon/qsubopt"}}."\n";}
@@ -439,6 +443,7 @@ sub workflowProcess{
 			if(ref($object)ne"ARRAY"){$object=[$object];}
 			foreach my $o(@{$object}){
 				if($o eq ""){next;}
+				if(checkWorkflowPredicate($o)){next;}
 				my $workflow2=loadWorkflowFromURL($o,$workflows);
 				if(!exists($workflow2->{$o})||ref($workflow2->{$o})ne"HASH"){push(@{$requireds},$o);next;}
 				foreach my $url(keys(%{$workflow2->{$o}})){workflowProcess($url,$commands,$workflows,$urls,$requireds,$nodeid);}
@@ -446,6 +451,15 @@ sub workflowProcess{
 		}
 	}
 	return ($nodeid,$workflow);
+}
+############################## checkWorkflowPredicate ##############################
+sub checkWorkflowPredicate{
+	my $predicate=shift();
+	my $subject=dirname($predicate);
+	my $command="perl rdf.pl -d $rdfdb object $subject $predicate";
+	my $object=`$command`;
+	chomp($object);
+	return ($object ne "");
 }
 ############################## loadWorkflowFromURL ##############################
 sub loadWorkflowFromURL{
@@ -800,6 +814,7 @@ sub loadCommandFromURLSub{
 	if(exists($command->{$urls->{"daemon/seqcount"}})){$command->{$urls->{"daemon/seqcount"}}=handleArray($command->{$urls->{"daemon/seqcount"}});}
 	if(exists($command->{$urls->{"daemon/import"}})){if(ref($command->{$urls->{"daemon/import"}}) ne "ARRAY"){$command->{$urls->{"daemon/import"}}=[$command->{$urls->{"daemon/import"}}];}}
 	if(exists($command->{$urls->{"daemon/software"}})){$command->{$urls->{"daemon/software"}}=handleArray($command->{$urls->{"daemon/software"}});}
+	if(exists($command->{$urls->{"daemon/description"}})){$command->{$urls->{"daemon/description"}}=handleArray($command->{$urls->{"daemon/description"}});}
 	if(exists($command->{$urls->{"daemon/insert"}})){$command->{"insertKeys"}=handleKeys($command->{$urls->{"daemon/insert"}},$command);}
 	if(exists($command->{$urls->{"daemon/update"}})){$command->{"updateKeys"}=handleKeys($command->{$urls->{"daemon/update"}},$command);}
 	if(exists($command->{$urls->{"daemon/delete"}})){$command->{"deleteKeys"}=handleKeys($command->{$urls->{"daemon/delete"}},$command);}

@@ -45,6 +45,7 @@ $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
 
 $urls->{"miniconda3"}="https://moirai2.github.io/software/miniconda3";
 $urls->{"miniconda3/bin"}="https://moirai2.github.io/software/miniconda3/bin";
+$urls->{"miniconda3/directory"}="https://moirai2.github.io/software/miniconda3/directory";
 
 ############################## HELP ##############################
 sub help{
@@ -645,7 +646,7 @@ sub whichConda{
 	chomp($condabin);
 	if($condabin eq ""){return;}
 	my $condadir=dirname(dirname($condabin));
-	my $json={$urls->{"miniconda3"}=>{$urls->{"miniconda3/bin"}=>$condabin}};
+	my $json={$urls->{"miniconda3"}=>{$urls->{"miniconda3/bin"}=>$condabin,$urls->{"miniconda3/directory"}=>$condadir}};
 	my $dbh=openDB($database);
 	$dbh->begin_work;
 	my $linecount=insertRDF($dbh,$json);
