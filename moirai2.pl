@@ -1126,9 +1126,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/linecount"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1137,9 +1139,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/seqcount"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1148,9 +1152,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/md5"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1159,9 +1165,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/filesize"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1175,9 +1183,11 @@ sub bashCommand{
 	print OUT "EOF\n";
 	if(!exists($command->{"isworkflow"})){
 		foreach my $output(@{$command->{"outputs"}}){
+			print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 			print OUT "for e in \${$output"."[\@]} ; do\n";
 			print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$e\">>\$tmpdir/\$insertfile\n";
 			print OUT "done\n";
+			print OUT "fi\n";
 		}
 	}
 	if(exists($command->{"batchmode"})){print OUT "perl \$cwd/rdf.pl -d \$localdb dump >> \$tmpdir/\$insertfile\nrm \$localdb\n";}
@@ -1186,9 +1196,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/linecount"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1197,9 +1209,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/seqcount"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1208,9 +1222,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/md5"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1219,9 +1235,11 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/filesize"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
+				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
+				print OUT "fi\n";
 			}
 		}
 	}
@@ -1249,7 +1267,9 @@ sub bashCommand{
 	}
 	print OUT "########## completed ##########\n";
 	my $importcount=0;
-	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$cwd/$importfile $ctrldir/insert/$nodeid.import\n";$importcount++;}
+	my $nodename=$nodeid;
+	$nodename=~s/[^A-za-z0-9]/_/g;
+	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$cwd/$importfile $ctrldir/insert/$nodename.import\n";$importcount++;}
 	print OUT "mv \$cwd/\$tmpdir/\$completedfile $ctrldir/completed/\$dirname.sh\n";
 	close(OUT);
 	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$updatefile,$bashfile,\@scriptfiles,$tmpdir,$cwd);
