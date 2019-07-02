@@ -821,7 +821,7 @@ sub loadCommandFromURLSub{
 	}
 	if(!exists($command->{$urls->{"daemon/maxjob"}})){$command->{$urls->{"daemon/maxjob"}}=1;}
 	if(exists($command->{$urls->{"daemon/script"}})){handleScript($command);}
-	if(scalar(keys($default))>0){$command->{"default"}=$default;}
+	if(scalar(keys(%{$default}))>0){$command->{"default"}=$default;}
 	#handleOutput($command);
 }
 ############################## handleOutput ##############################
