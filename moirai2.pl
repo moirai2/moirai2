@@ -139,14 +139,11 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 ############################## MAIN ##############################
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
 my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/workflow"}."\")";
-my $newSoftwareQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/software"}."\")";
 my $cwd=Cwd::getcwd();
-if(scalar(@ARGV)==1&&$ARGV[0] eq "daemon"){autodaemon();exit();}
+if($ARGV[0] eq "daemon"){autodaemon();exit();}
+if($ARGV[0] eq "test"){test();exit();}
 my $rdfdb=$opt_d;
-if(!defined($rdfdb)){
-	if(scalar(@ARGV)>0){$rdfdb="rdf.sqlite3";}
-	else{print STDERR "Please specify database by -d option.\n";exit(1);}
-}
+if(!defined($rdfdb)){$rdfdb="rdf.sqlite3";}
 if($rdfdb!~/^\//){$rdfdb="$cwd/$rdfdb";}
 my $sleeptime=defined($opt_s)?$opt_s:10;
 my $use_qsub=$opt_q;
@@ -188,7 +185,7 @@ if(defined($opt_i)){
 	$dbh->disconnect;
 	$results->{"rows"}=$rows;
 	$results->{"keys"}=$keys;
-	print_rows($keys,$rows);
+	if($showlog){print_rows($keys,$rows);}
 }
 if(scalar(@ARGV)>0){
 	$cmdurl=shift(@ARGV);
@@ -238,7 +235,6 @@ while(true){
 	$ctrlcount=0;
 	if($jobs_running<$maxjob){
 		foreach my $url(lookForNewCommands($rdfdb,$newExecuteQuery,$commands)){
-			#if(checkSoftwareSetting($commands->{$url})==0){next;}
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 			if($job>0){$jobcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
 		}
@@ -396,32 +392,39 @@ sub printCommand{
 ############################## assignCommand ##############################
 sub assignCommand{
 	my $command=shift();
+	my $results=shift();
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
-	my @arguments=();
-	foreach my $input(@inputs){push(@arguments,promtCommandInput($command,$input));}
-	foreach my $output(@outputs){push(@arguments,promtCommandOutput($command,$output));}
-	return @arguments;
+	foreach my $input(@inputs){if(!exists($results->{$input})){promtCommandInput($command,$results,$input);}}
+	#foreach my $output(@outputs){if(!exists($results->{$output})){promtCommandOutput($command,$results,$output);}}
 }
 ############################## promtCommandInput ##############################
 sub promtCommandInput{
 	my $command=shift();
+	my $results=shift();
 	my $label=shift();
-	print STDOUT "#Input [$label]?";
+	print STDOUT "#Input: $label";
+	my $default;
+	if(exists($command->{"default"})&&exists($command->{"default"}->{$label})){
+		$default=$command->{"default"}->{$label};
+		print STDOUT " [$default]";
+	}
+	print STDOUT "? ";
 	my $value=<STDIN>;
 	chomp($value);
-	if($value eq ""){exit(1);}
-	return $value;
+	if($value eq ""){if(defined($default)){$value=$default;}else{exit(1);}}
+	$results->{$label}=$value;
 }
 ############################## promtCommandOutput ##############################
 sub promtCommandOutput{
 	my $command=shift();
+	my $results=shift();
 	my $label=shift();
-	print STDOUT "#Output [$label]?";
+	print STDOUT "#Output: $label? ";
 	my $value=<STDIN>;
 	chomp($value);
 	if($value eq ""){return;}
-	return $value;
+	$results->{$label}=$value;
 }
 ############################## workflowProcess ##############################
 sub workflowProcess{
@@ -481,44 +484,38 @@ sub commandProcess{
 	my $results=shift(@arguments);
 	my $command=loadCommandFromURL($url,$commands);
 	$commands->{$url}=$command;
+	my @temp=();
+	foreach my $argument(@arguments){if($argument=~/^(.+)=(.+)$/){$results->{$1}=$2;}else{push(@temp,$argument);}}
+	@arguments=@temp;
 	if(defined($opt_o)){push(@{$command->{"insertKeys"}},@{handleKeys($opt_o,$command)});}
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
 	if($showlog){
 		my $cmdline="#Command: ".basename($command->{$urls->{"daemon/command"}});
-		if(scalar(@inputs)>0){$cmdline.=" [".join("] [",@inputs)."]";}
-		if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
+		if(scalar(@inputs)>0){$cmdline.=" \$".join(" \$",@inputs);}
+		if(scalar(@outputs)>0){$cmdline.=" \$".join(" \$",@outputs);}
 		print STDERR "$cmdline\n";
 	}
-	if(scalar(@inputs)>0&&scalar(@arguments)==0){@arguments=assignCommand($command);}
-	if(scalar(@arguments)<scalar(@inputs)){exit(1);}
+	foreach my $input(@inputs){if(!exists($results->{$input})){$results->{$input}=shift(@arguments);}}
+	assignCommand($command,$results);
+	foreach my $input(@inputs){if(!exists($results->{$input})){exit(1);}}
 	my @inserts=();
 	my @nodeids=();
-	if(scalar(keys(%{$results}))>0){
-		foreach my $row(@{$results->{"rows"}}){
-			my $variables={};
-			for(my $i=0;$i<scalar(@{$row});$i++){
-				my $key=$results->{"keys"}->[$i];
-				my $val=$row->[$i];
-				$variables->{"\$$key"}=$val;
-			}
-			my $hash={};
-			for(my $i=0;$i<scalar(@inputs);$i++){
-				my $input=$inputs[$i];
-				my $argument=$arguments[$i];
-				if(exists($variables->{$argument})){$argument=$variables->{$argument};}
-				$hash->{$input}=$argument;
-			}
-			my ($nodeid,@array)=commandProcessSub($url,$hash);
-			push(@nodeids,$nodeid);
-			push(@inserts,@array);
+	if(!exists($results->{"rows"})){$results->{"rows"}=[[]];}
+	foreach my $row(@{$results->{"rows"}}){
+		my $variables={};
+		for(my $i=0;$i<scalar(@{$row});$i++){
+			my $key=$results->{"keys"}->[$i];
+			my $val=$row->[$i];
+			$variables->{"\$$key"}=$val;
 		}
-	}else{
 		my $hash={};
-		foreach my $input(@inputs){$hash->{$input}=shift(@arguments);}
-		foreach my $output(@outputs){
-			if(scalar(@arguments)==0){last;}
-			$hash->{$output}=shift(@arguments);
+		for(my $i=0;$i<scalar(@inputs);$i++){
+			my $input=$inputs[$i];
+			my $value=$input;
+			if(exists($results->{$input})){$value=$results->{$input}}
+			if(exists($variables->{$value})){$value=$variables->{$value};}
+			$hash->{$input}=$value;
 		}
 		my ($nodeid,@array)=commandProcessSub($url,$hash);
 		push(@nodeids,$nodeid);
@@ -1126,7 +1123,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/linecount"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1139,7 +1136,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/seqcount"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1152,7 +1149,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/md5"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1165,7 +1162,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/filesize"}}}){
 			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1177,13 +1174,14 @@ sub bashCommand{
 	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
 	if(!exists($command->{"isworkflow"})){
 		print OUT "\$nodeid\t".$urls->{"daemon/timeended"}."\t`date +%s`\n";
+		foreach my $row(@{$command->{"insertKeys"}}){print OUT join("\t",@{$row})."\n";}
 		foreach my $output(@{$command->{"output"}}){print OUT "\$nodeid\t\$cmdurl#$output\t\$$output\n";}
 	}
-	if(scalar(@{$command->{"insertKeys"}})>0){foreach my $row(@{$command->{"insertKeys"}}){print OUT join("\t",@{$row})."\n";}}
 	print OUT "EOF\n";
+	if(scalar(@{$command->{"insertKeys"}})>0){foreach my $row(@{$command->{"insertKeys"}}){handleInsert($command,@{$row});}}
 	if(!exists($command->{"isworkflow"})){
 		foreach my $output(@{$command->{"outputs"}}){
-			print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+			print OUT "if [ \${#".$output."[\@]} -gt 0 ] ; then\n";
 			print OUT "for e in \${$output"."[\@]} ; do\n";
 			print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$e\">>\$tmpdir/\$insertfile\n";
 			print OUT "done\n";
@@ -1196,7 +1194,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/linecount"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1209,7 +1207,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/seqcount"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1222,7 +1220,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/md5"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1235,7 +1233,7 @@ sub bashCommand{
 		foreach my $key(@{$command->{$urls->{"daemon/filesize"}}}){
 			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";}
 			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#id[\@]} -gt 0 ] ; then\n";
+				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
 				print OUT "for e in \${$key"."[\@]} ; do\n";
 				print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";
 				print OUT "done\n";
@@ -1501,6 +1499,37 @@ sub writeCompleteFile{
 	print OUT "rmdir $tmpdir/ctrl/ > /dev/null 2>&1\n";
 	print OUT "rmdir $tmpdir/ > /dev/null 2>&1\n";
 	close(OUT);
+}
+############################## handleInsert ##############################
+sub handleInsert{
+	my $command=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $sub=substr($subject,1);
+	my $pre=substr($predicate,1);
+	my $obj=substr($object,1);
+	if(existsArray($command->{"outputs"},$sub)){
+		print OUT "if [ \${#".$sub."[\@]} -gt 0 ] ; then\n";
+		print OUT "for s in \${$sub"."[\@]} ; do\n";
+		print OUT "echo \"\$s\t$predicate\t$object\">>\$tmpdir/\$insertfile\n";
+		print OUT "done\n";
+		print OUT "fi\n";
+	}elsif(existsArray($command->{"outputs"},$pre)){
+		print OUT "if [ \${#".$pre."[\@]} -gt 0 ] ; then\n";
+		print OUT "for p in \${$pre"."[\@]} ; do\n";
+		print OUT "echo \"$subject\t\$p\t$object\">>\$tmpdir/\$insertfile\n";
+		print OUT "done\n";
+		print OUT "fi\n";
+	}elsif(existsArray($command->{"outputs"},$obj)){
+		print OUT "if [ \${#".$obj."[\@]} -gt 0 ] ; then\n";
+		print OUT "for o in \${$obj"."[\@]} ; do\n";
+		print OUT "echo \"$subject\t$predicate\t\$o\">>\$tmpdir/\$insertfile\n";
+		print OUT "done\n";
+		print OUT "fi\n";
+	}else{
+		print OUT "echo \"$subject\t$predicate\t$object\">>\$tmpdir/\$insertfile\n";
+	}
 }
 ############################## handleKeys ##############################
 sub handleKeys{

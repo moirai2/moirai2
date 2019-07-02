@@ -113,8 +113,8 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 insert D E F","inserted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 select","A\tB\tC\nD\tE\tF");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 select A","A\tB\tC");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 select ? E","D\tE\tF");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 select ? ? C","A\tB\tC");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select % E","D\tE\tF");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select % % C","A\tB\tC");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete A B C","deleted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 select","D\tE\tF");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f json select","{\"D\":{\"E\":\"F\"}}");
@@ -122,7 +122,7 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 insert D G H","inserted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f tsv select","D	E	F\nD	G	H");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 -f json select","{\"D\":{\"E\":\"F\",\"G\":\"H\"}}");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete ? ? H","deleted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete % % H","deleted 1");
 	testCommand("echo 'D\tE\tF'|perl rdf.pl -d test/rdf.sqlite3 -f tsv delete","deleted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 newnode","test/rdf.sqlite3#node1");
 	testCommand("echo '' > test/test.txt","");
@@ -137,11 +137,11 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test3.txt","replaced 0");
 	testCommand("perl rdf.pl md5 test/test.txt | perl rdf.pl -d test/rdf.sqlite3 import","imported 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test2.txt","replaced 1");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete ? ".$urls->{"file/md5"}." ?","deleted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete % ".$urls->{"file/md5"}." %","deleted 1");
 	testCommand("echo \"A\tB\tB\nA\tB\tC\nA\tC\tD\" | perl rdf.pl -d test/rdf.sqlite3 -f tsv insert","inserted 3");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 object","(B C D E)");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A","(B C D E)");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B","(B C E)");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object","B C D E");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A","B C D E");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B","B C E");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B C","C");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A C","D");
 	unlink("test/test2.txt");
@@ -259,7 +259,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	if(scalar(@objects)==1){print $objects[0]."\n";}
 	else{
 		@objects=sort{$a cmp $b}@objects;
-		print "(".join(" ",@objects).")\n";
+		print join(" ",@objects)."\n";
 	}
 }elsif(lc($command) eq "insert"){
 	if(!defined($opt_f)){
@@ -935,7 +935,7 @@ sub dbDelete{
 	if($predicate ne "" && $predicate ne "%"){push(@wheres,createWhere("predicate",$predicate));}
 	if($object ne "" && $object ne "%"){push(@wheres,createWhere("object",$object));}
 	if(scalar(@wheres)==0){return;}
-	$query.=" where ".join(" and ",@wheres);
+	$query.=" where".join(" and ",@wheres);
 	my $dbh=openDB($database);
 	$dbh->begin_work;
 	my $sth=$dbh->prepare($query);
@@ -985,9 +985,9 @@ sub createWhere{
 	my $label=shift();
 	my $object=shift();
 	my $where="";
-	if(ref($object) eq "ARRAY"){$where.=" e1.$label in(select id from node where data in (\"".join("\",\"",@{$object})."\"))";}
-	elsif($object=~/\%/){$where.=" e1.$label in (select id from node where data like '$object')";}
-	else{$where.=" e1.$label=(select id from node where data='$object')";}
+	if(ref($object) eq "ARRAY"){$where.=" $label in(select id from node where data in (\"".join("\",\"",@{$object})."\"))";}
+	elsif($object=~/\%/){$where.=" $label in (select id from node where data like '$object')";}
+	else{$where.=" $label=(select id from node where data='$object')";}
 	return $where;
 }
 ############################## dbSelect ##############################
@@ -999,9 +999,9 @@ sub dbSelect{
 	my $dbh=openDB($database);
 	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
 	my @wheres=();
-	if($subject ne "" && $subject ne "%"){push(@wheres,createWhere("subject",$subject));}
-	if($predicate ne "" && $predicate ne "%"){push(@wheres,createWhere("predicate",$predicate));}
-	if($object ne "" && $object ne "%"){push(@wheres,createWhere("object",$object));}
+	if($subject ne "" && $subject ne "%"){push(@wheres,createWhere("e1.subject",$subject));}
+	if($predicate ne "" && $predicate ne "%"){push(@wheres,createWhere("e1.predicate",$predicate));}
+	if($object ne "" && $object ne "%"){push(@wheres,createWhere("e1.object",$object));}
 	if(scalar(@wheres)>0){$query.=" where".join(" and ",@wheres);}
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
