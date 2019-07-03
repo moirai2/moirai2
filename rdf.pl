@@ -872,7 +872,7 @@ sub printQueryResults{
 	my @a=();
 	foreach my $result(@{$results}){
 		my @b=();
-		foreach my $key(keys(%{$result})){push(@b,"\"$key\":\"".$result->{$key}."\"");}
+		foreach my $key(keys(%{$result})){push(@b,"\"$key\":\"".escapeReturnTab($result->{$key})."\"");}
 		push(@a,"{".join(",",@b)."}");
 	}
 	print "[".join(",",@a)."]\n";
@@ -1425,7 +1425,6 @@ sub escapeReturnTab{
 	$string=~s/\t/\\\t/g;
 	$string=~s/\r/\\\r/g;
 	$string=~s/\"/\\\"/g;
-	$string=~s/\'/\\\'/g;
 	return $string;
 }
 ############################## loadJsonFromWeb ##############################
