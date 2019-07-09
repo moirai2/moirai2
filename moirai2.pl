@@ -1175,7 +1175,7 @@ sub bashCommand{
 						print OUT "$key=\$tmpdir/$basename\n";
 						print OUT "bzip2 -cd $value>\$$key\n";
 						push(@unzips,"\$tmpdir/$basename");
-					}elsif($value=~/\.gz(ip)?$/){
+					}elsif($value=~/^(.+)\.gz(ip)?$/){
 						my $basename=basename($1);
 						print OUT "$key=\$tmpdir/$basename\n";
 						print OUT "gzip -cd $value>\$$key\n";
