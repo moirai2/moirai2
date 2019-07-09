@@ -1,0 +1,192 @@
+<html>
+<head>
+	<title>Command Editor</title>
+	<meta http-equiv="content-type" content="text/html;charset=UTF-8"/>
+	<style type="text/css">h1{text-align:center}table{text-align:center;border-collapse:collapse;}th{border: 1px solid black}td{border: 1px solid black}</style>
+	<script src="js/jquery/jquery-2.2.3.min.js"></script>
+	<script src="js/ah3q/DnDController.js"></script>
+	<script src="js/ah3q/Utility.js"></script>
+	<script>
+	var sysvars=["cmdurl","rdfdb","execid","cwd","tmpdir","filebsnm","bashfile","stdoutfile","stderrfile","deletefile","insertfile","completedfile","localdb"];
+	var variables=[];
+	var input=[];
+	var output=[];
+	var outputArea;
+	var flagInput;
+	var scripts=[];
+	var inputEdit=true;
+	var controller=new DnDController("main").whenFileIsDroppedRead().whenUrlIsDroppedRead();
+	function convert(){
+		$("#input").on("click",function(){inputEdit=true;});
+		var code=$("#input").val().trim();
+		if(inputEdit){
+			variables=setupVariables(code,variables);
+			inputEdit=false;
+		}else{
+			if(!checkInputOutput(variables)){
+				alert("Please select at least one input and output.");
+			}else{
+				if(outputArea==null){outputArea=$("<hr><b>JSON</b><br><textarea id='output' rows=10 cols=100></textarea>");$("body").append(outputArea);}
+				outputArea.val(createCommand(code,variables));
+			}
+		}
+	}
+	$(document).ready(function(){
+		controller.addEventListener("textWasRead",function(e){
+			var filename=e.detail.filename;
+			var text=e.detail.text;
+			var index=scripts.length;
+			scripts.push(filename);
+			$("#command").append($("<div><b>$tmpdir/"+filename+"</b><br><textarea id='script"+index+"' rows=10 cols=100>"+text+"</textarea></div>"));
+		});
+	});
+	function encodeCode(code){
+		var lines=code.split(/\n/);
+		var codes=[];
+		lines.forEach(function(line){
+			line=line.replace(new RegExp("\r",'g'),"");
+			line=line.replace(new RegExp("^\\s*",),"");
+			line=line.replace(new RegExp("\\\\",'g'),"\\\\\\\\");
+			line=line.replace(new RegExp("\"",'g'),"\\\"");
+			line=line.replace(new RegExp("\t",'g'),"\\\\t");
+			line="\""+line+"\"";
+			codes.push(line);
+		});
+		if(lines.length>1)return "["+codes.join(",")+"]";
+		else return codes[0];
+	}
+	function checkInputOutput(variables){setInputsOutputs(variables);return ((input.length>0)||(inputs.length>0))&&((output.length>0)||(outputs.length>0));}
+	function setInputsOutputs(variables){
+		input=[];
+		output=[];
+		inputs=[];
+		outputs=[];
+		variables.forEach(function(variable){
+			var selected=$("input[name="+variable+"type]:checked").val();
+			var checked=$("#"+variable+"array:checked").val();
+			if(selected=="input"){
+				if(checked=="on")inputs.push(variable);
+				else input.push(variable);
+			}else if(selected=="output"){
+				if(checked=="on")outputs.push(variable);
+				else output.push(variable);
+			}
+		});
+	}
+	function setupVariables(code,previous){
+		var hash={};
+		var outs={};
+		var regexp=new RegExp("(\\$\\w+)","g");
+		var lines=code.split("\n");
+		lines.forEach(function(line){
+			var array=line.match(regexp);
+			if(array!=null){
+				array.forEach(function(variable){
+					variable=variable.substr(1);
+					if(sysvars.indexOf(variable)>=0)return;
+					hash[variable]=1;
+				});
+			}
+		});
+		var regexp2=new RegExp("^(\\w+)=","g");
+		lines.forEach(function(line){
+			var array2=line.match(regexp2);
+			if(array2!=null){
+				array2.forEach(function(variable){
+					variable=variable.substr(0,variable.length-1);
+					if(sysvars.indexOf(variable)>=0)return;
+					hash[variable]=1;
+					outs[variable]=1;
+				});
+			}
+		});
+		var variables=Object.keys(hash);
+		previous.forEach(function(variable){if(variables.indexOf(variable)>=0)return;$("#"+variable+"li").remove();});
+		variables.forEach(function(variable){
+			if(previous.indexOf(variable)>=0)return;
+			var type=(variable in outs)?"output":"input";
+			var element="<li id='"+variable+"li'><b>"+variable+"</b> <input type='radio' id='"+variable+"input' name='"+variable+"type' value='input'"+((type=="input")?"checked":"")+">input</input> <input type='radio' id='"+variable+"output' name='"+variable+"type' value='output'"+((type=="output")?"checked":"")+">output</input>";
+			element+=" <input type='checkbox' id='"+variable+"array'>array</input>";
+			element+="</li>";
+			$("#variables").append($(element));
+		});
+		var arrayline="<li><b>array</b>";
+		var unzipline="<li><b>unzip</b>";
+		var linecount="<li><b>linecount</b>";
+		var seqcount="<li><b>seqcount</b>";
+		var md5line="<li><b>md5</b>";
+		var gzipline="<li><b>gzip</b>";
+		var bzip2line="<li><b>bzip2</b>";
+		return variables;
+	}
+	function createCommand(code,variables){
+		setInputsOutputs(variables);
+		var script="{";
+		if(input.length)script+="\"https://moirai2.github.io/schema/daemon/input\":"+((input.length>1)?"[\"$"+input.join("\",\"$")+"\"]":"\"$"+input[0]+"\"");
+		if(inputs.length){
+			if(input.length)script+=",";
+			script+="\"https://moirai2.github.io/schema/daemon/inputs\":"+((inputs.length>1)?"[\"$"+inputs.join("\",\"$")+"\"]":"\"$"+inputs[0]+"\"");
+		}
+		script+=",\"https://moirai2.github.io/schema/daemon/bash\":"+encodeCode(code);
+		if(scripts.length>0){
+			script+=",\"https://moirai2.github.io/schema/daemon/script\":";
+			if(scripts.length>1)script+="[";
+			for(var i=0;i<scripts.length;i++){
+				if(i>0)script+=",";
+				script+="{\"https://moirai2.github.io/schema/daemon/script/name\":\"$tmpdir/"+scripts[i]+"\",\"https://moirai2.github.io/schema/daemon/script/code\":"+encodeCode($("#script"+i).val().trim())+"}";
+			};
+			if(scripts.length>1)script+="]";
+		}
+		if(output.length)script+=",\"https://moirai2.github.io/schema/daemon/output\":"+((output.length>1)?"[\"$"+output.join("\",\"$")+"\"]":"\"$"+output[0]+"\"");
+		if(outputs.length)script+=",\"https://moirai2.github.io/schema/daemon/outputs\":"+((outputs.length>1)?"[\"$"+outputs.join("\",\"$")+"\"]":"\"$"+outputs[0]+"\"");
+		script+="}";
+		return script;
+	}
+	</script>
+</head>
+<body id="main">
+	<h1>Command Editor</h1>
+	<ul>
+		<li>Drag and drop script file or url to add to a json. (example:<a href="input/test.pl">test.pl</a>)</li>
+		<li>System variables: <b>cmdurl</b>, <b>rdfdb</b>, <b>execid</b>, <b>cwd</b>, <b>tmpdir</b>, <b>filebsnm</b>, <b>bashfile</b>, <b>stdoutfile</b>, <b>stderrfile</b>, <b>deletefile</b>, <b>insertfile</b>, <b>completedfile</b>, and <b>localdb</b>.  Don't use them as a variable name.</li>
+		<li>There is a need to declare variables in order to save results to the RDF database.</li>
+		<li>If input or output is an <a href="https://www.tldp.org/LDP/Bash-Beginners-Guide/html/sect_10_02.html">array variable</a>, click on array checkbox.</li>
+		<li><b>"https://moirai2.github.io/schema/daemon/unzip"</b> - Unzip input files before execution.  Temporary files will be deleted after execution.</li>
+		<li><b>"https://moirai2.github.io/schema/daemon/md5"</b> - Stores file md5 information in RDF file.</li>
+		<li><b>"https://moirai2.github.io/schema/daemon/filesize"</b> - Stores filesize information in RDF file.</li>
+		<li><b>"https://moirai2.github.io/schema/daemon/linecount"</b> - Stores file line count information in RDF file.</li>
+		<li><b>"https://moirai2.github.io/schema/daemon/seqcount"</b> - Stores file sequence count information in RDF file.</li>
+		<li>Example: To store filepath to a variable.
+<pre>
+output="$tmpdir/output.txt"
+perl test.pl < $input > $output
+</pre>
+		</li>
+		<li>Example: To store a return value from a command to a variable.
+<pre>
+output=`perl test.pl < $input`
+</pre>
+		</li>
+		<li>Example: To store files created from a command to an array variable.
+<pre>
+output=(`ls *.bam`)
+</pre>
+		</li>
+		<li>Example: To use mulitiple input as arguments of a command.
+<pre>
+perl test.pl ${input[@]} > $output
+</pre>
+		</li>
+	</ul>
+	<hr>
+	<div id="command">
+		<b>Bash</b><br>
+<textarea id="input" rows=10 cols=100>
+output="$tmpdir/output.txt"
+perl $tmpdir/script.pl < $input > $output
+</textarea>
+	</div>
+	<div id="variableDiv"><ul id="variables"></ul></div>
+	<div><button onclick="convert()">convert</button></div>
+</body>
+</html>
