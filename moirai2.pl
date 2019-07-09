@@ -551,6 +551,11 @@ sub commandProcess{
 		if(exists($userdefined->{$input})){next;}
 		$userdefined->{$input}=shift(@arguments);
 	}
+	foreach my $output(@outputs){
+		if(scalar(@arguments)==0){last;}
+		if(exists($userdefined->{$output})){next;}
+		$userdefined->{$output}=shift(@arguments);
+	}
 	assignCommand($command,$userdefined,$queryresults);
 	my @inserts=();
 	my @nodeids=();
@@ -572,6 +577,14 @@ sub commandProcess{
 			if(exists($userdefined->{$input})){$value=$userdefined->{$input};}
 			if(exists($vars->{$value})){$value=$vars->{$value};}
 			$hash->{$input}=$value;
+		}
+		for(my $i=0;$i<scalar(@outputs);$i++){
+			my $output=$outputs[$i];
+			my $value=$output;
+			if(exists($queryresults->{$output})){$value=$queryresults->{$output}}
+			if(exists($userdefined->{$output})){$value=$userdefined->{$output};}
+			if(exists($vars->{$value})){$value=$vars->{$value};}
+			$hash->{$output}=$value;
 		}
 		if(!defined($keys)){my @temp=sort{$a cmp $b}keys(%{$hash});$keys=\@temp;}
 		my @temp=();
