@@ -92,7 +92,6 @@ sub help{
 		print "         2019/01/08  'merge' was added to combine two database into one.\n";
 		print "         2018/12/25  'replace' and 'rename' was added to change node values for 'mv' command.\n";
 		print "         2018/11/27  'reindex' was added to reindex node ids after removing controls.\n";
-		print "         2018/11/27  Remove 'execute','control', and 'log' were added.\n";
 		print "         2018/11/19  insert/update/delete with tsv/json format were added.\n";
 		print "         2018/11/08  Made import faster by storing nodes and edges data in perl hashtables.\n";
 		print "         2018/11/07  Added assemble expression codes.\n";
@@ -144,6 +143,11 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B","B C E");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B C","C");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A C","D");
+	testCommand("perl rdf.pl ls test","test/rdf.sqlite3\ntest/test2.txt");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 -g txt ls test","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object ".$urls->{"system"}." ".$urls->{"system/file"}." %","test/test2.txt");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete % % test/test2.txt","deleted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete A","deleted 4");
 	unlink("test/test2.txt");
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
@@ -511,7 +515,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 }elsif(lc($command) eq "download"){
 	registerDownloads($database,@ARGV);
 	my @files=downloadFiles($database);
-	if(scalar(@files)>1){print "(".join(" ",@files).")\n";}
+	if(scalar(@files)>1){foreach my $file(@files){print "$file\n";}}
 	else{print $files[0]."\n";}
 }elsif(lc($command) eq "executes"){
 	printExecutesInJson(retrieveExecutes($database));
@@ -523,7 +527,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	whichSoftware($database,@ARGV);
 }elsif(lc($command) eq "ls"){
 	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
-}elsif(lc($command) eq "imtable"){
+}elsif(lc($command) eq "importtable"){
 	my ($writer,$file)=tempfile(UNLINK=>1);
 	foreach my $file(@ARGV){importTable($file,$writer);}
 	close($writer);
@@ -531,7 +535,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	my $linecount=importDB($database,$reader);
 	close($reader);
 	if(!$opt_q){print "imported $linecount\n";}
-}elsif(lc($command) eq "extable"){
+}elsif(lc($command) eq "exporttable"){
 	my ($writer,$tmp)=tempfile(UNLINK=>1);
 	dumpDB($database,undef,$writer);
 	close($writer);
@@ -621,22 +625,23 @@ sub ls{
 	my $filegrep=shift(@files);
 	my $recursive=shift(@files);
 	if(scalar(@files)==0){push(@files,".");}
-	if(defined($format)){
-		foreach my $path(listFiles($filegrep,$recursive,@files)){
-			my @outputs=basenames($path);
-			print_table(\@outputs);
+	my @files=listFiles($filegrep,$recursive,@files);
+	if(defined($opt_d)){
+		my ($writer,$file)=tempfile(UNLINK=>1);
+		foreach my $file(@files){print $writer $urls->{"system"}."\t".$urls->{"system/file"}."\t$file\n";}
+		if(defined($format)){
+			foreach my $file(@files){
+				my $line=$format;
+				$line=~s/\$path/$file/g;
+				print $writer "$line\n";
+			}
 		}
-	}else{
-		my @files=listFiles($filegrep,$recursive,@files);
-		if(defined($opt_d)){
-			my ($writer,$file)=tempfile(UNLINK=>1);
-			foreach my $file(@files){print $writer $urls->{"file"}."$file\n";}
-			close($writer);
-			my $reader=IO::File->new($file);
-			my $linecount=importDB($database,$reader);
-			close($reader);
-		}else{foreach my $file(@files){print "$file\n";}}
-	}
+		close($writer);
+		my $reader=IO::File->new($file);
+		my $linecount=importDB($database,$reader);
+		close($reader);
+		if(!$opt_q){print "inserted $linecount\n";}
+	}else{foreach my $file(@files){print "$file\n";}}
 }
 ############################## whichConda ##############################
 sub whichConda{
@@ -2370,12 +2375,12 @@ sub listFiles{
 			if(-d $file){
 				if($recursivesearch!=0){push(@inputfiles,listFiles($filegrep,$recursivesearch-1,$file));}
 				next;
-			}elsif($file!~/$filegrep$/){next;}
+			}elsif($file!~/$filegrep/){next;}
 			push(@inputfiles,$file);
 		}
 		closedir(DIR);
 	}
-	return @inputfiles;
+	return sort{$a cmp $b}@inputfiles;
 }
 ############################## countLines ##############################
 sub countLines{

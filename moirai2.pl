@@ -53,20 +53,6 @@ $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
 $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
-
-$urls->{"file"}="https://moirai2.github.io/schema/file";
-$urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
-$urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
-$urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
-
-$urls->{"system"}="https://moirai2.github.io/schema/system";
-$urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
-$urls->{"system/upload"}="https://moirai2.github.io/schema/system/upload";
-$urls->{"system/path"}="https://moirai2.github.io/schema/system/path";
-$urls->{"system/software"}="https://moirai2.github.io/schema/system/software";
-
-$urls->{"software"}="https://moirai2.github.io/software";
-$urls->{"workflow"}="https://moirai2.github.io/workflow";
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -193,25 +179,25 @@ if(defined($opt_i)){
 	}
 }
 if(defined($cmdurl)){
-	if($cmdurl=~/\/software\/.+json$/){
-		my $outputs=[];
-		my $requireds=[];
-		my $nodeid=dirname($cmdurl);
-		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
-		my $vars=promptRequireds(@{$requireds});
-		promtWorkflows(@{$outputs});
-		setupWorkflows($nodeid,$outputs,$vars);
-	}elsif($cmdurl=~/\/workflow\/.+json$/){
-		my $outputs=[];
-		my $requireds=[];
-		my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);
-		my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
-		my $vars=promptRequireds(@{$requireds});
-		promtWorkflows(@{$outputs});
-		setupWorkflows($nodeid,$outputs,$vars);
-	}else{
+	#if($cmdurl=~/\/software\/.+json$/){
+	#	my $outputs=[];
+	#	my $requireds=[];
+	#	my $nodeid=dirname($cmdurl);
+	#	my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
+	#	my $vars=promptRequireds(@{$requireds});
+	#	promtWorkflows(@{$outputs});
+	#	setupWorkflows($nodeid,$outputs,$vars);
+	#}elsif($cmdurl=~/\/workflow\/.+json$/){
+	#	my $outputs=[];
+	#	my $requireds=[];
+	#	my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);
+	#	my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
+	#	my $vars=promptRequireds(@{$requireds});
+	#	promtWorkflows(@{$outputs});
+	#	setupWorkflows($nodeid,$outputs,$vars);
+	#}else{
 		@nodeids=commandProcess($cmdurl,$commands,$queryresults,$userdefined,$insertKeys,@{$arguments});
-	}
+	#}
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 if($showlog){
@@ -313,29 +299,6 @@ sub checkRDFObject{
 	my $result=`perl $cwd/rdf.pl -d $database $subject $predicate`;
 	chomp($result);
 	return $result;
-}
-############################## checkSoftwareSetting ##############################
-sub checkSoftwareSetting{
-	my $command=shift();
-	if(!exists($command->{$urls->{"daemon/software"}})){return 1;}
-	my @softwares=@{$command->{$urls->{"daemon/software"}}};
-	my @inserts=();
-	my $ok=1;
-	foreach my $software(@softwares){
-		my $url=$urls->{"software"}."/$software";
-		if(checkRDFObject($rdfdb,$url,"$url/bin") ne ""){next;}
-		my $result=`which $software`;
-		chomp($result);
-		push(@inserts,$urls->{"system"}."\t".$urls->{"system/software"}."\t$url");
-		if($result ne ""){
-			push(@inserts,"$url\t$url/bin\t$result");
-		}else{
-			push(@inserts,$urls->{"system/software"}."\t".$urls->{"daemon/workflow"}."\t$url/bin.json");
-			$ok=0;
-		}
-	}
-	if(scalar(@inserts)>0){writeInserts(@inserts);}
-	return $ok;
 }
 ############################## setupWorkflows ##############################
 sub setupWorkflows{
@@ -1729,7 +1692,9 @@ sub getJson{
 	my $username=shift();
 	my $password=shift();
 	my $content=($url=~/https?:\/\//)?getHttpContent($url,$username,$password):getFileContent($url);
+	my $directory=dirname($url);
 	$content=~s/\$this/$url/g;
+	$content=~s/\$\{this:directory\}/$directory/g;
 	return json_decode($content);
 }
 ############################## getFileContent ##############################
