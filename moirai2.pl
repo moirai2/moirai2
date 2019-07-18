@@ -164,6 +164,8 @@ my $returnvalue;
 my ($arguments,$userdefined)=handleArguments(@ARGV);
 my $queryresults={};
 my $insertKeys;
+if(defined($opt_i)){checkInputOutput($opt_i);}
+if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){
 	my ($query,$keys)=parseQuery(replaceHash($userdefined,$opt_i));
 	my $dbh=openDB($rdfdb);
@@ -248,6 +250,22 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		my $result=`perl $cwd/rdf.pl -d $rdfdb object $nodeid $cmdurl#$returnvalue`;
 		chomp($result);
 		print "$result\n";
+	}
+}
+############################## checkInputOutput ##############################
+sub checkInputOutput{
+	my $queries=shift();
+	foreach my $query(split(/,/,$queries)){
+		my $empty=0;
+		foreach my $token(split(/->/,$query)){
+				if($token eq ""){$empty=1;last;}
+		}
+		if($empty==1){
+			print STDERR "ERROR: '$query' has empty token.\n";
+			print STDERR "ERROR: Use single quote '\$a->b->\$c' instead of double quote \"\$a->b->\$c\".\n";
+			print STDERR "ERROR: Or escape '\$' with '\\' sign \"\\\$a->b->\\\$c\".\n";
+			exit(1);
+		}
 	}
 }
 ############################## replaceHash ##############################
@@ -670,13 +688,13 @@ sub throwJobs{
 		if(defined($qsubopt)){$command.=" $qsubopt";}
 		$command.=" $path";
 		if(system($command)==0){print "OK\n";}
-		else{print "FAILED\n";exit(1);}
+		else{print "FAILED $command\n";exit(1);}
 	}else{
 		if($showlog){print STDERR "#Executing $path:\t";}
 		my $command="bash $path";
 		if(defined($background)){$command.=" &";}
 		if(system($command)==0){if($showlog){print STDERR "OK\n";}}
-		else{if($showlog){print STDERR "FAILED\n";}exit(1);}
+		else{if($showlog){print STDERR "FAILED $command\n";}exit(1);}
 	}
 }
 ############################## controlCompleted ##############################
@@ -782,7 +800,7 @@ sub loadCommandFromURL{
 	if(exists($commands->{$url})){return $commands->{$url};}
 	if($showlog){print STDERR "#Loading $url:\t";}
 	my $command=getJson($url);
-	if(scalar(keys(%{$command}))==0){print "FAILED\n";return;}
+	if(scalar(keys(%{$command}))==0){print "FAILED $url\n";return;}
 	loadCommandFromURLSub($command,$url);
 	$command->{$urls->{"daemon/command"}}=$url;
 	if($showlog){print STDERR "OK\n";}
