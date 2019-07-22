@@ -56,6 +56,7 @@ $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/descripti
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
+if(scalar(@ARGV)==0&&$ARGV[0]eq"test"){test();exit(0);}
 if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "Program: Executes MOIRAI2 command(s) using a local RDF SQLITE3 database.\n";
@@ -162,44 +163,32 @@ my $cmdurl=(scalar(@ARGV)>0)?shift(@ARGV):undef;
 my @nodeids;
 my $returnvalue;
 my ($arguments,$userdefined)=handleArguments(@ARGV);
-my $queryresults={};
+my $queryResults={};
 my $insertKeys;
 if(defined($opt_i)){checkInputOutput($opt_i);}
 if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){
-	my ($query,$keys)=parseQuery(replaceHash($userdefined,$opt_i));
+	my ($query,$keys)=parseQuery(replaceStringWithHash($userdefined,$opt_i));
 	my $dbh=openDB($rdfdb);
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
 	my $rows=$sth->fetchall_arrayref();
 	$dbh->disconnect;
-	$queryresults->{".rows"}=$rows;
-	$queryresults->{".keys"}=$keys;
-	if(defined($opt_o)){
-		$insertKeys=handleKeys(replaceHash($userdefined,$opt_o));
-		remove_unnecessary_executes($queryresults,$insertKeys);
+	my @hashs=();
+	foreach my $row(@{$rows}){
+		my $hash={};
+		for(my $i=0;$i<scalar(@{$keys});$i++){$hash->{$keys->[$i]}=$row->[$i];}
+		push(@hashs,$hash);
 	}
+	$queryResults->{".keys"}=$keys;
+	$queryResults->{".hashs"}=\@hashs;
+}else{if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}}
+if(defined($opt_o)){
+	$insertKeys=handleKeys(replaceStringWithHash($userdefined,$opt_o));
+	if(defined($opt_i)){remove_unnecessary_executes($queryResults,$insertKeys);}
 }
 if(defined($cmdurl)){
-	#if($cmdurl=~/\/software\/.+json$/){
-	#	my $outputs=[];
-	#	my $requireds=[];
-	#	my $nodeid=dirname($cmdurl);
-	#	my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
-	#	my $vars=promptRequireds(@{$requireds});
-	#	promtWorkflows(@{$outputs});
-	#	setupWorkflows($nodeid,$outputs,$vars);
-	#}elsif($cmdurl=~/\/workflow\/.+json$/){
-	#	my $outputs=[];
-	#	my $requireds=[];
-	#	my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;chomp($nodeid);
-	#	my ($nodeid,$workflow)=workflowProcess($cmdurl,$commands,$workflows,$outputs,$requireds,$nodeid);
-	#	my $vars=promptRequireds(@{$requireds});
-	#	promtWorkflows(@{$outputs});
-	#	setupWorkflows($nodeid,$outputs,$vars);
-	#}else{
-		@nodeids=commandProcess($cmdurl,$commands,$queryresults,$userdefined,$insertKeys,@{$arguments});
-	#}
+	@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 if($showlog){
@@ -211,11 +200,8 @@ if($showlog){
 	print STDERR "# sleeptime      : $sleeptime sec\n";
 	print STDERR "# max job        : $maxjob job".(($maxjob>1)?"s":"")."\n";
 	print STDERR "# export path    : $exportpath\n";
-	if(defined($use_qsub)){
-		print STDERR "# job submission : qsub\n";
-	}else{
-		print STDERR "# job submission : bash\n";
-	}
+	if(defined($use_qsub)){print STDERR "# job submission : qsub\n";}
+	else{print STDERR "# job submission : bash\n";}
 	if(defined($cmdurl)){print STDERR "# command URL    : $cmdurl\n";}
 	foreach my $nodeid(@nodeids){if(defined($nodeid)){print STDERR "# command NodeID : $nodeid\n";}}
 	print STDERR "year/mon/date\thr:min:sec\twork\tnewjob\tremain\tinsert\tdelete\tupdate\tdone\n";
@@ -252,14 +238,59 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		print "$result\n";
 	}
 }
+############################## test ##############################
+sub test{
+	mkdir(test);
+	unlink("test/rdf.sqlite3");
+	open(OUT,">test/A.json");
+	print OUT "{\"https://moirai2.github.io/schema/daemon/input\":\"\$string\",\"https://moirai2.github.io/schema/daemon/bash\":[\"output=\\\"\$tmpdir/output.txt\\\"\",\"echo \\\"\$string\\\" > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}\n";
+	close(OUT);
+	open(OUT,">test/B.json");
+	print OUT "{\"https://moirai2.github.io/schema/daemon/input\":\"\$input\",\"https://moirai2.github.io/schema/daemon/bash\":[\"output=\\\"\$tmpdir/output.txt\\\"\",\"sort \$input > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}\n";
+	close(OUT);
+	testCommand("perl moirai2.pl -r '\$output' -d test/rdf.sqlite3 test/A.json 'Akira Hasegawa' test/output.txt","test/output.txt");
+	testCommand("cat test/output.txt","Akira Hasegawa");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 insert case1 '#string' 'Akira Hasegawa'","inserted 1");
+	testCommand("perl moirai2.pl -r '\$output' -d test/rdf.sqlite3 -i '\$id->#string->\$string' -o '\$id->#text->\$output' test/A.json '\$string' 'test/\$id.txt'","test/case1.txt");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object case1 '#text'","test/case1.txt");
+	testCommand("perl moirai2.pl -r output -d test/rdf.sqlite3 -i '\$id->#text->\$input' -o '\$input->#sorted->\$output' test/B.json 'output=test/\$id.sort.txt'","test/case1.sort.txt");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object % '#sorted'","test/case1.sort.txt");
+	open(OUT,">test/case2.txt");print OUT "Hasegawa\nAkira\nChiyo\nHasegawa\n";close(OUT);
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 insert case2 '#text' test/case2.txt","inserted 1");
+	testCommand("perl moirai2.pl -r output -d test/rdf.sqlite3 -i '\$id->#text->\$input' -o '\$input->#sorted->\$output' test/B.json 'output=test/\$id.sort.txt'","test/case2.sort.txt");
+	testCommand("perl moirai2.pl -r output -d test/rdf.sqlite3 -i '\$id->#text->\$input' -o '\$input->#sorted->\$output' test/B.json 'output=test/\$id.sort.txt'","");
+	system("rm -r test/ctrl");
+	unlink("test/output.txt");
+	unlink("test/case1.txt");
+	unlink("test/case2.txt");
+	unlink("test/case1.sort.txt");
+	unlink("test/case2.sort.txt");
+	unlink("test/A.json");
+	unlink("test/B.json");
+	unlink("test/rdf.sqlite3");
+	rmdir("test");
+}
+############################## testCommand ##############################
+sub testCommand{
+	my $command=shift();
+	my $value2=shift();
+	my $file=shift();
+	my ($writer,$file)=tempfile(UNLINK=>1);
+	close($writer);
+	if(system("$command > $file")){return 1;}
+	my $value1=readText($file);
+	chomp($value1);
+	if($value1 eq $value2){return 0;}
+	print STDERR ">$command\n";
+	print STDERR "$value1\n";
+	print STDERR "$value2\n";
+}
 ############################## checkInputOutput ##############################
 sub checkInputOutput{
 	my $queries=shift();
 	foreach my $query(split(/,/,$queries)){
 		my $empty=0;
-		foreach my $token(split(/->/,$query)){
-				if($token eq ""){$empty=1;last;}
-		}
+		foreach my $token(split(/->/,$query)){if($token eq ""){$empty=1;last;}}
 		if($empty==1){
 			print STDERR "ERROR: '$query' has empty token.\n";
 			print STDERR "ERROR: Use single quote '\$a->b->\$c' instead of double quote \"\$a->b->\$c\".\n";
@@ -268,8 +299,8 @@ sub checkInputOutput{
 		}
 	}
 }
-############################## replaceHash ##############################
-sub replaceHash{
+############################## replaceStringWithHash ##############################
+sub replaceStringWithHash{
 	my $hash=shift();
 	my $string=shift();
 	my @keys=sort{length($b)<=>length($a)}keys(%{$hash});
@@ -286,84 +317,36 @@ sub handleArguments{
 }
 ############################## remove_unnecessary_executes ##############################
 sub remove_unnecessary_executes{
-	my $results=shift();
+	my $queryResults=shift();
 	my $insertKeys=shift();
 	my @array=();
-	foreach my $row(@{$results->{".rows"}}){
-		my $hash={};
+	foreach my $hash(@{$queryResults->{".hashs"}}){
 		my $hit=0;
-		for(my $i=0;$i<scalar(@{$results->{".keys"}});$i++){$hash->{"\\\$".$results->{".keys"}->[i]}=$row->[$i];}
 		foreach my $out(@{$insertKeys}){
 			my @tokens=();
 			foreach my $token(@{$out}){
 				my $temp=$token;
-				foreach my $key(keys%{$hash}){my $value=$hash->{$key};$temp=~s/$key/$value/g;}
+				foreach my $key(keys%{$hash}){my $value=$hash->{$key};$temp=~s/\$$key/$value/g;}
 				push(@tokens,$temp);
 			}
 			if($tokens[0]=~/\$/){next;}
-			elsif($tokens[1]=~/\$/){next;}
-			elsif($tokens[2]!~/\$/){next;}
-			elsif(checkRDFObject($rdfdb,$tokens[0],$tokens[1]) ne ""){$hit=1;}
+			if($tokens[1]=~/\$/){next;}
+			if($tokens[2]=~/\$/){$tokens[2]="%";}
+			if(checkRDFObject($rdfdb,$tokens[0],$tokens[1],$tokens[2])ne""){$hit=1;}
 		}
-		if($hit==0){push(@array,$row);}
+		if($hit==0){push(@array,$hash);}
 	}
-	$results->{".rows"}=\@array;
+	$queryResults->{".hashs"}=\@array;
 }
 ############################## checkRDFObject ##############################
 sub checkRDFObject{
 	my $database=shift();
 	my $subject=shift();
 	my $predicate=shift();
-	my $result=`perl $cwd/rdf.pl -d $database $subject $predicate`;
+	my $object=shift();
+	my $result=`perl $cwd/rdf.pl -d $database object '$subject' '$predicate' '$object'`;
 	chomp($result);
 	return $result;
-}
-############################## setupWorkflows ##############################
-sub setupWorkflows{
-	my $nodeid=shift();
-	my $workflows=shift();
-	my $requireds=shift();
-	my @lines=();
-	foreach my $workflow(@{$workflows}){push(@lines,"$nodeid\t".$urls->{"daemon/workflow"}."\t$workflow");}
-	while(my ($key,$val)=each(%{$requireds})){push(@lines,"$nodeid\t$key\t$val");}
-	writeInserts(@lines);
-}
-############################## promptRequireds ##############################
-sub promptRequireds{
-	my @urls=@_;
-	my $size=scalar(@urls);
-	my $hash={};
-	if($size==0){return {};}
-	print STDERR "Please define these values:\n";
-	for(my $i=0;$i<$size;$i++){
-		my $url=$urls[$size-$i-1];
-		my $question="[$i] $url";
-		my $default="";
-		my $workflow=loadWorkflowFromURL($url,$workflows);
-		if(exists($workflow->{$url})){$default=$workflow->{$url};$question.=" [$default]";}
-		$question.="?";
-		print STDERR "$question ";
-		while(<STDIN>){
-			chomp();
-			my $prompt=$_;
-			if($prompt eq ""){$prompt=$default;}
-			if($prompt eq ""){print STDERR "$question ";next;}
-			$hash->{$url}=$prompt;
-			last;
-		}
-	}
-	return $hash;
-}
-############################## promtWorkflows ##############################
-sub promtWorkflows{
-	my @urls=@_;
-	print STDERR "\nThese commands will be executed:\n";
-	my $size=scalar(@urls);
-	for(my $i=0;$i<$size;$i++){my $url=$urls[$size-$i-1];print STDERR "[$i] $url\n";}
-	print STDERR "Do you want to continue [y/n]? ";
-	my $prompt=<STDIN>;
-	chomp($prompt);
-	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){exit(0);}
 }
 ############################## writeDeletes ##############################
 sub writeDeletes{
@@ -419,11 +402,11 @@ sub printCommand{
 sub assignCommand{
 	my $command=shift();
 	my $userdefined=shift();
-	my $results=shift();
+	my $queryResults=shift();
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
 	my $keys={};
-	foreach my $key(@{$results->{".keys"}}){$keys->{$key}++;}
+	foreach my $key(@{$queryResults->{".keys"}}){$keys->{$key}++;}
 	foreach my $input(@inputs){
 		if(exists($userdefined->{$input})){next;}
 		if(exists($keys->{$input})){$userdefined->{$input}="\$$input";next;}
@@ -447,80 +430,19 @@ sub promtCommandInput{
 	if($value eq ""){if(defined($default)){$value=$default;}else{exit(1);}}
 	$variables->{$label}=$value;
 }
-############################## promtCommandOutput ##############################
-sub promtCommandOutput{
-	my $command=shift();
-	my $results=shift();
-	my $label=shift();
-	print STDOUT "#Output: $label? ";
-	my $value=<STDIN>;
-	chomp($value);
-	if($value eq ""){return;}
-	$results->{$label}=$value;
-}
-############################## workflowProcess ##############################
-sub workflowProcess{
-	my $cmdurl=shift();
-	my $commands=shift();
-	my $workflows=shift();
-	my $urls=shift();
-	my $requireds=shift();
-	my $nodeid=shift();
-	my $workflow=loadWorkflowFromURL($cmdurl,$workflows);
-	my $command=loadCommandFromURL($cmdurl,$commands);
-	push(@{$urls},$cmdurl);
-	if(!exists($command->{"insertKeys"})){return;}
-	foreach my $update(@{$command->{"insertKeys"}}){
-		my ($subject,$predicate,$object)=@{$update};
-		if(!exists($workflow->{$predicate})){next;}
-		foreach my $url(keys(%{$workflow->{$predicate}})){
-			my $object=$workflow->{$predicate}->{$url};
-			if(ref($object)ne"ARRAY"){$object=[$object];}
-			foreach my $o(@{$object}){
-				if($o eq ""){next;}
-				if(checkWorkflowPredicate($o)){next;}
-				my $workflow2=loadWorkflowFromURL($o,$workflows);
-				if(!exists($workflow2->{$o})||ref($workflow2->{$o})ne"HASH"){push(@{$requireds},$o);next;}
-				foreach my $url(keys(%{$workflow2->{$o}})){workflowProcess($url,$commands,$workflows,$urls,$requireds,$nodeid);}
-			}
-		}
-	}
-	return ($nodeid,$workflow);
-}
-############################## checkWorkflowPredicate ##############################
-sub checkWorkflowPredicate{
-	my $predicate=shift();
-	my $subject=dirname($predicate);
-	my $command="perl rdf.pl -d $rdfdb object $subject $predicate";
-	my $object=`$command`;
-	chomp($object);
-	return ($object ne "");
-}
-############################## loadWorkflowFromURL ##############################
-sub loadWorkflowFromURL{
-	my $url=shift();
-	my $workflows=shift();
-	if($url=~/^(.+)\/workflow\/(.+)\/.+\.json$/){$url="$1/workflow/$2.json";}
-	elsif($url=~/^(.+)\/workflow\/(.+)\/[^\/]+$/){$url="$1/workflow/$2.json";}
-	elsif($url=~/^(.+)\/software\/(.+)\/.+\.json$/){$url="$1/software/$2.json";}
-	elsif($url=~/^(.+)\/software\/(.+)\/[^\/]+$/){$url="$1/software/$2.json";}
-	if(exists($workflows->{$url})){return $workflows->{$url};}
-	$workflows->{$url}=getJson($url);
-	return $workflows->{$url};
-}
 ############################## commandProcess ##############################
 sub commandProcess{
 	my @arguments=@_;
 	my $url=shift(@arguments);
 	my $commands=shift(@arguments);
-	my $queryresults=shift(@arguments);
+	my $queryResults=shift(@arguments);
 	my $userdefined=shift(@arguments);
 	my $insertKeys=shift(@arguments);
 	my $command=loadCommandFromURL($url,$commands);
 	$commands->{$url}=$command;
-	if(defined($insertKeys)){push(@{$command->{"insertKeys"}},@{$insertKeys});}
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
+	if(defined($insertKeys)){push(@{$command->{"insertKeys"}},@{$insertKeys});}
 	if($showlog){
 		my $cmdline="#Command: ".basename($command->{$urls->{"daemon/command"}});
 		if(scalar(@inputs)>0){$cmdline.=" \$".join(" \$",@inputs);}
@@ -537,41 +459,14 @@ sub commandProcess{
 		if(exists($userdefined->{$output})){next;}
 		$userdefined->{$output}=shift(@arguments);
 	}
-	assignCommand($command,$userdefined,$queryresults);
+	assignCommand($command,$userdefined,$queryResults);
 	my @inserts=();
 	my @nodeids=();
 	my $keys;
-	my $rows=[];
-	if(!exists($queryresults->{".rows"})){$queryresults->{".rows"}=[[]];}
-	foreach my $row(@{$queryresults->{".rows"}}){
-		my $vars={};
-		for(my $i=0;$i<scalar(@{$row});$i++){
-			my $key=$queryresults->{".keys"}->[$i];
-			my $val=$row->[$i];
-			$vars->{"\$$key"}=$val;
-		}
-		my $hash={};
-		for(my $i=0;$i<scalar(@inputs);$i++){
-			my $input=$inputs[$i];
-			my $value=$input;
-			if(exists($queryresults->{$input})){$value=$queryresults->{$input}}
-			if(exists($userdefined->{$input})){$value=$userdefined->{$input};}
-			if(exists($vars->{$value})){$value=$vars->{$value};}
-			$hash->{$input}=$value;
-		}
-		for(my $i=0;$i<scalar(@outputs);$i++){
-			my $output=$outputs[$i];
-			my $value=$output;
-			if(exists($queryresults->{$output})){$value=$queryresults->{$output}}
-			if(exists($userdefined->{$output})){$value=$userdefined->{$output};}
-			if(exists($vars->{$value})){$value=$vars->{$value};}
-			$hash->{$output}=$value;
-		}
-		if(!defined($keys)){my @temp=sort{$a cmp $b}keys(%{$hash});$keys=\@temp;}
-		my @temp=();
-		foreach my $key(@{$keys}){push(@temp,$hash->{$key});}
-		push(@{$rows},\@temp);
-		my ($nodeid,@array)=commandProcessSub($url,$hash);
+	foreach my $hash(@{$queryResults->{".hashs"}}){
+		my $vars=commandProcessVars($hash,$userdefined,$insertKeys,\@inputs,\@outputs);
+		if(!defined($keys)){my @temp=sort{$a cmp $b}keys(%{$vars});$keys=\@temp;}
+		my ($nodeid,@array)=commandProcessSub($url,$vars);
 		push(@nodeids,$nodeid);
 		push(@inserts,@array);
 	}
@@ -584,15 +479,46 @@ sub commandProcess{
 	writeInserts(@inserts);
 	return @nodeids;
 }
+############################## commandProcessVars ##############################
+sub commandProcessVars{
+	my $hash=shift();
+	my $userdefined=shift();
+	my $insertKeys=shift();
+	my @inputs=@{shift()};
+	my @outputs=@{shift()};
+	my $vars={};
+	#print_table("##### userdefined #####",$userdefined);
+	#print_table("##### insertKeys #####",$insertKeys);
+	#print_table("##### inputs #####",\@inputs);
+	#print_table("##### outputs #####",\@outputs);
+	for(my $i=0;$i<scalar(@inputs);$i++){
+		my $input=$inputs[$i];
+		my $value=$input;
+		if(exists($hash->{$value})){$value=$hash->{$value};}
+		if(exists($userdefined->{$value})){$value=$userdefined->{$value};}
+		$vars->{$input}=$value;
+	}
+	for(my $i=0;$i<scalar(@outputs);$i++){
+		my $output=$outputs[$i];
+		my $value=$output;
+		if(exists($hash->{$value})){$value=$hash->{$value};}
+		if(exists($userdefined->{$value})){$value=$userdefined->{$value};}
+		$vars->{$output}=$value;
+	}
+	while(my($key,$val)=each(%{$hash})){if(!exists($vars->{$key})){$vars->{$key}=$val;}}
+	#print_table("##### vars #####",$vars);
+	return $vars;
+}
+############################## commandProcessSub ##############################
 sub commandProcessSub{
 	my $url=shift();
-	my $hash=shift();
+	my $vars=shift();
 	my @inserts=();
 	my $nodeid=`perl $cwd/rdf.pl -d $rdfdb newnode`;
 	chomp($nodeid);
 	push(@inserts,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t$nodeid");
 	push(@inserts,"$nodeid\t".$urls->{"daemon/command"}."\t$url");
-	foreach my $key(keys(%{$hash})){push(@inserts,"$nodeid\t$url#$key\t".$hash->{$key});}
+	foreach my $key(keys(%{$vars})){push(@inserts,"$nodeid\t$url#$key\t".$vars->{$key});}
 	return ($nodeid,@inserts);
 }
 ############################## mainProcess ##############################
@@ -688,13 +614,13 @@ sub throwJobs{
 		if(defined($qsubopt)){$command.=" $qsubopt";}
 		$command.=" $path";
 		if(system($command)==0){print "OK\n";}
-		else{print "FAILED $command\n";exit(1);}
+		else{print "ERROR: Failed to $command\n";exit(1);}
 	}else{
 		if($showlog){print STDERR "#Executing $path:\t";}
 		my $command="bash $path";
 		if(defined($background)){$command.=" &";}
 		if(system($command)==0){if($showlog){print STDERR "OK\n";}}
-		else{if($showlog){print STDERR "FAILED $command\n";}exit(1);}
+		else{if($showlog){print STDERR "ERROR: Failed to $command\n";}exit(1);}
 	}
 }
 ############################## controlCompleted ##############################
@@ -800,7 +726,7 @@ sub loadCommandFromURL{
 	if(exists($commands->{$url})){return $commands->{$url};}
 	if($showlog){print STDERR "#Loading $url:\t";}
 	my $command=getJson($url);
-	if(scalar(keys(%{$command}))==0){print "FAILED $url\n";return;}
+	if(scalar(keys(%{$command}))==0){print "ERROR: Couldn't load $url\n";exit(1);}
 	loadCommandFromURLSub($command,$url);
 	$command->{$urls->{"daemon/command"}}=$url;
 	if($showlog){print STDERR "OK\n";}
@@ -1231,23 +1157,42 @@ sub bashCommand{
 		}
 	}
 	print OUT "########## database ##########\n";
-	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
-	if(!exists($command->{"isworkflow"})){
-		print OUT "\$nodeid\t".$urls->{"daemon/timeended"}."\t`date +%s`\n";
-		foreach my $row(@{$command->{"insertKeys"}}){print OUT join("\t",@{$row})."\n";}
-		foreach my $output(@{$command->{"output"}}){print OUT "\$nodeid\t\$cmdurl#$output\t\$$output\n";}
-	}
-	print OUT "EOF\n";
-	if(scalar(@{$command->{"insertKeys"}})>0){foreach my $row(@{$command->{"insertKeys"}}){handleInsert($command,@{$row});}}
-	if(!exists($command->{"isworkflow"})){
-		foreach my $output(@{$command->{"outputs"}}){
-			print OUT "if [ \${#".$output."[\@]} -gt 0 ] ; then\n";
-			print OUT "for e in \${$output"."[\@]} ; do\n";
-			print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$e\">>\$tmpdir/\$insertfile\n";
-			print OUT "done\n";
-			print OUT "fi\n";
+	my $inserts={};
+	if(exists($command->{"insertKeys"})){
+		foreach my $insert(@{$command->{"insertKeys"}}){
+			my $found=0;
+			my $line=join("->",@{$insert});
+			foreach my $output(@{$command->{"output"}}){
+				if($line=~/\$$output/){push(@{$inserts->{$output}},$insert);$found=1;last;}
+			}
+			if($found==0){push(@{$inserts->{""}},$insert);}
 		}
 	}
+	print OUT "echo \"\$nodeid\t".$urls->{"daemon/timeended"}."\t`date +%s`\">>\$tmpdir/\$insertfile\n";
+	foreach my $output(@{$command->{"output"}}){
+		print OUT "if [[ \"\$(declare -p $output)\" =~ \"declare -a\" ]]; then\n";
+		print OUT "for out in \${$output"."[\@]} ; do\n";
+		if(exists($vars->{$output})){print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$out\">>\$tmpdir/\$updatefile\n";}
+		else{print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$out\">>\$tmpdir/\$insertfile\n";}
+		if(exists($inserts->{$output})){
+			foreach my $row(@{$inserts->{$output}}){
+				my $line=join("\t",@{$row});
+				$line=~s/\$$output/\$out/g;
+				print OUT "echo \"$line\">>\$tmpdir/\$insertfile\n";
+			}
+		}
+		print OUT "done\n";
+		print OUT "else\n";
+		if(exists($vars->{$output})){print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$$output\">>\$tmpdir/\$updatefile\n";}
+		else{print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$$output\">>\$tmpdir/\$insertfile\n";}
+		if(exists($inserts->{$output})){
+			foreach my $row(@{$inserts->{$output}}){
+				print OUT "echo \"".join("\t",@{$row})."\">>\$tmpdir/\$insertfile\n";
+			}
+		}
+		print OUT "fi\n";
+	}
+	if(exists($inserts->{""})){foreach my $row(@{$inserts->{""}}){print OUT "echo \"".join("\t",@{$row})."\">>\$tmpdir/\$insertfile\n";}}
 	if(exists($command->{"batchmode"})){print OUT "perl \$cwd/rdf.pl -d \$localdb dump >> \$tmpdir/\$insertfile\nrm \$localdb\n";}
 	if(exists($command->{$urls->{"daemon/linecount"}})){
 		print OUT "########## linecount ##########\n";
@@ -2062,6 +2007,15 @@ sub list_files{
 		closedir(DIR);
 	}
 	return @input_files;
+}
+############################## readText ##############################
+sub readText{
+	my $file=shift();
+	my $text="";
+	open(IN,$file);
+	while(<IN>){s/\r//g;$text.=$_;}
+	close(IN);
+	return $text;
 }
 ############################## autodaemon ##############################
 sub autodaemon{

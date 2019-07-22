@@ -58,6 +58,7 @@ sub help{
 	print "COMMAND: $program_name -d DB object SUB PRE OBJ > VARIABLE\n";
 	print "COMMAND: $program_name -d DB import < TSV\n";
 	print "COMMAND: $program_name -d DB dump > TSV\n";
+	print "COMMAND: $program_name -d DB drop\n";
 	print "COMMAND: $program_name -d DB -f json dump > JSON\n";
 	print "COMMAND: $program_name -d DB query QUERY > JSON\n";
 	print "COMMAND: $program_name -d DB replace FROM TO\n";
@@ -68,12 +69,13 @@ sub help{
 	print "COMMAND: $program_name -d DB software URL\n";
 	print "COMMAND: $program_name -d DB -f json command < JSON\n";
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
-	print "COMMAND: $program_name -d DB conda\n";
-	print "COMMAND: $program_name -d DB ls < STDIN\n";
 	print "COMMAND: $program_name linecount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name seqcount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
-	print "COMMAND: $program_name ls DIR/FILE > TSV\n";
+	print "COMMAND: $program_name ls DIR/FILE > LIST\n";
+	print "COMMAND: $program_name -d DB ls '-' < STDIN\n";
+	print "\n";
+	print "COMMAND: $program_name -d DB conda\n";
 	print "\n";
 	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
 	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
@@ -81,7 +83,8 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2019/06/04  Added 'executes' and 'html' to retrieve execute log informations.\n";
+		print "UPDATED: 2019/07/18  'drop' added to remove all data.\n";
+		print "         2019/06/04  Added 'executes' and 'html' to retrieve execute log informations.\n";
 		print "         2019/05/07  Added 'md5' to calculate md5 of files.\n";
 		print "         2019/04/26  Changed name from 'sqlite3.pl' to 'rdf.pl'.\n";
 		print "         2019/03/13  'linecount' and 'seqcount' added to count files.\n";
@@ -148,8 +151,24 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object ".$urls->{"system"}." ".$urls->{"system/file"}." %","test/test2.txt");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete % % test/test2.txt","deleted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete A","deleted 4");
+	testCommand("echo C|perl rdf.pl -d test/rdf.sqlite3 insert A B '-'","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select A B C","A\tB\tC");
+	testCommand("echo C|perl rdf.pl -d test/rdf.sqlite3 insert A '-' B","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select A C B","A\tC\tB");
+	testCommand("echo C|perl rdf.pl -d test/rdf.sqlite3 insert '-' A B","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 select C A B","C\tA\tB");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","");
+	testCommand("ls test/*.sqlite3|perl rdf.pl ls '-'","test/rdf.sqlite3");
+	testCommand("ls test/*.sqlite3|perl rdf.pl -d test/rdf.sqlite3 ls '-'","inserted 1");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 object ".$urls->{"system"}." ".$urls->{"system/file"}." %","test/rdf.sqlite3");
+	testCommand("echo \"A\tB\tC\"|perl rdf.pl -d test/A.sqlite3 insert","inserted 1");
+	testCommand("echo \"D\tE\tF\"|perl rdf.pl -d test/B.sqlite3 insert","inserted 1");
+	testCommand("perl rdf.pl -d test/C.sqlite3 merge test/A.sqlite3 test/B.sqlite3","inserted 2");
 	unlink("test/test2.txt");
 	unlink("test/rdf.sqlite3");
+	unlink("test/A.sqlite3");
+	unlink("test/B.sqlite3");
+	unlink("test/C.sqlite3");
 	rmdir("test");
 }
 ############################## MAIN ##############################
@@ -266,6 +285,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		print join(" ",@objects)."\n";
 	}
 }elsif(lc($command) eq "insert"){
+	if(scalar(@ARGV)==0&&!defined($opt_f)){$opt_f="tsv";}
 	if(!defined($opt_f)){
 		my $subject=shift(@ARGV);
 		my $predicate=shift(@ARGV);
@@ -273,9 +293,12 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		if($subject eq "?"){$subject=undef;}
 		if($predicate eq "?"){$predicate=undef;}
 		if($object eq "?"){$object=undef;}
-		if(!defined($subject)){exit(1);}
-		if(!defined($predicate)){exit(1);}
-		if(!defined($object)){$object="";while(<STDIN>){$object.=$_;}chomp($object);}
+		if(!defined($subject)){if(!defined($opt_q)){print STDERR "ERROR: Please specify subject.\n";}exit(1);}
+		elsif($subject eq "-"){$subject="";while(<STDIN>){$subject.=$_;}chomp($subject);}
+		if(!defined($predicate)){if(!defined($opt_q)){print STDERR "ERROR: Please specify predicate.\n";}exit(1);}
+		elsif($predicate eq "-"){$predicate="";while(<STDIN>){$predicate.=$_;}chomp($predicate);}
+		if(!defined($object)){if(!defined($opt_q)){print STDERR "ERROR: Please specify object.\n";}exit(1);}
+		elsif($object eq "-"){$object="";while(<STDIN>){$object.=$_;}chomp($object);}
 		my $json={$subject=>{$predicate=>$object}};
 		my $linecount=($iswebdb)?webInsert($database,$json):dbInsert($database,$subject,$predicate,$object);
 		if(!$opt_q){print "inserted $linecount\n";}
@@ -481,17 +504,13 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		if(!$opt_q){print "replaced $linecount\n";}
 	}
 }elsif(lc($command) eq "merge"){
-	my ($writer,$file)=tempfile(UNLINK=>1);
-	foreach my $database(@ARGV){
-		my $dbh=openDB($database);
-		dumpDB($dbh,"tsv",$writer);
-		$dbh->disconnect;
-	}
+	my ($writer,$file)=tempfile();#UNLINK=>1
+	foreach my $database(@ARGV){dumpDB($database,undef,$writer);}
 	close($writer);
 	my $reader=IO::File->new($file);
 	my $linecount=importDB($database,$reader);
 	close($reader);
-	if(!$opt_q){print "insert $linecount\n";}
+	if(!$opt_q){print "inserted $linecount\n";}
 }elsif(lc($command) eq "copy"){
 	my $dbh=openDB($database);
 	my ($writer,$file)=tempfile(UNLINK=>1);
@@ -540,6 +559,11 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	dumpDB($database,undef,$writer);
 	close($writer);
 	foreach my $file(@ARGV){exportTable($database,$tmp,$file);}
+}elsif(lc($command) eq "drop"){
+	my $dbh=openDB($database);
+	$dbh->do("drop table node");
+	$dbh->do("drop table edge");
+	$dbh->disconnect;
 }
 ############################## exportTable ##############################
 sub exportTable{
@@ -619,13 +643,15 @@ sub basenames{
 }
 ############################## ls ##############################
 sub ls{
-	my @files=@_;
-	my $database=shift(@files);
-	my $format=shift(@files);
-	my $filegrep=shift(@files);
-	my $recursive=shift(@files);
-	if(scalar(@files)==0){push(@files,".");}
-	my @files=listFiles($filegrep,$recursive,@files);
+	my @args=@_;
+	my $database=shift(@args);
+	my $format=shift(@args);
+	my $filegrep=shift(@args);
+	my $recursive=shift(@args);
+	my @files=();
+	if(scalar(@args)==0){push(@args,".");}
+	if(scalar(@args)==1&&$args[0]eq"-"){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=listFiles($filegrep,$recursive,@args);}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
 		foreach my $file(@files){print $writer $urls->{"system"}."\t".$urls->{"system/file"}."\t$file\n";}
@@ -939,7 +965,7 @@ sub dbDelete{
 	if($subject ne "" && $subject ne "%"){push(@wheres,createWhere("subject",$subject));}
 	if($predicate ne "" && $predicate ne "%"){push(@wheres,createWhere("predicate",$predicate));}
 	if($object ne "" && $object ne "%"){push(@wheres,createWhere("object",$object));}
-	if(scalar(@wheres)==0){return;}
+	if(scalar(@wheres)==0){if(!defined($opt_q)){print STDERR "ERROR: Please specify SUB PRE OBJ\n";}exit(1);}
 	$query.=" where".join(" and ",@wheres);
 	my $dbh=openDB($database);
 	$dbh->begin_work;
