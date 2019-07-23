@@ -427,6 +427,7 @@ sub promtCommandInput{
 	print STDOUT "? ";
 	my $value=<STDIN>;
 	chomp($value);
+	if($value=~/^(.+) +$/){$value=$1;}
 	if($value eq ""){if(defined($default)){$value=$default;}else{exit(1);}}
 	$variables->{$label}=$value;
 }
@@ -1017,7 +1018,7 @@ sub bashCommand{
 	my $completedfile="$cwd/$tmpdir/".$vars->{"completedfile"};
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
-	print OUT "set -eu\n";
+	#print OUT "set -eu\n";
 	print OUT "########## system ##########\n";
 	my @systemvars=("cmdurl","dirname","rdfdb","cwd","nodeid","tmpdir");
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
