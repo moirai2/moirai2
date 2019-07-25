@@ -17,8 +17,8 @@ my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
-getopts('d:D:e:f:g:hHl:qr:tw:');
+use vars qw($opt_b $opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
+getopts('b:d:D:e:f:g:hHl:qr:tw:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -37,7 +37,6 @@ $urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
 
 $urls->{"software"}="https://moirai2.github.io/schema/software";
 $urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
-$urls->{"software/version"}="https://moirai2.github.io/schema/software/version";
 
 $urls->{"system"}="https://moirai2.github.io/schema/system";
 $urls->{"system/file"}="https://moirai2.github.io/schema/system/file";
@@ -564,6 +563,23 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	$dbh->do("drop table node");
 	$dbh->do("drop table edge");
 	$dbh->disconnect;
+}elsif(lc($command) eq "install"){
+	my $bindir=defined($opt_b)?$opt_b:"bin";
+	installSoftware($database,$bindir,@ARGV);
+}
+############################## installSoftware ##############################
+sub installSoftware{
+	my @softwares=@_;
+	my $database=shift(@softwares);
+	my $bindir=shift(@softwares);
+	foreach my $software(@softwares){
+		my $hash=dbSelect($database,$software,$urls->{"software/bin"});
+		if(exists($hash->{$software})){next;}
+		my $node=newNode($database);
+		my $url="https://moirai2.github.io/software/install/$software.json";
+		my $command="perl moirai2.pl -d $database	-o '$software->".$urls->{"software/bin"}."->\$path' $url $bindir\n";
+		system($command);
+	}
 }
 ############################## exportTable ##############################
 sub exportTable{

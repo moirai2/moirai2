@@ -41,7 +41,6 @@ $urls->{"daemon/singlethread"}="https://moirai2.github.io/schema/daemon/singleth
 $urls->{"daemon/qsubopt"}="https://moirai2.github.io/schema/daemon/qsubopt";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/workflow"}="https://moirai2.github.io/schema/daemon/workflow";
-$urls->{"daemon/software"}="https://moirai2.github.io/schema/daemon/software";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"daemon/stderr"}="https://moirai2.github.io/schema/daemon/stderr";
 $urls->{"daemon/stdout"}="https://moirai2.github.io/schema/daemon/stdout";
@@ -53,6 +52,9 @@ $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
 $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
+$urls->{"software"}="https://moirai2.github.io/schema/software";
+$urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
+
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -378,7 +380,6 @@ sub printCommand{
 	if(scalar(@inputs)>0){$cmdline.=" [".join("] [",@inputs)."]";}
 	if(scalar(@outputs)>0){$cmdline.=" [".join("] [",@outputs)."]";}
 	print STDOUT "$cmdline\n";
-	if(exists($command->{$urls->{"daemon/software"}})){print STDOUT "#Software:".join(", ",@{$command->{$urls->{"daemon/software"}}})."\n";}
 	if(exists($command->{$urls->{"daemon/select"}})){print STDOUT "#Select  :".join("\n         :",@{$command->{$urls->{"daemon/select"}}})."\n";}
 	if(exists($command->{$urls->{"daemon/insert"}})&&scalar(@{$command->{$urls->{"daemon/insert"}}})>0){print STDOUT "#Insert  :".join("\n         :",@{$command->{$urls->{"daemon/insert"}}})."\n";}
 	if(scalar(@inputs)>0){print STDOUT "#Input   :".join(", ",@{$command->{"input"}})."\n";}
@@ -495,16 +496,18 @@ sub commandProcessVars{
 	for(my $i=0;$i<scalar(@inputs);$i++){
 		my $input=$inputs[$i];
 		my $value=$input;
-		if(exists($hash->{$value})){$value=$hash->{$value};}
-		if(exists($userdefined->{$value})){$value=$userdefined->{$value};}
-		$vars->{$input}=$value;
+		my $found=0;
+		if(exists($hash->{$value})){$value=$hash->{$value};$found=1;}
+		if(exists($userdefined->{$value})){$value=$userdefined->{$value};$found=1;}
+		if($found==1){$vars->{$input}=$value;}
 	}
 	for(my $i=0;$i<scalar(@outputs);$i++){
 		my $output=$outputs[$i];
 		my $value=$output;
-		if(exists($hash->{$value})){$value=$hash->{$value};}
-		if(exists($userdefined->{$value})){$value=$userdefined->{$value};}
-		$vars->{$output}=$value;
+		my $found=0;
+		if(exists($hash->{$value})){$value=$hash->{$value};$found=1;}
+		if(exists($userdefined->{$value})){$value=$userdefined->{$value};$found=1;}
+		if($found==1){$vars->{$output}=$value;}
 	}
 	while(my($key,$val)=each(%{$hash})){if(!exists($vars->{$key})){$vars->{$key}=$val;}}
 	#print_table("##### vars #####",$vars);
@@ -775,21 +778,10 @@ sub loadCommandFromURLSub{
 		}
 		$command->{"output"}=\@array;
 	}
-	if($url=~/^(.+)\/(workflow|software)\/([^\/]+)\//){
-		if(ref($command->{$urls->{"daemon/select"}})ne"ARRAY"){$command->{$urls->{"daemon/select"}}=[$command->{$urls->{"daemon/select"}}];}
-		push(@{$command->{$urls->{"daemon/select"}}},"\$root->".$urls->{"daemon/workflow"}."->$url");
-		my @temp=parseQuery($command->{$urls->{"daemon/select"}});
-		$command->{"rdfQuery"}=$temp[0];
-		$command->{"keys"}=$temp[1];
-		$command->{"input"}=$temp[2];
-		$command->{"selectKeys"}=handleKeys($command->{$urls->{"daemon/select"}});
-		$command->{"isworkflow"}=1;
-	}else{
-		my @array=();
-		foreach my $input(@{$command->{"input"}}){push(@array,$input);}
-		foreach my $output(@{$command->{"output"}}){push(@array,$output);}
-		$command->{"keys"}=\@array;
-	}
+	my @array=();
+	foreach my $input(@{$command->{"input"}}){push(@array,$input);}
+	foreach my $output(@{$command->{"output"}}){push(@array,$output);}
+	$command->{"keys"}=\@array;
 	if(exists($command->{$urls->{"daemon/return"}})){$command->{$urls->{"daemon/return"}}=removeDollar($command->{$urls->{"daemon/return"}});}
 	if(exists($command->{$urls->{"daemon/unzip"}})){$command->{$urls->{"daemon/unzip"}}=handleArray($command->{$urls->{"daemon/unzip"}});}
 	if(exists($command->{$urls->{"daemon/md5"}})){$command->{$urls->{"daemon/md5"}}=handleArray($command->{$urls->{"daemon/md5"}});}
@@ -797,7 +789,6 @@ sub loadCommandFromURLSub{
 	if(exists($command->{$urls->{"daemon/linecount"}})){$command->{$urls->{"daemon/linecount"}}=handleArray($command->{$urls->{"daemon/linecount"}});}
 	if(exists($command->{$urls->{"daemon/seqcount"}})){$command->{$urls->{"daemon/seqcount"}}=handleArray($command->{$urls->{"daemon/seqcount"}});}
 	if(exists($command->{$urls->{"daemon/import"}})){if(ref($command->{$urls->{"daemon/import"}}) ne "ARRAY"){$command->{$urls->{"daemon/import"}}=[$command->{$urls->{"daemon/import"}}];}}
-	if(exists($command->{$urls->{"daemon/software"}})){$command->{$urls->{"daemon/software"}}=handleArray($command->{$urls->{"daemon/software"}});}
 	if(exists($command->{$urls->{"daemon/description"}})){$command->{$urls->{"daemon/description"}}=handleArray($command->{$urls->{"daemon/description"}});}
 	if(exists($command->{$urls->{"daemon/insert"}})){$command->{"insertKeys"}=handleKeys($command->{$urls->{"daemon/insert"}});}
 	if(exists($command->{$urls->{"daemon/update"}})){$command->{"updateKeys"}=handleKeys($command->{$urls->{"daemon/update"}});}
