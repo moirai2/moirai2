@@ -314,7 +314,12 @@ sub handleArguments{
 	my @arguments=@_;
 	my $variables={};
 	my @array=();
-	foreach my $argument(@arguments){if($argument=~/^(.+)=(.+)$/){$variables->{$1}=$2;}else{push(@array,$argument);}}
+	foreach my $argument(@arguments){if($argument=~/^(.+)=(.+)$/){
+		my $key=$1;
+		my $val=$2;
+		if($key=~/^\$(.+)$/){$key=$1;}
+		$variables->{$key}=$val;
+	}else{push(@array,$argument);}}
 	return (\@array,$variables);
 }
 ############################## remove_unnecessary_executes ##############################
