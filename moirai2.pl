@@ -1015,6 +1015,7 @@ sub bashCommand{
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
 	#print OUT "set -eu\n";
+	print OUT "cd \$cwd\n";
 	print OUT "########## system ##########\n";
 	my @systemvars=("cmdurl","dirname","rdfdb","cwd","nodeid","tmpdir");
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
@@ -1055,7 +1056,6 @@ sub bashCommand{
 		}
 	}
 	print OUT "########## initialize ##########\n";
-	print OUT "cd \$cwd\n";
 	print OUT "cat<<EOF>>\$tmpdir/\$insertfile\n";
 	my $inputs=$command->{"inputs"};
 	print OUT "\$nodeid\t".$urls->{"daemon/command"}."\t\$cmdurl\n";
