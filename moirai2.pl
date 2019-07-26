@@ -1015,7 +1015,6 @@ sub bashCommand{
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
 	#print OUT "set -eu\n";
-	print OUT "cd \$cwd\n";
 	print OUT "########## system ##########\n";
 	my @systemvars=("cmdurl","dirname","rdfdb","cwd","nodeid","tmpdir");
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
@@ -1041,6 +1040,7 @@ sub bashCommand{
 		if(ref($value)eq"ARRAY"){print OUT "$key=(\"".join("\" \"",@{$value})."\")\n";}
 		else{print OUT "$key=\"$value\"\n";}
 	}
+	print OUT "cd \$cwd\n";
 	my @scriptfiles=();
 	if(exists($command->{"script"})){
 		print OUT "########## script ##########\n";
