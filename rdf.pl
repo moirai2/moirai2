@@ -73,6 +73,7 @@ sub help{
 	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
 	print "COMMAND: $program_name ls DIR/FILE > LIST\n";
 	print "COMMAND: $program_name -d DB ls '-' < STDIN\n";
+	print "COMMAND: $program_name -d DB rmexec\n";
 	print "\n";
 	print "COMMAND: $program_name -d DB conda\n";
 	print "\n";
@@ -566,6 +567,19 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 }elsif(lc($command) eq "install"){
 	my $bindir=defined($opt_b)?$opt_b:"bin";
 	installSoftware($database,$bindir,@ARGV);
+}elsif(lc($command) eq "rmexec"){
+	rmexec($database);
+}
+############################## rmexec ##############################
+sub rmexec{
+	my $database=shift();
+	my @nodes=getObjects($database,$urls->{"daemon"},$urls->{"daemon/execute"});
+	my $linecount=dbDelete($database,$urls->{"daemon"},$urls->{"daemon/execute"});
+	foreach my $node(@nodes){
+		my $hash=dbSelect($database,$node);
+		$linecount+=dbDelete($database,$node);
+	}
+	if(!$opt_q){print "deleted $linecount\n";}
 }
 ############################## installSoftware ##############################
 sub installSoftware{
