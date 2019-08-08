@@ -15,7 +15,6 @@ use File::Temp qw/tempfile tempdir/;
 my ($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 my $program_path=Cwd::abs_path($program_directory)."/$program_name";
-# require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
 use vars qw($opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_q $opt_r $opt_s);
 getopts('c:d:hHi:lm:o:qr:s:');
@@ -54,7 +53,6 @@ $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
 $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
 $urls->{"software"}="https://moirai2.github.io/schema/software";
 $urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
-
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -130,8 +128,8 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
 my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/workflow"}."\")";
 my $cwd=Cwd::getcwd();
-if($ARGV[0] eq "daemon"){autodaemon();exit();}
-if($ARGV[0] eq "test"){test();exit();}
+if($ARGV[0] eq "daemon"){autodaemon();exit(0);}
+if($ARGV[0] eq "test"){test();exit(0);}
 my $rdfdb=$opt_d;
 if(!defined($rdfdb)){$rdfdb="rdf.sqlite3";}
 if($rdfdb!~/^\//){$rdfdb="$cwd/$rdfdb";}
@@ -167,6 +165,7 @@ my $returnvalue;
 my ($arguments,$userdefined)=handleArguments(@ARGV);
 my $queryResults={};
 my $insertKeys;
+controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);#just in case jobs are completed while moirai2.pl was not running
 if(defined($opt_i)){checkInputOutput($opt_i);}
 if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){
@@ -481,7 +480,7 @@ sub commandProcess{
 		print STDERR "Do you want to continue [y/n]? ";
 		my $prompt=<STDIN>;
 		chomp($prompt);
-		if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){exit(0);}
+		if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){exit(1);}
 	}
 	writeInserts(@inserts);
 	return @nodeids;
@@ -494,10 +493,6 @@ sub commandProcessVars{
 	my @inputs=@{shift()};
 	my @outputs=@{shift()};
 	my $vars={};
-	#print_table("##### userdefined #####",$userdefined);
-	#print_table("##### insertKeys #####",$insertKeys);
-	#print_table("##### inputs #####",\@inputs);
-	#print_table("##### outputs #####",\@outputs);
 	for(my $i=0;$i<scalar(@inputs);$i++){
 		my $input=$inputs[$i];
 		my $value=$input;
@@ -1254,11 +1249,9 @@ sub bashCommand{
 		print OUT "EOF\n";
 	}
 	print OUT "if [ -s \$tmpdir/\$stdoutfile ];then\n";
-	print OUT "echo \"\$nodeid\t\$cmdurl#stdoutfile\t\$tmpdir/\$stdoutfile\">>\$tmpdir/\$insertfile\n";
 	print OUT "echo \"\$nodeid\t".$urls->{"daemon/stdout"}."\t\$tmpdir/\$stdoutfile\">>\$tmpdir/\$insertfile\n";
 	print OUT "fi\n";
 	print OUT "if [ -s \$tmpdir/\$stderrfile ];then\n";
-	print OUT "echo \"\$nodeid\t\$cmdurl#stderrfile\t\$tmpdir/\$stderrfile\">>\$tmpdir/\$insertfile\n";
 	print OUT "echo \"\$nodeid\t".$urls->{"daemon/stderr"}."\t\$tmpdir/\$stderrfile\">>\$tmpdir/\$insertfile\n";
 	print OUT "fi\n";
 	if(scalar(@unzips)>0){
