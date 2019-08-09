@@ -50,7 +50,7 @@
 					var code="";
 					var maxcols=maxLength(codes);
 					var maxrows=codes.length;
-					for(var j=0;j<maxrows;j++){code+=codes[j]+"\n";}
+					for(var j=0;j<maxrows;j++){code+=codes[j].replace(new RegExp("\\\\\\\\",'g'),"\\")+"\n";}
 					if(maxrows>30)maxrows=30;
 					$("#main").append($("<b>"+name+"</b>"));
 					$("#main").append("<br>");

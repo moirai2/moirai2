@@ -398,10 +398,40 @@ sub printCommand{
 	if(exists($command->{$urls->{"daemon/script"}})){
 		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
 			print STDOUT "#Script  :".$script->{$urls->{"daemon/script/name"}}."\n";
-			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print STDOUT "         :$line\n";}
+			foreach my $line(scriptCodeForStdout(@{$script->{$urls->{"daemon/script/code"}}})){
+				$line=~s/\t/\\t/g;
+				$line=~s/\n/\\n/g;
+				print STDOUT "         :$line\n";
+			}
 		}
 	}
 	print STDOUT "\n";
+}
+############################## scriptCodeForStdout ##############################
+sub scriptCodeForStdout{
+	my @codes=@_;
+	my @output=();
+	for(my $i=0;$i<scalar(@codes);$i++){
+		my $line=$codes[$i];
+		$line=~s/\t/\\t/g;
+		$line=~s/\n/\\n/g;
+		push(@output,$line);
+	}
+	return @output;
+}
+############################## scriptCodeForBash ##############################
+sub scriptCodeForBash{
+	my @codes=@_;
+	my @output=();
+	for(my $i=0;$i<scalar(@codes);$i++){
+		my $line=$codes[$i];
+		$line=~s/\\/\\\\/g;
+		$line=~s/\t/\\t/g;
+		$line=~s/\n/\\n/g;
+		$line=~s/\$/\\\$/g;
+		push(@output,$line);
+	}
+	return @output;
 }
 ############################## assignCommand ##############################
 sub assignCommand{
@@ -826,6 +856,7 @@ sub handleScript{
 		my $name=$script->{$urls->{"daemon/script/name"}};
 		my $code=$script->{$urls->{"daemon/script/code"}};
 		if(ref($code)ne"ARRAY"){$code=[$code];}
+		foreach my $c(@{$code}){$c=~s/\\"/"/;}
 		$command->{$name}=$code;
 		push(@{$command->{"script"}},$name);
 	}
@@ -1042,11 +1073,7 @@ sub bashCommand{
 		foreach my $name (@{$command->{"script"}}){
 			push(@scriptfiles,"$cwd/$name");
 			print OUT "cat<<EOF>$name\n";
-			for(my $i=0;$i<scalar(@{$command->{$name}});$i++){
-				my $code=$command->{$name}->[$i];
-				$code=~s/\$/\\\$/g;
-				print OUT "$code\n";
-			}
+			foreach my $line(scriptCodeForBash(@{$command->{$name}})){print OUT "$line\n";}
 			print OUT "EOF\n";
 		}
 	}
