@@ -45,10 +45,7 @@
 		var codes=[];
 		lines.forEach(function(line){
 			line=line.replace(new RegExp("\r",'g'),"");
-			line=line.replace(new RegExp("^\\s*",),"");
-			line=line.replace(new RegExp("\\\\",'g'),"\\\\\\\\");
 			line=line.replace(new RegExp("\"",'g'),"\\\"");
-			line=line.replace(new RegExp("\t",'g'),"\\\\t");
 			line="\""+line+"\"";
 			codes.push(line);
 		});
@@ -164,7 +161,7 @@ perl test.pl < $input > $output
 		</li>
 		<li>Example: To store a return value from a command to a variable.
 <pre>
-output=`perl test.pl < $input`
+output=`perl test.pl < $input` OR output=$(perl test.pl < $input)
 </pre>
 		</li>
 		<li>Example: To store files created from a command to an array variable.
