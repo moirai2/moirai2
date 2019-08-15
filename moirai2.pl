@@ -183,6 +183,7 @@ if(defined($opt_i)){
 	}
 	$queryResults->{".keys"}=$keys;
 	$queryResults->{".hashs"}=\@hashs;
+	if(defined($opt_l)){print_rows($keys,\@hashs);}
 }else{if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}}
 if(defined($opt_o)){
 	$insertKeys=handleKeys(replaceStringWithHash($userdefined,$opt_o));
@@ -1844,16 +1845,16 @@ sub getHttpContent{
 ############################## print_rows ##############################
 sub print_rows{
 	my $keys=shift();
-	my $rows=shift();
+	my $hashtable=shift();
 	my @lengths=();
 	my @labels=();
 	foreach my $key(@{$keys}){push(@labels,"\$$key");}
-	my $indexlength=length("".scalar(@{$rows}));
+	my $indexlength=length("".scalar(@{$hashtable}));
 	for(my $i=0;$i<scalar(@labels);$i++){$lengths[$i]=length($labels[$i]);}
-	for(my $i=0;$i<scalar(@{$rows});$i++){
-		for(my $j=0;$j<scalar(@{$rows->[$i]});$j++){
-			my $token=$rows->[$i]->[$j];
-			my $length=length($token);
+	for(my $i=0;$i<scalar(@{$hashtable});$i++){
+		my $hash=$hashtable->[$i];
+		for(my $j=0;$j<scalar(@labels);$j++){
+			my $length=length($hash->{$keys->[$j]});
 			if($lengths[$j]<$length){$lengths[$j]=$length;}
 		}
 	}
@@ -1877,13 +1878,14 @@ sub print_rows{
 	$labelline.="|";
 	print STDERR "$labelline\n";
 	print STDERR "$tableline\n";
-	for(my $i=0;$i<scalar(@{$rows});$i++){
+	for(my $i=0;$i<scalar(@{$hashtable});$i++){
+		my $hash=$hashtable->[$i];
 		my $line="$i";
 		my $l=length($line);
 		for(my $j=$l;$j<$indexlength;$j++){$line=" $line";}
 		$line="|$line";
-		for(my $j=0;$j<scalar(@{$rows->[$i]});$j++){
-			my $token=$rows->[$i]->[$j];
+		for(my $j=0;$j<scalar(@{$keys});$j++){
+			my $token=$hash->{$keys->[$j]};
 			my $l=length($token);
 			$line.="|$token";
 			for(my $k=$l;$k<$lengths[$j];$k++){$line.=" ";}
