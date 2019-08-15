@@ -73,6 +73,7 @@ sub help{
 	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
 	print "COMMAND: $program_name ls DIR/FILE > LIST\n";
 	print "COMMAND: $program_name -d DB ls '-' < STDIN\n";
+	print "COMMAND: $program_name -d DB install\n";
 	print "COMMAND: $program_name -d DB rmexec\n";
 	print "\n";
 	print "COMMAND: $program_name -d DB conda\n";
@@ -174,6 +175,7 @@ sub test{
 ############################## MAIN ##############################
 my $database=$opt_d;
 if(!defined($database)){$database="rdf.sqlite3";}
+my $bindir=defined($opt_b)?$opt_b:Cwd::getcwd()."/bin";
 my $iswebdb=($database=~/^https?:\/\//)?1:0;
 my $command=shift(@ARGV);
 if(defined($opt_h)||defined($opt_H)||!defined($command)){
@@ -542,8 +544,6 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	printExecutesInHTML(retrieveExecutes($database));
 }elsif(lc($command) eq "conda"){
 	whichConda($database);
-}elsif(lc($command) eq "software"){
-	whichSoftware($database,@ARGV);
 }elsif(lc($command) eq "ls"){
 	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
 }elsif(lc($command) eq "importtable"){
@@ -565,8 +565,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	$dbh->do("drop table edge");
 	$dbh->disconnect;
 }elsif(lc($command) eq "install"){
-	my $bindir=defined($opt_b)?$opt_b:"bin";
-	installSoftware($database,$bindir,@ARGV);
+	installSoftware($bindir,@ARGV);
 }elsif(lc($command) eq "rmexec"){
 	rmexec($database);
 }
@@ -584,16 +583,36 @@ sub rmexec{
 ############################## installSoftware ##############################
 sub installSoftware{
 	my @softwares=@_;
-	my $database=shift(@softwares);
 	my $bindir=shift(@softwares);
+	my @installs=();
+	my $hash=dbSelect($database,undef,$urls->{"software/bin"},undef);
 	foreach my $software(@softwares){
-		my $hash=dbSelect($database,$software,$urls->{"software/bin"});
 		if(exists($hash->{$software})){next;}
+		my $path="$bindir/$software";
+		if(!(-e $path)){$path=`which $software`;chomp($path);}
+		if($path ne ""&&promptYesNo("Do you want to set '$path' for '$software' [y/n]? ")){
+			if(!(-e $path)){system("ln -s $path $bindir/$software");}
+			dbInsert($database,$software,$urls->{"software/bin"},$path);
+			next;
+		}
+		if(!promptYesNo("Do you want to install '$software' [y/n]? ")){next;}
+		push(@installs,$software);
+	}
+	foreach my $install(@installs){
 		my $node=newNode($database);
-		my $url="https://moirai2.github.io/software/install/$software.json";
-		my $command="perl moirai2.pl -d $database	-o '$software->".$urls->{"software/bin"}."->\$path' $url $bindir\n";
+		my $url="https://moirai2.github.io/software/install/$install.json";
+		my $command="perl moirai2.pl -d $database	-o '$install->".$urls->{"software/bin"}."->\$path' $url $bindir";
 		system($command);
 	}
+}
+############################## promptYesNo ##############################
+sub promptYesNo{
+	my $querstion=shift();
+	print STDOUT $querstion;
+	my $prompt=<STDIN>;
+	chomp($prompt);
+	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){return 0;}
+	else{return 1;}
 }
 ############################## exportTable ##############################
 sub exportTable{
@@ -816,25 +835,6 @@ sub retrieveExecutes{
 		}
 	}
 	return $hashtable
-}
-############################## whichSoftware ##############################
-sub whichSoftware{
-	my @softwares=@_;
-	my $database=shift(@softwares);
-	my $hash=dbSelect($database,undef,$urls->{"software/bin"},undef);
-	foreach my $software(@softwares){
-		if(exists($hash->{$software})){
-			my $path=$hash->{$software}->{$urls->{"software/bin"}};
-			print "$path\n";
-			next;
-		}
-		my $path=`which $software`;
-		chomp($path);
-		if($path ne ""){
-			dbInsert($database,$software,$urls->{"software/bin"},$path);
-			print "$path\n";
-		}
-	}
 }
 ############################## executeComand ##############################
 sub executeComand{
