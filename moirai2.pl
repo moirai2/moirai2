@@ -427,7 +427,6 @@ sub scriptCodeForBash{
 	for(my $i=0;$i<scalar(@codes);$i++){
 		my $line=$codes[$i];
 		$line=~s/\\/\\\\/g;
-		$line=~s/\t/\\t/g;
 		$line=~s/\n/\\n/g;
 		$line=~s/\$/\\\$/g;
 		$line=~s/\`/\\`/g;
