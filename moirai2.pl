@@ -416,6 +416,7 @@ sub scriptCodeForStdout{
 		my $line=$codes[$i];
 		$line=~s/\t/\\t/g;
 		$line=~s/\n/\\n/g;
+		$line=~s/\\\\/\\/g;
 		push(@output,$line);
 	}
 	return @output;
