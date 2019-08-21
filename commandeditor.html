@@ -44,8 +44,13 @@
 		var lines=code.split(/\n/);
 		var codes=[];
 		lines.forEach(function(line){
-			line=line.replace(new RegExp("\r",'g'),"");
+			line=line.replace(new RegExp("\\\\",'g'),"\\\\");
 			line=line.replace(new RegExp("\"",'g'),"\\\"");
+			line=line.replace(new RegExp("\b",'g'),"\\b");
+			line=line.replace(new RegExp("\f",'g'),"\\f");
+			line=line.replace(new RegExp("\n",'g'),"\\n");
+			line=line.replace(new RegExp("\r",'g'),"\\r");
+			line=line.replace(new RegExp("\t",'g'),"\\t");
 			line="\""+line+"\"";
 			codes.push(line);
 		});

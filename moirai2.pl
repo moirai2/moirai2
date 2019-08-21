@@ -399,27 +399,12 @@ sub printCommand{
 	if(exists($command->{$urls->{"daemon/script"}})){
 		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
 			print STDOUT "#Script  :".$script->{$urls->{"daemon/script/name"}}."\n";
-			foreach my $line(scriptCodeForStdout(@{$script->{$urls->{"daemon/script/code"}}})){
-				$line=~s/\t/\\t/g;
-				$line=~s/\n/\\n/g;
+			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){
 				print STDOUT "         :$line\n";
 			}
 		}
 	}
 	print STDOUT "\n";
-}
-############################## scriptCodeForStdout ##############################
-sub scriptCodeForStdout{
-	my @codes=@_;
-	my @output=();
-	for(my $i=0;$i<scalar(@codes);$i++){
-		my $line=$codes[$i];
-		$line=~s/\t/\\t/g;
-		$line=~s/\n/\\n/g;
-		$line=~s/\\\\/\\/g;
-		push(@output,$line);
-	}
-	return @output;
 }
 ############################## scriptCodeForBash ##############################
 sub scriptCodeForBash{
