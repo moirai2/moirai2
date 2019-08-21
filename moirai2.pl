@@ -94,6 +94,8 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -r  Recursive search through a directory (default='0').\n";
 	print "         -s  Loop second (default='10 sec').\n";
 	print "\n";
+	print "Usage: $program_name script URL\n";
+	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	print "\n";
 	if(defined($opt_H)){
@@ -130,6 +132,12 @@ my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n
 my $cwd=Cwd::getcwd();
 if($ARGV[0] eq "daemon"){autodaemon();exit(0);}
 if($ARGV[0] eq "test"){test();exit(0);}
+if($ARGV[0] eq "script"){
+	my $outdir=defined($opt_o)?$opt_o:".";
+	mkdir($outdir);
+	if(scalar(@ARGV)>1){writeScript($ARGV[1],$outdir,$commands);}
+	exit(0);
+}
 my $rdfdb=$opt_d;
 if(!defined($rdfdb)){$rdfdb="rdf.sqlite3";}
 if($rdfdb!~/^\//){$rdfdb="$cwd/$rdfdb";}
@@ -271,6 +279,29 @@ sub test{
 	unlink("test/B.json");
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
+}
+############################## writeScript ##############################
+sub writeScript{
+	my $url=shift();
+	my $outdir=shift();
+	my $commands=shift();
+	my $command=loadCommandFromURL($url,$commands);
+	my $basename=basename($url,".json");
+	open(OUT,">$outdir/$basename.sh");
+	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){
+		$line=~s/\$tmpdir\///g;
+		print OUT "$line\n";
+	}
+	close(OUT);
+	if(exists($command->{$urls->{"daemon/script"}})){
+		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
+			my $path="$outdir/".$script->{$urls->{"daemon/script/name"}};
+			$path=~s/\$tmpdir\///g;
+			open(OUT,">$path");
+			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print OUT "$line\n";}
+			close(OUT);
+		}
+	}
 }
 ############################## testCommand ##############################
 sub testCommand{
