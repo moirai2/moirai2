@@ -84,7 +84,8 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2019/07/18  'drop' added to remove all data.\n";
+		print "UPDATED: 2019/08/27  'input', 'prompt', and 'install' added to manipulate database inputs.\n";
+		print "         2019/07/18  'drop' added to remove all data.\n";
 		print "         2019/06/04  Added 'executes' and 'html' to retrieve execute log informations.\n";
 		print "         2019/05/07  Added 'md5' to calculate md5 of files.\n";
 		print "         2019/04/26  Changed name from 'sqlite3.pl' to 'rdf.pl'.\n";
@@ -564,10 +565,37 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	$dbh->do("drop table node");
 	$dbh->do("drop table edge");
 	$dbh->disconnect;
+}elsif(lc($command) eq "prompt"){
+	promptInsert($database,@ARGV);
 }elsif(lc($command) eq "install"){
-	installSoftware($bindir,@ARGV);
+	installSoftware($database,$bindir,@ARGV);
+}elsif(lc($command) eq "input"){
+	inputDatabase($database,@ARGV);
 }elsif(lc($command) eq "rmexec"){
 	rmexec($database);
+}
+############################## inputDatabase ##############################
+sub inputDatabase{
+	my @inputs=@_;
+	my $database=shift(@inputs);
+	my $subject=shift(@inputs);
+	my $predicate=shift(@inputs);
+	foreach my $input(@inputs){dbInsert($database,$subject,$predicate,$input);}
+}
+############################## promptInsert ##############################
+sub promptInsert{
+	my $database=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $question=shift();
+	my $default=shift();
+	my $object=getObject($database,$subject,$predicate);
+	if(defined($object)){return;}
+	print STDOUT $question;
+	my $answer=<STDIN>;
+	chomp($answer);
+	if($answer ne ""){dbInsert($database,$subject,$predicate,$answer);}
+	elsif(defined($default)){dbInsert($database,$subject,$predicate,$default);}
 }
 ############################## rmexec ##############################
 sub rmexec{
@@ -583,6 +611,7 @@ sub rmexec{
 ############################## installSoftware ##############################
 sub installSoftware{
 	my @softwares=@_;
+	my $database=shift(@softwares);
 	my $bindir=shift(@softwares);
 	my @installs=();
 	my $hash=dbSelect($database,undef,$urls->{"software/bin"},undef);
@@ -607,12 +636,12 @@ sub installSoftware{
 }
 ############################## promptYesNo ##############################
 sub promptYesNo{
-	my $querstion=shift();
-	print STDOUT $querstion;
+	my $question=shift();
+	print STDOUT $question;
 	my $prompt=<STDIN>;
 	chomp($prompt);
-	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){return 0;}
-	else{return 1;}
+	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){return 1;}
+	else{return 0;}
 }
 ############################## exportTable ##############################
 sub exportTable{
