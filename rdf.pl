@@ -42,10 +42,6 @@ $urls->{"system"}="https://moirai2.github.io/schema/system";
 $urls->{"system/file"}="https://moirai2.github.io/schema/system/file";
 $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
 
-$urls->{"miniconda3"}="https://moirai2.github.io/software/miniconda3";
-$urls->{"miniconda3/bin"}="https://moirai2.github.io/software/miniconda3/bin";
-$urls->{"miniconda3/directory"}="https://moirai2.github.io/software/miniconda3/directory";
-
 ############################## HELP ##############################
 sub help{
 	print "PROGRAM: $program_name\n";
@@ -65,18 +61,24 @@ sub help{
 	print "COMMAND: $program_name -d DB newnode > NODE\n";
 	print "COMMAND: $program_name -d DB reindex\n";
 	print "COMMAND: $program_name -d DB download URL\n";
-	print "COMMAND: $program_name -d DB software URL\n";
 	print "COMMAND: $program_name -d DB -f json command < JSON\n";
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name linecount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name seqcount DIR/FILE > TSV\n";
+	print "COMMAND: $program_name filesize DIR/FILE > TSV\n";
 	print "COMMAND: $program_name md5 DIR/FILE > TSV\n";
 	print "COMMAND: $program_name ls DIR/FILE > LIST\n";
 	print "COMMAND: $program_name -d DB ls '-' < STDIN\n";
+	print "COMMAND: $program_name -d DB -D DB2 copy QUERY\n";
 	print "COMMAND: $program_name -d DB install\n";
 	print "COMMAND: $program_name -d DB rmexec\n";
-	print "\n";
+	print "COMMAND: $program_name -d DB input SUB PRE OBJECT OBJECT2 [..]\n";
+	print "COMMAND: $program_name -d DB prompt SUB PRE QUESTION DEFAULT\n";
 	print "COMMAND: $program_name -d DB conda\n";
+	print "COMMAND: $program_name -d DB importtable FILE FILE2 [..]\n";
+	print "COMMAND: $program_name -d DB exporttable FILE FILE2 [..]\n";
+	print "COMMAND: $program_name -d DB executes\n";
+	print "COMMAND: $program_name -d DB html\n";
 	print "\n";
 	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
 	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
@@ -543,8 +545,6 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	printExecutesInJson(retrieveExecutes($database));
 }elsif(lc($command) eq "html"){
 	printExecutesInHTML(retrieveExecutes($database));
-}elsif(lc($command) eq "conda"){
-	whichConda($database);
 }elsif(lc($command) eq "ls"){
 	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
 }elsif(lc($command) eq "importtable"){
@@ -640,8 +640,8 @@ sub promptYesNo{
 	print STDOUT $question;
 	my $prompt=<STDIN>;
 	chomp($prompt);
-	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){return 1;}
-	else{return 0;}
+	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){return 0;}
+	else{return 1;}
 }
 ############################## exportTable ##############################
 sub exportTable{
@@ -746,22 +746,6 @@ sub ls{
 		close($reader);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}else{foreach my $file(@files){print "$file\n";}}
-}
-############################## whichConda ##############################
-sub whichConda{
-	my $database=shift();
-	my $hash=dbSelect($database,undef,$urls->{"software/bin"},undef);
-	my $condabin=`which conda`;
-	chomp($condabin);
-	if($condabin eq ""){return;}
-	my $condadir=dirname(dirname($condabin));
-	my $json={$urls->{"miniconda3"}=>{$urls->{"miniconda3/bin"}=>$condabin,$urls->{"miniconda3/directory"}=>$condadir}};
-	my $dbh=openDB($database);
-	$dbh->begin_work;
-	my $linecount=insertRDF($dbh,$json);
-	$dbh->commit;
-	$dbh->disconnect;
-	print "$condabin\n";
 }
 ############################## printExecutesInHTML ##############################
 sub printExecutesInHTML{
