@@ -580,7 +580,20 @@ sub inputDatabase{
 	my $database=shift(@inputs);
 	my $subject=shift(@inputs);
 	my $predicate=shift(@inputs);
-	foreach my $input(@inputs){dbInsert($database,$subject,$predicate,$input);}
+	if(scalar(@inputs)>0){
+		foreach my $input(@inputs){dbInsert($database,$subject,$predicate,$input);}
+	}else{
+		print STDERR "Please input for '$subject -> $predicate' [empty return to end]?\n";
+		my $index=1;
+		print STDERR "[$index] ";
+		while(<STDIN>){
+			chomp;s/\r//g;
+			if($_ eq ""){last;}
+			dbInsert($database,$subject,$predicate,$_);
+			$index++;
+			print STDERR "[$index] ";
+		}
+	}
 }
 ############################## promptInsert ##############################
 sub promptInsert{
