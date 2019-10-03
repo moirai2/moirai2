@@ -17,8 +17,8 @@ my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_b $opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_q $opt_r $opt_t $opt_w);
-getopts('b:d:D:e:f:g:hHl:qr:tw:');
+use vars qw($opt_b $opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_p $opt_q $opt_r $opt_t $opt_w);
+getopts('b:d:D:e:f:g:hHl:pqr:tw:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -74,7 +74,6 @@ sub help{
 	print "COMMAND: $program_name -d DB rmexec\n";
 	print "COMMAND: $program_name -d DB input SUB PRE OBJECT OBJECT2 [..]\n";
 	print "COMMAND: $program_name -d DB prompt SUB PRE QUESTION DEFAULT\n";
-	print "COMMAND: $program_name -d DB conda\n";
 	print "COMMAND: $program_name -d DB importtable FILE FILE2 [..]\n";
 	print "COMMAND: $program_name -d DB exporttable FILE FILE2 [..]\n";
 	print "COMMAND: $program_name -d DB executes\n";
@@ -566,7 +565,8 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	$dbh->do("drop table edge");
 	$dbh->disconnect;
 }elsif(lc($command) eq "prompt"){
-	promptInsert($database,@ARGV);
+	my $answer=promptInsert($database,@ARGV);
+	if(defined($opt_p)){print "$answer\n";}
 }elsif(lc($command) eq "install"){
 	installSoftware($database,$bindir,@ARGV);
 }elsif(lc($command) eq "input"){
@@ -609,6 +609,7 @@ sub promptInsert{
 	chomp($answer);
 	if($answer ne ""){dbInsert($database,$subject,$predicate,$answer);}
 	elsif(defined($default)){dbInsert($database,$subject,$predicate,$default);}
+	return $answer;
 }
 ############################## rmexec ##############################
 sub rmexec{
@@ -632,7 +633,13 @@ sub installSoftware{
 		if(exists($hash->{$software})){next;}
 		my $path="$bindir/$software";
 		if(!(-e $path)){$path=`which $software`;chomp($path);}
-		if($path ne ""&&promptYesNo("Do you want to set '$path' for '$software' [y/n]? ")){
+		if($path ne ""&&promptYesNo("Do you want to use '$path' software [y/n]? ")){
+			if(!(-e $path)){system("ln -s $path $bindir/$software");}
+			dbInsert($database,$software,$urls->{"software/bin"},$path);
+			next;
+		}
+		$path=promptInput("Fullpath to '$software' [empty=install] : ");
+		if($path ne ""){
 			if(!(-e $path)){system("ln -s $path $bindir/$software");}
 			dbInsert($database,$software,$urls->{"software/bin"},$path);
 			next;
@@ -646,6 +653,14 @@ sub installSoftware{
 		my $command="perl moirai2.pl -d $database	-o '$install->".$urls->{"software/bin"}."->\$path' $url $bindir";
 		system($command);
 	}
+}
+############################## promptInput ##############################
+sub promptInput{
+	my $question=shift();
+	print STDOUT $question;
+	my $prompt=<STDIN>;
+	chomp($prompt);
+	if($prompt ne ""){return $prompt;}
 }
 ############################## promptYesNo ##############################
 sub promptYesNo{
@@ -743,22 +758,29 @@ sub ls{
 	if(scalar(@args)==0){push(@args,".");}
 	if(scalar(@args)==1&&$args[0]eq"-"){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=listFiles($filegrep,$recursive,@args);}
+	my @lines=();
+	if(defined($format)){
+		foreach my $file(@files){
+			my $line=$format;
+			$line=~s/\$_/$file/g;
+			$line=~s/->/\t/g;
+			push(@lines,$line);
+		}
+	}else{
+		foreach my $file(@files){
+			push(@lines,$urls->{"system"}."\t".$urls->{"system/file"}."\t$file");
+		}
+	}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
-		foreach my $file(@files){print $writer $urls->{"system"}."\t".$urls->{"system/file"}."\t$file\n";}
-		if(defined($format)){
-			foreach my $file(@files){
-				my $line=$format;
-				$line=~s/\$path/$file/g;
-				print $writer "$line\n";
-			}
-		}
+		foreach my $line(@lines){print $writer "$line\n";}
 		close($writer);
 		my $reader=IO::File->new($file);
 		my $linecount=importDB($database,$reader);
 		close($reader);
 		if(!$opt_q){print "inserted $linecount\n";}
-	}else{foreach my $file(@files){print "$file\n";}}
+	}elsif(defined($opt_f)){foreach my $line(@lines){print "$line\n";}}
+	else{foreach my $file(@files){print "$file\n";}}
 }
 ############################## printExecutesInHTML ##############################
 sub printExecutesInHTML{
@@ -2453,6 +2475,7 @@ sub listFiles{
 			if($file eq "."){next;}
 			if($file eq ".."){next;}
 			if($file eq ""){next;}
+			if($file=~/^\./){next;}
 			$file=($inputdirectory eq ".")?$file:"$inputdirectory/$file";
 			if(-d $file){
 				if($recursivesearch!=0){push(@inputfiles,listFiles($filegrep,$recursivesearch-1,$file));}
