@@ -22,11 +22,13 @@ getopts('b:d:D:e:f:g:hHl:pqr:tw:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
+$urls->{"daemon/bash"}="https://moirai2.github.io/schema/daemon/bash";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"daemon/execid"}="https://moirai2.github.io/schema/daemon/execid";
 $urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
+$urls->{"daemon/timeduration"}="https://moirai2.github.io/schema/daemon/timeduration";
 
 $urls->{"file"}="https://moirai2.github.io/schema/file";
 $urls->{"file/line"}="https://moirai2.github.io/schema/file/line";
@@ -85,7 +87,8 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2019/08/27  'input', 'prompt', and 'install' added to manipulate database inputs.\n";
+		print "UPDATED: 2019/10/07  'history'.\n";
+		print "         2019/08/27  'input', 'prompt', and 'install' added to manipulate database inputs.\n";
 		print "         2019/07/18  'drop' added to remove all data.\n";
 		print "         2019/06/04  Added 'executes' and 'html' to retrieve execute log informations.\n";
 		print "         2019/05/07  Added 'md5' to calculate md5 of files.\n";
@@ -573,6 +576,185 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	inputDatabase($database,@ARGV);
 }elsif(lc($command) eq "rmexec"){
 	rmexec($database);
+}elsif(lc($command) eq "history"){
+	history($database);
+}
+############################## history ##############################
+sub history{
+	my $database=shift();
+	my $data=dbSelect($database,undef,$urls->{"daemon/command"});
+	foreach my $subject(keys(%{$data})){
+		foreach my $predicate(keys(%{$data->{$subject}})){
+			my $object=$data->{$subject}->{$predicate};
+			my $json=getJson($object);
+			my $bash=$json->{$urls->{"daemon/bash"}};
+			$data->{$subject}->{$urls->{"daemon/bash"}}=$bash;
+		}
+		my $timestarted=getObject($database,$subject,$urls->{"daemon/timestarted"});
+		$data->{$subject}->{$urls->{"daemon/timestarted"}}=$timestarted;
+		my $timeended=getObject($database,$subject,$urls->{"daemon/timeended"});
+		$data->{$subject}->{$urls->{"daemon/timeended"}}=$timeended;
+		my $duration=$timeended-$timestarted;
+		$data->{$subject}->{$urls->{"daemon/timeduration"}}=$duration;
+	}
+	my @nodes=sort{$data->{$a}->{$urls->{"daemon/timestarted"}} cmp $data->{$b}->{$urls->{"daemon/timestarted"}}}keys(%{$data});
+	print "\n";
+	my $index=1;
+	foreach my $node(@nodes){
+		my $url=$data->{$node}->{$urls->{"daemon/command"}};
+		my $start=$data->{$node}->{$urls->{"daemon/timestarted"}};
+		my $end=$data->{$node}->{$urls->{"daemon/timeended"}};
+		my $duration=$data->{$node}->{$urls->{"daemon/timeduration"}};
+		my $url_line=$url;
+		my $time_line=getDate("/",$start)." ".getTime(":",$start)." (".getDuration($duration).")";
+		my $length=(length($url_line)>length($time_line))?length($url_line):length($time_line);
+		my $index_line=" $index ";
+		for(my $i=length($index_line);$i<$length;$i++){if($i%2==0){$index_line.="-";}else{$index_line="-$index_line";}}
+		my $label="";
+		for(my $i=0;$i<$length;$i++){$label.="-";}
+		for(my $i=length($url_line);$i<$length;$i++){$url_line.=" ";}
+		for(my $i=length($time_line);$i<$length;$i++){if($i%2==0){$time_line.=" ";}else{$time_line=" $time_line";}}
+		print "+-$index_line-+\n";
+		print "| $url_line |\n";
+		print "| $time_line |\n";
+		print "+-$label-+\n";
+		foreach my $bash(@{$data->{$node}->{$urls->{"daemon/bash"}}}){print "$bash\n";}
+		print "\n";
+		$index++;
+	}
+}
+############################## getDuration ##############################
+sub getDuration{
+	my $duration=shift();
+	if($duration<=100){return "$duration sec";}
+	elsif($duration<=60*100){return sprintf("%.1f",$duration/60)." min";}
+	elsif($duration<=60*60*100){return sprintf("%.1f",$duration/60/60)." hr";}
+	else{return sprintf("%.1f",$duration/24/60/60)." day";}
+}
+############################## getJson ##############################
+sub getJson{
+	my $url=shift();
+	my $username=shift();
+	my $password=shift();
+	my $content=($url=~/https?:\/\//)?getHttpContent($url,$username,$password):getFileContent($url);
+	my $directory=dirname($url);
+	$content=~s/\$this/$url/g;
+	$content=~s/\$\{this:directory\}/$directory/g;
+	return json_decode($content);
+}
+############################## getFileContent ##############################
+sub getFileContent{
+	my $path=shift();
+	open(IN,$path);
+	my $content;
+	while(<IN>){chomp;s/\r//g;$content.=$_;}
+	close(IN);
+	return $content;
+}
+############################## getHttpContent ##############################
+sub getHttpContent{
+	my $url=shift();
+	my $username=shift();
+	my $password=shift();
+	my $agent=new LWP::UserAgent();
+	my $request=HTTP::Request->new(GET=>$url);
+	if($username ne ""||$password ne ""){$request->authorization_basic($username,$password);}
+	my $res=$agent->request($request);
+	if($res->is_success){return $res->content;}
+	elsif($res->is_error){print $res;}
+}
+############################## json_decode ##############################
+sub json_decode{
+	my $text=shift();
+	my @temp=split(//,$text);
+	my $chars=\@temp;
+	my $index=0;
+	my $value;
+	if($chars->[$index] eq "["){($value,$index)=toJsonArray($chars,$index+1);return $value;}
+	elsif($chars->[$index] eq "{"){($value,$index)=toJsonHash($chars,$index+1);return $value;}
+}
+sub toJsonArray{
+	my $chars=shift();
+	my $index=shift();
+	my $array=[];
+	my $value;
+	my $length=scalar(@{$chars});
+	for(;$chars->[$index] ne "]"&&$index<$length;$index++){
+		if($chars->[$index] eq "["){($value,$index)=toJsonArray($chars,$index+1);push(@{$array},$value);}
+		elsif($chars->[$index] eq "{"){($value,$index)=toJsonHash($chars,$index+1);push(@{$array},$value);}
+		elsif($chars->[$index] eq "\""){($value,$index)=toJsonStringDoubleQuote($chars,$index+1);push(@{$array},$value);}
+		elsif($chars->[$index] eq "\'"){($value,$index)=toJsonStringSingleQuote($chars,$index+1);push(@{$array},$value);}
+	}
+	return ($array,$index);
+}
+sub toJsonHash{
+	my $chars=shift();
+	my $index=shift();
+	my $hash={};
+	my $key;
+	my $value;
+	my $length=scalar(@{$chars});
+	for(my $findKey=1;$index<$length;$index++){
+		if($chars->[$index] eq "}"){
+			if(defined($value)){$hash->{$key}=$value;}
+			last;
+		}elsif($findKey==1){
+			if($value ne ""){$hash->{$key}=$value;$value="";}
+			if($chars->[$index] eq ":"){$key=chomp($key);$findKey=0;}
+			elsif($chars->[$index] eq "\""){($key,$index)=toJsonStringDoubleQuote($chars,$index+1);$findKey=0;}
+			elsif($chars->[$index] eq "\'"){($key,$index)=toJsonStringSingleQuote($chars,$index+1);$findKey=0;}
+			elsif($chars->[$index]!~/^\s$/){$key.=$chars->[$index];}
+		}else{
+			if($chars->[$index] eq ":"){next;}
+			elsif($chars->[$index] eq ","){$findKey=1;}
+			elsif($chars->[$index] eq "["){($value,$index)=toJsonArray($chars,$index+1);$hash->{$key}=$value;$value=undef;}
+			elsif($chars->[$index] eq "{"){($value,$index)=toJsonHash($chars,$index+1);$hash->{$key}=$value;$value=undef;}
+			elsif($chars->[$index] eq "\""){($value,$index)=toJsonStringDoubleQuote($chars,$index+1);$hash->{$key}=$value;$value=undef;}
+			elsif($chars->[$index] eq "\'"){($value,$index)=toJsonStringSingleQuote($chars,$index+1);$hash->{$key}=$value;$value=undef;}
+			elsif($chars->[$index]!~/^\s$/){$value.=$chars->[$index];}
+		}
+	}
+	return ($hash,$index);
+}
+sub toJsonStringDoubleQuote{
+	my $chars=shift();
+	my $index=shift();
+	my $length=scalar(@{$chars});
+	my $value;
+	my $i;
+	for($i=$index;$i<$length;$i++){
+		if($chars->[$i] eq "\""){
+			if($i==$index){last;}
+			elsif($chars->[$i-1] ne "\\"){last;}
+		}
+		$value.=$chars->[$i];
+	}
+	return (jsonUnescape($value),$i);
+}
+sub toJsonStringSingleQuote{
+	my $chars=shift();
+	my $index=shift();
+	my $length=scalar(@{$chars});
+	my $value;
+	my $i;
+	for($i=$index;$i<$length;$i++){
+		if($chars->[$i] eq "\'"){
+			if($i==$index){last;}
+			elsif($chars->[$i-1] ne "\\"){last;}
+		}
+		$value.=$chars->[$i];
+	}
+	return (jsonUnescape($value),$i);
+}
+sub jsonUnescape{
+	my $text=shift();
+	$text=~s/\\\\/#_ESCAPED_#/g;
+	$text=~s/\\"/\"/g;
+	$text=~s/\\t/\t/g;
+	$text=~s/\\r/\r/g;
+	$text=~s/\\n/\n/g;
+	$text=~s/#_ESCAPED_#/\\/g;
+	return $text;
 }
 ############################## inputDatabase ##############################
 sub inputDatabase{
