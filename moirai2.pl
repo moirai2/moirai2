@@ -96,6 +96,8 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "Usage: $program_name script URL\n";
 	print "\n";
+	print "             Retrieves scripts from URL.\n";
+	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	print "\n";
 	if(defined($opt_H)){

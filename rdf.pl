@@ -29,21 +29,18 @@ $urls->{"daemon/execid"}="https://moirai2.github.io/schema/daemon/execid";
 $urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
 $urls->{"daemon/timeduration"}="https://moirai2.github.io/schema/daemon/timeduration";
-
 $urls->{"file"}="https://moirai2.github.io/schema/file";
 $urls->{"file/line"}="https://moirai2.github.io/schema/file/line";
 $urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
 $urls->{"file/filesize"}="https://moirai2.github.io/schema/file/filesize";
 $urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
 $urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
-
+$urls->{"file/timeremoved"}="https://moirai2.github.io/schema/file/timeremoved";
 $urls->{"software"}="https://moirai2.github.io/schema/software";
 $urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
-
 $urls->{"system"}="https://moirai2.github.io/schema/system";
 $urls->{"system/file"}="https://moirai2.github.io/schema/system/file";
 $urls->{"system/download"}="https://moirai2.github.io/schema/system/download";
-
 ############################## HELP ##############################
 sub help{
 	print "PROGRAM: $program_name\n";
@@ -60,6 +57,7 @@ sub help{
 	print "COMMAND: $program_name -d DB query QUERY > JSON\n";
 	print "COMMAND: $program_name -d DB replace FROM TO\n";
 	print "COMMAND: $program_name -d DB mv FROM TO\n";
+	print "COMMAND: $program_name -d DB rm PATH\n";
 	print "COMMAND: $program_name -d DB newnode > NODE\n";
 	print "COMMAND: $program_name -d DB reindex\n";
 	print "COMMAND: $program_name -d DB download URL\n";
@@ -80,6 +78,8 @@ sub help{
 	print "COMMAND: $program_name -d DB exporttable FILE FILE2 [..]\n";
 	print "COMMAND: $program_name -d DB executes\n";
 	print "COMMAND: $program_name -d DB html\n";
+	print "COMMAND: $program_name -d DB history\n";
+	#print "COMMAND: $program_name -d DB table\n";
 	print "\n";
 	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
 	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
@@ -87,7 +87,7 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2019/10/07  'history'.\n";
+		print "UPDATED: 2019/10/07  'history' function was added to review commands executed.\n";
 		print "         2019/08/27  'input', 'prompt', and 'install' added to manipulate database inputs.\n";
 		print "         2019/07/18  'drop' added to remove all data.\n";
 		print "         2019/06/04  Added 'executes' and 'html' to retrieve execute log informations.\n";
@@ -143,10 +143,10 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 replace D E","replaced 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 dump","A	B	E");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test3.txt","replaced 0");
-	testCommand("perl rdf.pl md5 test/test.txt | perl rdf.pl -d test/rdf.sqlite3 import","imported 1");
+	testCommand("perl rdf.pl md5 test/test.txt|perl rdf.pl -d test/rdf.sqlite3 import","imported 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 mv test/test.txt test/test2.txt","replaced 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete % ".$urls->{"file/md5"}." %","deleted 1");
-	testCommand("echo \"A\tB\tB\nA\tB\tC\nA\tC\tD\" | perl rdf.pl -d test/rdf.sqlite3 -f tsv insert","inserted 3");
+	testCommand("echo \"A\tB\tB\nA\tB\tC\nA\tC\tD\"|perl rdf.pl -d test/rdf.sqlite3 -f tsv insert","inserted 3");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object","B C D E");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A","B C D E");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object A B","B C E");
@@ -156,6 +156,7 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 -g txt ls test","inserted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object ".$urls->{"system"}." ".$urls->{"system/file"}." %","test/test2.txt");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete % % test/test2.txt","deleted 1");
+	unlink("test/test2.txt");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 delete A","deleted 4");
 	testCommand("echo C|perl rdf.pl -d test/rdf.sqlite3 insert A B '-'","inserted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 select A B C","A\tB\tC");
@@ -170,7 +171,7 @@ sub test{
 	testCommand("echo \"A\tB\tC\"|perl rdf.pl -d test/A.sqlite3 insert","inserted 1");
 	testCommand("echo \"D\tE\tF\"|perl rdf.pl -d test/B.sqlite3 insert","inserted 1");
 	testCommand("perl rdf.pl -d test/C.sqlite3 merge test/A.sqlite3 test/B.sqlite3","inserted 2");
-	unlink("test/test2.txt");
+	testCommand("perl rdf.pl -d test/C.sqlite3 select","A\tB\tC\nD\tE\tF");
 	unlink("test/rdf.sqlite3");
 	unlink("test/A.sqlite3");
 	unlink("test/B.sqlite3");
@@ -183,16 +184,47 @@ if(!defined($database)){$database="rdf.sqlite3";}
 my $bindir=defined($opt_b)?$opt_b:Cwd::getcwd()."/bin";
 my $iswebdb=($database=~/^https?:\/\//)?1:0;
 my $command=shift(@ARGV);
-if(defined($opt_h)||defined($opt_H)||!defined($command)){
-	help();
-	exit(0);
-}elsif($command eq "test"){
-	test();
-	exit(0);
-}elsif($command eq "linecount"){
+if(defined($opt_h)||defined($opt_H)||!defined($command)){help();}
+elsif(lc($command) eq "test"){test();}
+elsif(lc($command) eq "linecount"){linecountCommand($database,@ARGV);}
+elsif(lc($command) eq "seqcount"){seqcountCommand($database,@ARGV);}
+elsif(lc($command) eq "filesize"){filesizeCommand($database,@ARGV);}
+elsif(lc($command) eq "md5"){md5Command($database,@ARGV);}
+elsif(lc($command) eq "select"){selectCommand($database,@ARGV);}
+elsif(lc($command) eq "object"){objectCommand($database,@ARGV);}
+elsif(lc($command) eq "insert"){insertCommand($database,@ARGV);}
+elsif(lc($command) eq "import"){importCommand($database);}
+elsif(lc($command) eq "query"){queryCommand($database,@ARGV);}
+elsif(lc($command) eq "dump"){dumpCommand($database);}
+elsif(lc($command) eq "reindex"){reindexCommand($database);}
+elsif(lc($command) eq "update"){updateCommand($database,@ARGV);}
+elsif(lc($command) eq "delete"){deleteCommand($database,@ARGV);}
+elsif(lc($command) eq "replace"){replaceCommand($database,@ARGV);}
+elsif(lc($command) eq "mv"){mvCommand($database,@ARGV);}
+elsif(lc($command) eq "merge"){mergeCommand($database,@ARGV);}
+elsif(lc($command) eq "copy"){copyCommand($database,@ARGV);}
+elsif(lc($command) eq "newnode"){print newNode($database)."\n";}
+elsif(lc($command) eq "command"){commandCommand($database);}
+elsif(lc($command) eq "download"){downloadCommand($database,@ARGV);}
+elsif(lc($command) eq "executes"){printExecutesInJson(retrieveExecutes($database));}
+elsif(lc($command) eq "html"){printExecutesInHTML(retrieveExecutes($database));}
+elsif(lc($command) eq "ls"){lsCommand($database,$opt_f,$opt_g,$opt_r,@ARGV);}
+elsif(lc($command) eq "importtable"){importTableCommand($database,@ARGV);}
+elsif(lc($command) eq "exporttable"){exportTableCommand($database,@ARGV);}
+elsif(lc($command) eq "drop"){dropCommand($database);}
+elsif(lc($command) eq "prompt"){promptCommand($database,@ARGV);}
+elsif(lc($command) eq "install"){installSoftware($database,$bindir,@ARGV);}
+elsif(lc($command) eq "input"){inputDatabase($database,@ARGV);}
+elsif(lc($command) eq "rmexec"){rmexecCommand($database);}
+elsif(lc($command) eq "history"){historyCommand($database);}
+elsif(lc($command) eq "rm"){rmCommand($database,@ARGV);}
+############################## linecountCommand ##############################
+sub linecountCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	my @files=();
-	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
-	else{@files=@ARGV;}
+	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
 		countLines($writer,$opt_r,$opt_g,@files);
@@ -205,11 +237,14 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		countLines($writer,$opt_r,$opt_g,@files);
 		close($writer);
 	}
-	exit(0);
-}elsif($command eq "seqcount"){
+}
+############################## seqcountCommand ##############################
+sub seqcountCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	my @files=();
-	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
-	else{@files=@ARGV;}
+	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
 		countSequences($writer,$opt_r,$opt_g,@files);
@@ -222,11 +257,14 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		countSequences($writer,$opt_r,$opt_g,@files);
 		close($writer);
 	}
-	exit(0);
-}elsif($command eq "filesize"){
+}
+############################## filesizeCommand ##############################
+sub filesizeCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	my @files=();
-	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
-	else{@files=@ARGV;}
+	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
 		sizeFiles($writer,$opt_r,$opt_g,@files);
@@ -239,11 +277,14 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		sizeFiles($writer,$opt_r,$opt_g,@files);
 		close($writer);
 	}
-	exit(0);
-}elsif($command eq "md5"){
+}
+############################## md5Command ##############################
+sub md5Command{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	my @files=();
-	if(scalar(@ARGV)==0){while(<STDIN>){chomp;push(@files,$_);}}
-	else{@files=@ARGV;}
+	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
 		md5Files($writer,$opt_r,$opt_g,@files);
@@ -256,11 +297,14 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		md5Files($writer,$opt_r,$opt_g,@files);
 		close($writer);
 	}
-	exit(0);
-}elsif(lc($command) eq "select"){
-	my $subject=shift(@ARGV);
-	my $predicate=shift(@ARGV);
-	my $object=shift(@ARGV);
+}
+############################## selectCommand ##############################
+sub selectCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
+	my $subject=shift(@arguments);
+	my $predicate=shift(@arguments);
+	my $object=shift(@arguments);
 	my $json={$subject=>{$predicate=>$object}};
 	my $rdf=($iswebdb)?webSelect($database,$json):dbSelect($database,$subject,$predicate,$object);
 	my $format=defined($opt_f)?$opt_f:"tsv";
@@ -269,10 +313,14 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	elsif($format eq "json"){outputInJsonFormat($rdf,$writer);}
 	else{outputInAssembleFormat($rdf,$format,$writer);}
 	close($writer);
-}elsif(lc($command) eq "object"){
-	my $subject=shift(@ARGV);
-	my $predicate=shift(@ARGV);
-	my $object=shift(@ARGV);
+}
+############################## objectCommand ##############################
+sub objectCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
+	my $subject=shift(@arguments);
+	my $predicate=shift(@arguments);
+	my $object=shift(@arguments);
 	if($subject eq "?"){$subject=undef;}
 	if($predicate eq "?"){$predicate=undef;}
 	if($object eq "?"){$object=undef;}
@@ -291,12 +339,16 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		@objects=sort{$a cmp $b}@objects;
 		print join(" ",@objects)."\n";
 	}
-}elsif(lc($command) eq "insert"){
-	if(scalar(@ARGV)==0&&!defined($opt_f)){$opt_f="tsv";}
+}
+############################## insertCommand ##############################
+sub insertCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
+	if(scalar(@arguments)==0&&!defined($opt_f)){$opt_f="tsv";}
 	if(!defined($opt_f)){
-		my $subject=shift(@ARGV);
-		my $predicate=shift(@ARGV);
-		my $object=shift(@ARGV);
+		my $subject=shift(@arguments);
+		my $predicate=shift(@arguments);
+		my $object=shift(@arguments);
 		if($subject eq "?"){$subject=undef;}
 		if($predicate eq "?"){$predicate=undef;}
 		if($object eq "?"){$object=undef;}
@@ -330,13 +382,19 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		close($reader);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}
-}elsif(lc($command) eq "import"){
+}
+############################## importCommand ##############################
+sub importCommand{
+	my $database=shift();
 	my $reader=IO::File->new("-");
 	my $linecount=importDB($database,$reader);
 	close($reader);
 	if(!$opt_q){print "imported $linecount\n";}
-}elsif(lc($command) eq "query"){
-	my @queries=@ARGV;
+}
+############################## queryCommand ##############################
+sub queryCommand{
+	my @queries=@_;
+	my $database=shift(@queries);
 	if(scalar(@queries)==0){while(<STDIN>){chomp;push(@queries,$_);}}
 	my $results=[];
 	while(1){
@@ -359,11 +417,17 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		close($writer);
 	}elsif($opt_f eq "tsv"){outputQueryResults($results);}
 	else{my $writer=IO::File->new(">&STDOUT");assembleJsonResults($results,$opt_f,$writer);close($writer);}
-}elsif(lc($command) eq "dump"){
+}
+############################## dumpCommand ##############################
+sub dumpCommand{
+	my $database=shift();
 	my $writer=IO::File->new(">&STDOUT");
 	dumpDB($database,$opt_f,$writer);
 	close($writer);
-}elsif(lc($command) eq "reindex"){
+}
+############################## reindexCommand ##############################
+sub reindexCommand{
+	my $database=shift();
 	my ($fh,$filename)=tempfile;
 	dumpDB($database,"tsv",$fh);
 	close($fh);
@@ -374,11 +438,15 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	unlink($filename);
 	rename("$database.tmp",$database);
 	if(!$opt_q){print "reindexed $linecount\n";}
-}elsif(lc($command) eq "update"){
+}
+############################## updateCommand ##############################
+sub updateCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	if(!defined($opt_f)){
-		my $subject=shift(@ARGV);
-		my $predicate=shift(@ARGV);
-		my $object=shift(@ARGV);
+		my $subject=shift(@arguments);
+		my $predicate=shift(@arguments);
+		my $object=shift(@arguments);
 		if($subject eq "?"){$subject=undef;}
 		if($predicate eq "?"){$predicate=undef;}
 		if($object eq "?"){$object=undef;}
@@ -413,11 +481,15 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 			else{jsonUpdate($database,$json);}
 		}
 	}
-}elsif(lc($command) eq "delete"){
+}
+############################## deleteCommand ##############################
+sub deleteCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	if(!defined($opt_f)){
-		my $subject=shift(@ARGV);
-		my $predicate=shift(@ARGV);
-		my $object=shift(@ARGV);
+		my $subject=shift(@arguments);
+		my $predicate=shift(@arguments);
+		my $object=shift(@arguments);
 		if($subject eq "?"){$subject=undef;}
 		if($predicate eq "?"){$predicate=undef;}
 		if($object eq "?"){$object=undef;}
@@ -464,7 +536,11 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 			$dbh->disconnect;
 		}
 	}
-}elsif(lc($command) eq "replace"){
+}
+############################## replaceCommand ##############################
+sub replaceCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	if($opt_f eq "tsv"){
 		my $dbh=openDB($database);
 		my $reader=IO::File->new("-");
@@ -473,12 +549,16 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		$dbh->disconnect;
 		if(!$opt_q){print "replaced $linecount\n";}
 	}else{
-		my $from=shift(@ARGV);
-		my $to=shift(@ARGV);
+		my $from=shift(@arguments);
+		my $to=shift(@arguments);
 		my $linecount=dbReplace($database,$from,$to);
 		if(!$opt_q){print "replaced $linecount\n";}
 	}
-}elsif(lc($command) eq "mv"){
+}
+############################## mvCommand ##############################
+sub mvCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	if($opt_f eq "tsv"){
 		my $dbh=openDB($database);
 		my $reader=IO::File->new("-");
@@ -487,7 +567,7 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 		$dbh->disconnect;
 		if(!$opt_q){print "renamed $linecount\n";}
 	}else{
-		my @froms=@ARGV;
+		my @froms=@arguments;
 		if(scalar(@froms<2)){
 			print STDERR "ERROR Need to specify at least two arguments.\n";
 			print STDERR "perl rdf.pl mv SOURCE TARGET\n";
@@ -503,26 +583,34 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 			foreach my $from(@froms){$linecount+=dbReplace($database,$from,$to.basename($from),1);}
 		}elsif(scalar(@froms)>1){
 			print STDERR "ERROR multiple files were specified and target wasn't a directory.";
-			print STDERR "perl rdf.pl mv SOURCE SOURCE SOURCE DIRECTORY\n";
+			print STDERR "perl rdf.pl mv SOURCE [SOURCE SOURCE] DIRECTORY\n";
 			exit(1);
 		}else{
 			$linecount=dbReplace($database,$froms[0],$to,1);
 		}
 		if(!$opt_q){print "replaced $linecount\n";}
 	}
-}elsif(lc($command) eq "merge"){
+}
+############################## mergeCommand ##############################
+sub mergeCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	my ($writer,$file)=tempfile();#UNLINK=>1
-	foreach my $database(@ARGV){dumpDB($database,undef,$writer);}
+	foreach my $database(@arguments){dumpDB($database,undef,$writer);}
 	close($writer);
 	my $reader=IO::File->new($file);
 	my $linecount=importDB($database,$reader);
 	close($reader);
 	if(!$opt_q){print "inserted $linecount\n";}
-}elsif(lc($command) eq "copy"){
+}
+############################## copyCommand ##############################
+sub copyCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
 	my $dbh=openDB($database);
 	my ($writer,$file)=tempfile(UNLINK=>1);
 	my @queries=();
-	foreach my $query(@ARGV){push(@queries,split(/,/,$query));}
+	foreach my $query(@arguments){push(@queries,split(/,/,$query));}
 	queryTotsv($writer,\@queries,getResults($dbh,parseQuery(\@queries)));
 	close($writer);
 	$dbh->disconnect;
@@ -531,56 +619,84 @@ if(defined($opt_h)||defined($opt_H)||!defined($command)){
 	my $linecount=importDB($database,$reader);
 	close($reader);
 	if(!$opt_q){print "copied $linecount\n";}
-}elsif(lc($command) eq "newnode"){
-	print newNode($database)."\n";
-}elsif(lc($command) eq "command"){
+}
+############################## commandCommand ##############################
+sub commandCommand{
+	my $database=shift();
 	my $reader=IO::File->new("-");
 	my $json=readJson($reader);
 	close($reader);
 	print executeComand($database,$json)."\n";
-}elsif(lc($command) eq "download"){
-	registerDownloads($database,@ARGV);
+}
+############################## promptCommand ##############################
+sub promptCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
+	my $answer=promptInsert($database,@arguments);
+	if(defined($opt_p)){print "$answer\n";}
+}
+############################## downloadCommand ##############################
+sub downloadCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
+	registerDownloads($database,@arguments);
 	my @files=downloadFiles($database);
 	if(scalar(@files)>1){foreach my $file(@files){print "$file\n";}}
 	else{print $files[0]."\n";}
-}elsif(lc($command) eq "executes"){
-	printExecutesInJson(retrieveExecutes($database));
-}elsif(lc($command) eq "html"){
-	printExecutesInHTML(retrieveExecutes($database));
-}elsif(lc($command) eq "ls"){
-	ls($database,$opt_f,$opt_g,$opt_r,@ARGV);
-}elsif(lc($command) eq "importtable"){
-	my ($writer,$file)=tempfile(UNLINK=>1);
-	foreach my $file(@ARGV){importTable($file,$writer);}
+}
+############################## importTableCommand ##############################
+sub importTableCommand{
+	my @files=@_;
+	my $database=shift(@files);
+	my ($writer,$tmp)=tempfile(UNLINK=>1);
+	foreach my $file(@files){importTable($file,$writer);}
 	close($writer);
-	my $reader=IO::File->new($file);
+	my $reader=IO::File->new($tmp);
 	my $linecount=importDB($database,$reader);
 	close($reader);
 	if(!$opt_q){print "imported $linecount\n";}
-}elsif(lc($command) eq "exporttable"){
+}
+############################## exportTableCommand ##############################
+sub exportTableCommand{
+	my @files=@_;
+	my $database=shift(@files);
+	my $dbh=openDB($database);
 	my ($writer,$tmp)=tempfile(UNLINK=>1);
 	dumpDB($database,undef,$writer);
 	close($writer);
-	foreach my $file(@ARGV){exportTable($database,$tmp,$file);}
-}elsif(lc($command) eq "drop"){
+	foreach my $file(@files){exportTable($database,$tmp,$file);}
+}
+############################## dropCommand ##############################
+sub dropCommand{
+	my $database=shift();
 	my $dbh=openDB($database);
 	$dbh->do("drop table node");
 	$dbh->do("drop table edge");
 	$dbh->disconnect;
-}elsif(lc($command) eq "prompt"){
-	my $answer=promptInsert($database,@ARGV);
-	if(defined($opt_p)){print "$answer\n";}
-}elsif(lc($command) eq "install"){
-	installSoftware($database,$bindir,@ARGV);
-}elsif(lc($command) eq "input"){
-	inputDatabase($database,@ARGV);
-}elsif(lc($command) eq "rmexec"){
-	rmexec($database);
-}elsif(lc($command) eq "history"){
-	history($database);
 }
-############################## history ##############################
-sub history{
+############################## rmCommand ##############################
+sub rmCommand{
+	my @paths=@_;
+	my $database=shift(@paths);
+	my $rmcount=0;
+	md5Command($database,@paths);
+	filesizeCommand($database,@paths);
+	foreach my $path(@paths){
+		if(-e $path){
+			my $time=`date +%s`;
+			chomp($time);
+			dbUpdate($database,$path,$urls->{"file/timeremoved"},$time);
+			if(!$opt_q){print "rm $path\n";}
+			unlink($path);
+			$rmcount++;
+		}else{
+			print STDERR "ERROR: $path doesn't exist.\n";
+		}
+	}
+	if(!$opt_q){print "imported $rmcount\n";}
+}
+############################## historyCommand ##############################
+sub historyCommand{
 	my $database=shift();
 	my $data=dbSelect($database,undef,$urls->{"daemon/command"});
 	foreach my $subject(keys(%{$data})){
@@ -793,8 +909,8 @@ sub promptInsert{
 	elsif(defined($default)){dbInsert($database,$subject,$predicate,$default);}
 	return $answer;
 }
-############################## rmexec ##############################
-sub rmexec{
+############################## rmexecCommand ##############################
+sub rmexecCommand{
 	my $database=shift();
 	my @nodes=getObjects($database,$urls->{"daemon"},$urls->{"daemon/execute"});
 	my $linecount=dbDelete($database,$urls->{"daemon"},$urls->{"daemon/execute"});
@@ -929,8 +1045,8 @@ sub basenames{
 	}
 	return wantarray?@out:$out[1];
 }
-############################## ls ##############################
-sub ls{
+############################## lsCommand ##############################
+sub lsCommand{
 	my @args=@_;
 	my $database=shift(@args);
 	my $format=shift(@args);
