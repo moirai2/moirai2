@@ -17,8 +17,8 @@ my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_b $opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_p $opt_q $opt_r $opt_t $opt_w);
-getopts('b:d:D:e:f:g:hHl:pqr:tw:');
+use vars qw($opt_b $opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_n $opt_p $opt_q $opt_r $opt_t $opt_w);
+getopts('b:d:D:e:f:g:hHl:npqr:tw:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -212,7 +212,8 @@ elsif(lc($command) eq "ls"){lsCommand($database,$opt_f,$opt_g,$opt_r,@ARGV);}
 elsif(lc($command) eq "importtable"){importTableCommand($database,@ARGV);}
 elsif(lc($command) eq "exporttable"){exportTableCommand($database,@ARGV);}
 elsif(lc($command) eq "drop"){dropCommand($database);}
-elsif(lc($command) eq "prompt"){promptCommand($database,@ARGV);}
+elsif(lc($command) eq "prompt"){promptCommand($database,0,@ARGV);}
+elsif(lc($command) eq "newprompt"){promptCommand($database,1,@ARGV);}
 elsif(lc($command) eq "install"){installSoftware($database,$bindir,@ARGV);}
 elsif(lc($command) eq "input"){inputDatabase($database,@ARGV);}
 elsif(lc($command) eq "rmexec"){rmexecCommand($database);}
@@ -632,7 +633,8 @@ sub commandCommand{
 sub promptCommand{
 	my @arguments=@_;
 	my $database=shift(@arguments);
-	my $answer=promptInsert($database,@arguments);
+	my $newprompt=shift(@arguments);
+	my $answer=promptInsert($database,$newprompt,@arguments);
 	if(defined($opt_p)){print "$answer\n";}
 }
 ############################## downloadCommand ##############################
@@ -896,12 +898,15 @@ sub inputDatabase{
 ############################## promptInsert ##############################
 sub promptInsert{
 	my $database=shift();
+	my $nocheck=shift();
 	my $subject=shift();
 	my $predicate=shift();
 	my $question=shift();
 	my $default=shift();
-	my $object=getObject($database,$subject,$predicate);
-	if(defined($object)){return;}
+	if(!$nocheck){
+		my $object=getObject($database,$subject,$predicate);
+		if(defined($object)){return;}
+	}
 	print STDOUT $question;
 	my $answer=<STDIN>;
 	chomp($answer);

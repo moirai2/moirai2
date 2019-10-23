@@ -65,6 +65,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "Usage: $program_name -d DB URL [INPUT/OUTPUT ..]\n";
 	print "\n";
 	print "             Executes a MOIRAI2 command with user specified arguments\n";
+	print "\n";
 	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
 	print "        URL  Command URL or path (command URLs from https://moirai2.github.io/).\n";
 	print "      INPUT  inputs of a MOIRAI2 command (varies among commands).\n";
@@ -73,6 +74,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "Usage: $program_name -d DB -s SEC\n";
 	print "\n";
 	print "             Check for Moirai2 commands every X seconds and execute.\n";
+	print "\n";
 	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
 	print "        SEC  Loop search every specified seconds (default='run only once').\n";
 	print "\n";
@@ -89,6 +91,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "Usage: $program_name daemon\n";
 	print "\n";
 	print "             Look for RDF databases and run once if filestamps are updated.\n";
+	print "\n";
 	print "Options: -d  Directory to search for (default='.').\n";
 	print "         -l  Log directory (default='./log').\n";
 	print "         -r  Recursive search through a directory (default='0').\n";
@@ -97,6 +100,18 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "Usage: $program_name script URL\n";
 	print "\n";
 	print "             Retrieves scripts from URL.\n";
+	print "\n";
+	print "Usage: $program_name entry -i INPUT -o OUTPUT QUERY [DEFAULT]\n";
+	print "\n";
+	print "             Retrieves scripts from URL.\n";
+	print "\n";
+	print "      INPUT  Input RDF triple with '->' delim.\n";
+	print "     OUTPUT  Output RDF triple with '->' delim.\n";
+	print "      QUERY  Query to show for retrieving value.\n";
+	print "    DEFAULT  Default value when empty (default=none).\n";
+	print "\n";
+	print "Options: -i  Input query for select (default='none').\n";
+	print "         -o  Output query for insert (default='none').\n";
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	print "\n";
@@ -134,12 +149,7 @@ my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n
 my $cwd=Cwd::getcwd();
 if($ARGV[0] eq "daemon"){autodaemon();exit(0);}
 if($ARGV[0] eq "test"){test();exit(0);}
-if($ARGV[0] eq "script"){
-	my $outdir=defined($opt_o)?$opt_o:".";
-	mkdir($outdir);
-	if(scalar(@ARGV)>1){writeScript($ARGV[1],$outdir,$commands);}
-	exit(0);
-}
+if($ARGV[0] eq "script"){script();exit(0);}
 my $rdfdb=$opt_d;
 if(!defined($rdfdb)){$rdfdb="rdf.sqlite3";}
 if($rdfdb!~/^\//){$rdfdb="$cwd/$rdfdb";}
@@ -164,6 +174,7 @@ mkdir("$ctrldir/update");
 mkdir("$ctrldir/completed");
 mkdir("$ctrldir/stdout");
 mkdir("$ctrldir/stderr");
+if($ARGV[0] eq "prompt"){prompt();exit(0);}
 my $workflows={};
 my $executes={};
 my @execurls=();
@@ -175,26 +186,12 @@ my $returnvalue;
 my ($arguments,$userdefined)=handleArguments(@ARGV);
 my $queryResults={};
 my $insertKeys;
-controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);#just in case jobs are completed while moirai2.pl was not running
+#just in case jobs are completed while moirai2.pl was not running
+controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);
 if(defined($opt_i)){checkInputOutput($opt_i);}
 if(defined($opt_o)){checkInputOutput($opt_o);}
-if(defined($opt_i)){
-	my ($query,$keys)=parseQuery(replaceStringWithHash($userdefined,$opt_i));
-	my $dbh=openDB($rdfdb);
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	my $rows=$sth->fetchall_arrayref();
-	$dbh->disconnect;
-	my @hashs=();
-	foreach my $row(@{$rows}){
-		my $hash={};
-		for(my $i=0;$i<scalar(@{$keys});$i++){$hash->{$keys->[$i]}=$row->[$i];}
-		push(@hashs,$hash);
-	}
-	$queryResults->{".keys"}=$keys;
-	$queryResults->{".hashs"}=\@hashs;
-	if(defined($opt_l)){print_rows($keys,\@hashs);}
-}else{if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}}
+if(defined($opt_i)){$queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);}
+if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}
 if(defined($opt_o)){
 	$insertKeys=handleKeys(replaceStringWithHash($userdefined,$opt_o));
 	if(defined($opt_i)){remove_unnecessary_executes($queryResults,$insertKeys);}
@@ -282,6 +279,77 @@ sub test{
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
 }
+############################## prompt ##############################
+sub prompt{
+	my $command=shift(@ARGV);
+	my $query=shift(@ARGV);
+	my $default=shift(@ARGV);
+	if(!defined($opt_i)){exit(1);}
+	if(!defined($opt_o)){exit(1);}
+	checkInputOutput($opt_i);
+	checkInputOutput($opt_o);
+	my $completed=controlCompleted();
+	my $inserted=controlInsert($rdfdb);
+	my $deleted=controlDelete($rdfdb);
+	my $update=controlUpdate($rdfdb);
+	my ($arguments,$userdefined)=handleArguments(@ARGV);
+	my $queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);
+	if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}
+	$insertKeys=handleKeys($opt_o);
+	if(defined($opt_i)){remove_unnecessary_executes($queryResults,$insertKeys);}
+	my @lines=();
+	foreach my $hash(@{$queryResults->{".hashs"}}){
+		my $q=$query;
+		foreach my $key(@{$queryResults->{".keys"}}){my $val=$hash->{$key};$q=~s/\$$key/$val/g;}
+		print STDOUT $q;
+		my $answer=<STDIN>;
+		chomp($answer);
+		if($answer eq ""){$answer=$default;}
+		if($answer eq ""){next;}
+		foreach my $array(@{$insertKeys}){
+			my @outs=();
+			foreach my $token(@{$array}){
+				my $out=$token;
+				foreach my $key(@{$queryResults->{".keys"}}){my $val=$hash->{$key};$out=~s/\$$key/$val/g;}
+				$out=~s/\$_/$answer/g;
+				push(@outs,$out);
+			}
+			push(@lines,join("\t",@outs))
+		}
+	}
+	writeInserts(@lines);
+	controlInsert($rdfdb);
+	exit(0);
+}
+############################## script ##############################
+sub script{
+	my $outdir=defined($opt_o)?$opt_o:".";
+	mkdir($outdir);
+	if(scalar(@ARGV)>1){foreach my $out(writeScript($ARGV[1],$outdir,$commands)){print "$out\n";}}
+}
+############################## getQueryResults ##############################
+sub getQueryResults{
+	my $rdfdb=shift();
+	my $userdefined=shift();
+	my $input=shift();
+	my $hash={};
+	my ($query,$keys)=parseQuery(replaceStringWithHash($userdefined,$input));
+	my $dbh=openDB($rdfdb);
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my $rows=$sth->fetchall_arrayref();
+	$dbh->disconnect;
+	my @hashs=();
+	foreach my $row(@{$rows}){
+		my $hash={};
+		for(my $i=0;$i<scalar(@{$keys});$i++){$hash->{$keys->[$i]}=$row->[$i];}
+		push(@hashs,$hash);
+	}
+	$hash->{".keys"}=$keys;
+	$hash->{".hashs"}=\@hashs;
+	if(defined($opt_l)){print_rows($keys,\@hashs);}
+	return $hash;
+}
 ############################## writeScript ##############################
 sub writeScript{
 	my $url=shift();
@@ -289,7 +357,10 @@ sub writeScript{
 	my $commands=shift();
 	my $command=loadCommandFromURL($url,$commands);
 	my $basename=basename($url,".json");
-	open(OUT,">$outdir/$basename.sh");
+	my $outfile="$outdir/$basename.sh";
+	my @outs=();
+	push(@outs,$outfile);
+	open(OUT,">$outfile");
 	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){
 		$line=~s/\$tmpdir\///g;
 		print OUT "$line\n";
@@ -299,11 +370,13 @@ sub writeScript{
 		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
 			my $path="$outdir/".$script->{$urls->{"daemon/script/name"}};
 			$path=~s/\$tmpdir\///g;
+			push(@outs,$outfile);
 			open(OUT,">$path");
 			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print OUT "$line\n";}
 			close(OUT);
 		}
 	}
+	return @outs;
 }
 ############################## testCommand ##############################
 sub testCommand{
@@ -423,8 +496,8 @@ sub printCommand{
 	if(scalar(@inputs)>0){print STDOUT "#Input   :".join(", ",@{$command->{"input"}})."\n";}
 	if(scalar(@outputs)>0){print STDOUT "#Output  :".join(", ",@{$command->{"output"}})."\n";}
 	print STDOUT "#Bash    :";
-	my $index=0;
-	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){if($index++>0){print STDOUT "         :"}print STDOUT "$line\n";}
+	if(ref($command->{$urls->{"daemon/bash"}}) ne "ARRAY"){print STDOUT $command->{$urls->{"daemon/bash"}}."\n";}
+	else{my $index=0;foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){if($index++>0){print STDOUT "         :"}print STDOUT "$line\n";}}
 	if(exists($command->{$urls->{"daemon/description"}})){print STDOUT "#Summary :".join(", ",@{$command->{$urls->{"daemon/description"}}})."\n";}
 	if($command->{$urls->{"daemon/maxjob"}}>1){print STDOUT "#Maxjob  :".$command->{$urls->{"daemon/maxjob"}}."\n";}
 	if(exists($command->{$urls->{"daemon/singlethread"}})){print STDOUT "#Single  :".($command->{$urls->{"daemon/singlethread"}}?"true":"false")."\n";}
