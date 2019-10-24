@@ -370,7 +370,7 @@ sub writeScript{
 		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
 			my $path="$outdir/".$script->{$urls->{"daemon/script/name"}};
 			$path=~s/\$tmpdir\///g;
-			push(@outs,$outfile);
+			push(@outs,$path);
 			open(OUT,">$path");
 			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print OUT "$line\n";}
 			close(OUT);
@@ -949,7 +949,7 @@ sub handleScript{
 		my $name=$script->{$urls->{"daemon/script/name"}};
 		my $code=$script->{$urls->{"daemon/script/code"}};
 		if(ref($code)ne"ARRAY"){$code=[$code];}
-		foreach my $c(@{$code}){$c=~s/\\"/"/;}
+		#foreach my $c(@{$code}){$c=~s/\\"/"/;}#Is this needed?
 		$command->{$name}=$code;
 		push(@{$command->{"script"}},$name);
 	}
