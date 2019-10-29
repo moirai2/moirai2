@@ -215,7 +215,7 @@ elsif(lc($command) eq "drop"){dropCommand($database);}
 elsif(lc($command) eq "prompt"){promptCommand($database,0,@ARGV);}
 elsif(lc($command) eq "newprompt"){promptCommand($database,1,@ARGV);}
 elsif(lc($command) eq "install"){installSoftware($database,$bindir,@ARGV);}
-elsif(lc($command) eq "input"){inputDatabase($database,@ARGV);}
+elsif(lc($command) eq "input"){inputDatabase($database,@ARGV);print STDERR "\n";selectCommand($database,@ARGV);}
 elsif(lc($command) eq "rmexec"){rmexecCommand($database);}
 elsif(lc($command) eq "history"){historyCommand($database);}
 elsif(lc($command) eq "rm"){rmCommand($database,@ARGV);}
@@ -874,6 +874,24 @@ sub jsonUnescape{
 	$text=~s/#_ESCAPED_#/\\/g;
 	return $text;
 }
+############################## sandbox ##############################
+sub sandbox{
+	my @lines=@_;
+	my $center=shift(@lines);
+	my $length=0;
+	foreach my $line(@lines){my $l=length($line);if($l>$length){$length=$l;}}
+	my $label="";
+	for(my $i=0;$i<$length+4;$i++){$label.="#";}
+	print STDERR "$label\n";
+	foreach my $line(@lines){
+		for(my $i=length($line);$i<$length;$i++){
+			if($center){if(($i%2)==0){$line.=" ";}else{$line=" $line";}}
+			else{$line.=" ";}
+		}
+		print STDERR "# $line #\n";
+	}
+	print STDERR "$label\n";
+}
 ############################## inputDatabase ##############################
 sub inputDatabase{
 	my @inputs=@_;
@@ -883,7 +901,7 @@ sub inputDatabase{
 	if(scalar(@inputs)>0){
 		foreach my $input(@inputs){dbInsert($database,$subject,$predicate,$input);}
 	}else{
-		print STDERR "Please input for '$subject -> $predicate' [empty return to end]?\n";
+		sandbox(1,"Enter data for '$subject -> $predicate'","Empty return to end input");
 		my $index=1;
 		print STDERR "[$index] ";
 		while(<STDIN>){

@@ -101,13 +101,12 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "             Retrieves scripts from URL.\n";
 	print "\n";
-	print "Usage: $program_name entry -i INPUT -o OUTPUT QUERY [DEFAULT]\n";
+	print "Usage: $program_name input -i INPUT -o OUTPUT [DEFAULT ..]\n";
 	print "\n";
 	print "             Retrieves scripts from URL.\n";
 	print "\n";
 	print "      INPUT  Input RDF triple with '->' delim.\n";
 	print "     OUTPUT  Output RDF triple with '->' delim.\n";
-	print "      QUERY  Query to show for retrieving value.\n";
 	print "    DEFAULT  Default value when empty (default=none).\n";
 	print "\n";
 	print "Options: -i  Input query for select (default='none').\n";
@@ -174,7 +173,7 @@ mkdir("$ctrldir/update");
 mkdir("$ctrldir/completed");
 mkdir("$ctrldir/stdout");
 mkdir("$ctrldir/stderr");
-if($ARGV[0] eq "prompt"){prompt();exit(0);}
+if($ARGV[0] eq "input"){input();exit(0);}
 my $workflows={};
 my $executes={};
 my @execurls=();
@@ -279,11 +278,29 @@ sub test{
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
 }
+############################## sandbox ##############################
+sub sandbox{
+	my @lines=@_;
+	my $center=shift(@lines);
+	my $length=0;
+	foreach my $line(@lines){my $l=length($line);if($l>$length){$length=$l;}}
+	my $label="";
+	for(my $i=0;$i<$length+4;$i++){$label.="#";}
+	print STDERR "$label\n";
+	foreach my $line(@lines){
+		for(my $i=length($line);$i<$length;$i++){
+			if($center){if(($i%2)==0){$line.=" ";}else{$line=" $line";}}
+			else{$line.=" ";}
+		}
+		print STDERR "# $line #\n";
+	}
+	print STDERR "$label\n";
+}
 ############################## prompt ##############################
 sub prompt{
-	my $command=shift(@ARGV);
-	my $query=shift(@ARGV);
-	my $default=shift(@ARGV);
+	my @defaults=@ARGV;
+	my $command=shift(@defaults);
+	my $query=shift(@defaults);
 	if(!defined($opt_i)){exit(1);}
 	if(!defined($opt_o)){exit(1);}
 	checkInputOutput($opt_i);
@@ -294,32 +311,31 @@ sub prompt{
 	my $update=controlUpdate($rdfdb);
 	my ($arguments,$userdefined)=handleArguments(@ARGV);
 	my $queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);
-	if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}
 	$insertKeys=handleKeys($opt_o);
 	if(defined($opt_i)){remove_unnecessary_executes($queryResults,$insertKeys);}
+	if(scalar(@{$queryResults->{".hashs"}})==0){return;}
+	sandbox(0,$query);
 	my @lines=();
 	foreach my $hash(@{$queryResults->{".hashs"}}){
-		my $q=$query;
-		foreach my $key(@{$queryResults->{".keys"}}){my $val=$hash->{$key};$q=~s/\$$key/$val/g;}
-		print STDOUT $q;
-		my $answer=<STDIN>;
-		chomp($answer);
-		if($answer eq ""){$answer=$default;}
-		if($answer eq ""){next;}
-		foreach my $array(@{$insertKeys}){
-			my @outs=();
-			foreach my $token(@{$array}){
-				my $out=$token;
-				foreach my $key(@{$queryResults->{".keys"}}){my $val=$hash->{$key};$out=~s/\$$key/$val/g;}
-				$out=~s/\$_/$answer/g;
-				push(@outs,$out);
-			}
-			push(@lines,join("\t",@outs))
+		for(my $i=0;$i<scalar(@{$insertKeys});$i++){
+			my $array=$insertKeys->[$i];
+			my $default=$defaults[$i];
+			my $insert=join("->",@{$array});
+			foreach my $key(@{$queryResults->{".keys"}}){my $val=$hash->{$key};$insert=~s/\$$key/$val/g;}
+			print STDERR "$insert ";
+			if(defined($default)){print STDERR "[$default] "}
+			my $answer=<STDIN>;
+			chomp($answer);
+			if($answer eq ""){$answer=$default;}
+			if($answer eq ""){next;}
+			$insert=~s/\?/$answer/g;
+			push(@lines,$insert);
 		}
 	}
+	print STDERR "\n";
+	foreach my $line(@lines){print STDERR "$line\n";$line=~s/->/\t/g;}
 	writeInserts(@lines);
 	controlInsert($rdfdb);
-	exit(0);
 }
 ############################## script ##############################
 sub script{
