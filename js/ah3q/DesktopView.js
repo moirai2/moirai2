@@ -31,69 +31,69 @@ DesktopView.prototype.initialize=function(){
 	window.addEventListener("resize",function(event){self.resizeHandler(event);},true);
 	this.resizeHandler();
 	this.dragLineStart=(function(e){
-																					var x=e.detail.x;
-																					var y=e.detail.y;
-																					self.dragLine=new createjs.Shape();
-																					var g=self.dragLine.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(1).moveTo(x,y);
-																					self.dragLine.command=g.lineTo(x,y).command;
-																					self.stage.addChild(self.dragLine);
-																					self.originX=x;
-																					self.originY=y;
-																					});
+		var x=e.detail.x;
+		var y=e.detail.y;
+		self.dragLine=new createjs.Shape();
+		var g=self.dragLine.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(1).moveTo(x,y);
+		self.dragLine.command=g.lineTo(x,y).command;
+		self.stage.addChild(self.dragLine);
+		self.originX=x;
+		self.originY=y;
+	});
 	this.dragRectangleStart=(function(e){
-																										var x=e.detail.x;
-																										var y=e.detail.y;
-																										self.dragRect=new createjs.Shape();
-																										var g=self.dragRect.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(1);
-																										self.dragRect.command=g.drawRect(x,y,0,0).command;
-																										self.stage.addChild(self.dragRect);
-																										self.originX=x;
-																										self.originY=y;
-																										});
+		var x=e.detail.x;
+		var y=e.detail.y;
+		self.dragRect=new createjs.Shape();
+		var g=self.dragRect.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(1);
+		self.dragRect.command=g.drawRect(x,y,0,0).command;
+		self.stage.addChild(self.dragRect);
+		self.originX=x;
+		self.originY=y;
+	});
 	this.dragEllipseStart=(function(e){
-																								var x=e.detail.x;
-																								var y=e.detail.y;
-																								self.dragEllipse=new createjs.Shape();
-																								var g=self.dragEllipse.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(1);
-																								self.dragEllipse.command=g.drawEllipse(x,y,0,0).command;
-																								self.stage.addChild(self.dragEllipse);
-																								self.originX=x;
-																								self.originY=y;
-																								});
+		var x=e.detail.x;
+		var y=e.detail.y;
+		self.dragEllipse=new createjs.Shape();
+		var g=self.dragEllipse.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(1);
+		self.dragEllipse.command=g.drawEllipse(x,y,0,0).command;
+		self.stage.addChild(self.dragEllipse);
+		self.originX=x;
+		self.originY=y;
+	});
 	this.dragLineDrag=(function(e){
-																				var x=e.detail.x;
-																				var y=e.detail.y;
-																				var w=Math.abs(x-self.originX);
-																				var h=Math.abs(y-self.originY);
-																				self.dragLine.command.x=x;
-																				self.dragLine.command.y=y;
-																				});
+		var x=e.detail.x;
+		var y=e.detail.y;
+		var w=Math.abs(x-self.originX);
+		var h=Math.abs(y-self.originY);
+		self.dragLine.command.x=x;
+		self.dragLine.command.y=y;
+	});
 	this.dragRectangleDrag=(function(e){
-																									var x=e.detail.x;
-																									var y=e.detail.y;
-																									var dx=x-self.dragRect.command.x;
-																									var dy=y-self.dragRect.command.y;
-																									var adx=Math.abs(dx);
-																									var ady=Math.abs(dy);
-																									if(e.detail.shiftKey){if(adx<ady)dy=(dy<0)?-adx:adx;else dx=(dx<0)?-ady:ady;}
-																									self.dragRect.command.w=dx;
-																									self.dragRect.command.h=dy;
-																									});
+		var x=e.detail.x;
+		var y=e.detail.y;
+		var dx=x-self.dragRect.command.x;
+		var dy=y-self.dragRect.command.y;
+		var adx=Math.abs(dx);
+		var ady=Math.abs(dy);
+		if(e.detail.shiftKey){if(adx<ady)dy=(dy<0)?-adx:adx;else dx=(dx<0)?-ady:ady;}
+		self.dragRect.command.w=dx;
+		self.dragRect.command.h=dy;
+	});
 	this.dragEllipseDrag=(function(e){
-																							var dx=e.detail.x-self.originX;
-																							var dy=e.detail.y-self.originY;
-																							var adx=Math.abs(dx);
-																							var ady=Math.abs(dy);
-																							if(e.detail.shiftKey){if(adx<ady)dy=(dy<0)?-adx:adx;else dx=(dx<0)?-ady:ady;}
-																							var x=self.originX-dx;
-																							var y=self.originY-dy;
-																							var w=2*dx;
-																							var h=2*dy;
-																							self.dragEllipse.command.x=x;
-																							self.dragEllipse.command.y=y;
-																							self.dragEllipse.command.w=w;
-																							self.dragEllipse.command.h=h;
-																							});
+		var dx=e.detail.x-self.originX;
+		var dy=e.detail.y-self.originY;
+		var adx=Math.abs(dx);
+		var ady=Math.abs(dy);
+		if(e.detail.shiftKey){if(adx<ady)dy=(dy<0)?-adx:adx;else dx=(dx<0)?-ady:ady;}
+		var x=self.originX-dx;
+		var y=self.originY-dy;
+		var w=2*dx;
+		var h=2*dy;
+		self.dragEllipse.command.x=x;
+		self.dragEllipse.command.y=y;
+		self.dragEllipse.command.w=w;
+		self.dragEllipse.command.h=h;
+	});
 	this.dragLineEnd=(function(e){self.stage.removeChild(self.dragLine);self.dragLine=null;});
 	this.dragRectangleEnd=(function(e){self.stage.removeChild(self.dragRect);self.dragRect=null;});
 	this.dragEllipseEnd=(function(e){self.stage.removeChild(self.dragEllipse);self.dragEllipse=null;});
@@ -120,7 +120,7 @@ DesktopView.prototype.resizeHandler=function(event){
 }
 DesktopView.prototype.start=function(fps){
 	if(fps==null)fps=60;
-	createjs.Ticker.setFPS(fps);
+	createjs.Ticker.framerate=fps;
 	createjs.Ticker.addEventListener("tick",this.stage);
 }
 DesktopView.prototype.getChildFromPoint=function(x,y){

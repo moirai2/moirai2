@@ -54,8 +54,8 @@ Utility.prototype.textToRDF=function(text){
 		var o=tokens[2];
 		if(!(s in rdf))rdf[s]={};
 		if(!(p in rdf[s]))rdf[s][p]=o;
-		if(Array.isArray(rdf[s][p]))rdf[s][p].push(o);
-		else rdf[s][p]=[rdf[s][p]];
+		else if(Array.isArray(rdf[s][p]))rdf[s][p].push(o);
+		else rdf[s][p]=[rdf[s][p],o];
 	}
 	return rdf;
 }

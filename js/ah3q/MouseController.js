@@ -37,9 +37,9 @@ MouseController.prototype.initialize=function(){
 MouseController.prototype.addEventListener=function(type,listener,useCapture,wantsUntrusted){this.dom.addEventListener(type,listener,useCapture,wantsUntrusted);}
 MouseController.prototype.removeEventListener=function(type,listener,useCapture){this.dom.removeEventListener(type,listener,useCapture);}
 MouseController.prototype.touchStartHandler=function(event){var size=event.touches.length;if(size==1){this.mouseDownHandler(event);return;}}
-MouseController.prototype.singleClickHandler=function(target,x,y){if(!this.removeRegisteredDom(target))this.dom.dispatchEvent(new CustomEvent("singleClick",{detail:this.addKeyPressed({target:target,x:x,y:y})}));}
-MouseController.prototype.doubleClickHandler=function(target,x,y){this.dom.dispatchEvent(new CustomEvent("doubleClick",{detail:this.addKeyPressed({target:target,x:x,y:y})}));}
-MouseController.prototype.longClickHandler=function(target,x,y){this.dom.dispatchEvent(new CustomEvent("longClick",{detail:this.addKeyPressed({target:target,x:x,y:y})}));}
+MouseController.prototype.singleClickHandler=function(event,target,x,y){if(!this.removeRegisteredDom(target))this.dom.dispatchEvent(new CustomEvent("singleClick",{detail:this.addKeyPressed(event,{target:target,x:x,y:y})}));}
+MouseController.prototype.doubleClickHandler=function(event,target,x,y){this.dom.dispatchEvent(new CustomEvent("doubleClick",{detail:this.addKeyPressed(event,{target:target,x:x,y:y})}));}
+MouseController.prototype.longClickHandler=function(event,target,x,y){this.dom.dispatchEvent(new CustomEvent("longClick",{detail:this.addKeyPressed(event,{target:target,x:x,y:y})}));}
 MouseController.prototype.touchMoveHandler=function(event){
 	var size=event.touches.length;
 	if(size==1){this.mouseMoveHandler(event);return;}
@@ -68,8 +68,8 @@ MouseController.prototype.touchMoveHandler=function(event){
 	var zoomfactor=distance/this.previousDistance;
 	var dx=x-this.previousX;
 	var dy=y-this.previousY;
-	this.dom.dispatchEvent(new CustomEvent("pinched",{detail:this.addKeyPressed({target:event.target,zoomfactor:zoomfactor})}));
-	this.dom.dispatchEvent(new CustomEvent("scrolled",{detail:this.addKeyPressed({target:event.target,dx:dx,dy:dy})}));
+	this.dom.dispatchEvent(new CustomEvent("pinched",{detail:this.addKeyPressed(event,{target:event.target,zoomfactor:zoomfactor})}));
+	this.dom.dispatchEvent(new CustomEvent("scrolled",{detail:this.addKeyPressed(event,{target:event.target,dx:dx,dy:dy})}));
 	this.previousX=x;
 	this.previousY=y;
 	this.previousDistance=distance;
@@ -87,8 +87,8 @@ MouseController.prototype.touchEndHandler=function(event){
 	var zoomfactor=distance/this.startDistance;
 	var dx=x-this.downStartX;
 	var dy=y-this.downStartY;
-	this.dom.dispatchEvent(new CustomEvent("pinchCompleted",{detail:this.addKeyPressed({target:event.target,zoomfactor:zoomfactor})}));
-	this.dom.dispatchEvent(new CustomEvent("scrollCompleted",{detail:this.addKeyPressed({target:event.target,dx:dx,dy:dy})}));
+	this.dom.dispatchEvent(new CustomEvent("pinchCompleted",{detail:this.addKeyPressed(event,{target:event.target,zoomfactor:zoomfactor})}));
+	this.dom.dispatchEvent(new CustomEvent("scrollCompleted",{detail:this.addKeyPressed(event,{target:event.target,dx:dx,dy:dy})}));
 	this.pinched=false;
 }
 MouseController.prototype.mouseDownHandler=function(event){
@@ -101,9 +101,9 @@ MouseController.prototype.mouseDownHandler=function(event){
 	var y=this.downStartY;
 	this.mouseDown=true;
 	this.dragged=false;
-	if(this.movableTarget==null)this.longTimer=setTimeout(function(){self.longTimer=null;self.clickCount=0;self.longClickHandler(event.target,x,y)},this.longSecond);
+	if(this.movableTarget==null)this.longTimer=setTimeout(function(){self.longTimer=null;self.clickCount=0;self.longClickHandler(event,event.target,x,y)},this.longSecond);
 }
-MouseController.prototype.addKeyPressed=function(json){
+MouseController.prototype.addKeyPressed=function(event,json){
 	if(event.shiftKey)json["shiftKey"]=true;
 	if(event.altKeyPressed)json["shiftKey"]=true;
 	if(event.ctrlKeyPressed)json["shiftKey"]=true;
@@ -120,14 +120,14 @@ MouseController.prototype.mouseMoveHandler=function(event){
 		if(this.longTimer){clearTimeout(this.longTimer);this.longTimer=null;}
 		if(!this.dragged){
 			this.dragged=true;
-			this.dom.dispatchEvent(new CustomEvent("dragStarted",{detail:this.addKeyPressed({target:event.target,x:x,y:y})}));
+			this.dom.dispatchEvent(new CustomEvent("dragStarted",{detail:this.addKeyPressed(event,{target:event.target,x:x,y:y})}));
 		}else{
 			var dx=x-prevX;
 			var dy=y-prevY;
 			if(this.movableTarget!=null){
 				$(this.movableTarget).css({left:"+="+dx,top:"+="+dy});
-				this.dom.dispatchEvent(new CustomEvent("moved",{detail:this.addKeyPressed({target:this.movableTarget,prevX:prevX,prevY:prevY,x:x,y:y,dx:dx,dy:dy})}));
-			}else this.dom.dispatchEvent(new CustomEvent("dragged",{detail:this.addKeyPressed({target:event.target,prevX:prevX,prevY:prevY,x:x,y:y,dx:dx,dy:dy})}));
+				this.dom.dispatchEvent(new CustomEvent("moved",{detail:this.addKeyPressed(event,{target:this.movableTarget,prevX:prevX,prevY:prevY,x:x,y:y,dx:dx,dy:dy})}));
+			}else this.dom.dispatchEvent(new CustomEvent("dragged",{detail:this.addKeyPressed(event,{target:event.target,prevX:prevX,prevY:prevY,x:x,y:y,dx:dx,dy:dy})}));
 		}
 	}else if(this.doubleTimer){
 		if(Math.abs(x-this.prevClickX)>10||Math.abs(y-this.prevClickY)>10){
@@ -135,7 +135,7 @@ MouseController.prototype.mouseMoveHandler=function(event){
 			this.doubleTimer=null;
 			this.mouseDown=false;
 			this.clickCount=0;
-			this.singleClickHandler(event.target,this.prevClickX,this.prevClickY);
+			this.singleClickHandler(event,event.target,this.prevClickX,this.prevClickY);
 		}
 	}
 }
@@ -149,29 +149,29 @@ MouseController.prototype.mouseUpHandler=function(event){
 	this.mouseDown=false;
 	if(this.dragged){
 		if(this.movableTarget!=null){
-			this.dom.dispatchEvent(new CustomEvent("moveEnded",{detail:this.addKeyPressed({target:this.movableTarget,x:x,y:y})}));
-			this.dom.dispatchEvent(new CustomEvent("moveCompleted",{detail:this.addKeyPressed({target:this.movableTarget,startX:this.downStartX,startY:this.downStartY,endX:x,endY:y})}));
+			this.dom.dispatchEvent(new CustomEvent("moveEnded",{detail:this.addKeyPressed(event,{target:this.movableTarget,x:x,y:y})}));
+			this.dom.dispatchEvent(new CustomEvent("moveCompleted",{detail:this.addKeyPressed(event,{target:this.movableTarget,startX:this.downStartX,startY:this.downStartY,endX:x,endY:y})}));
 			this.movableTarget=null;
 		}else{
 			var dx=x-prevX;
 			var dy=y-prevY;
 			var l=Math.sqrt(dx*dx+dy*dy);
-			this.dom.dispatchEvent(new CustomEvent("dragEnded",{detail:this.addKeyPressed({target:event.target,prevX:prevX,prevY:prevY,x:x,y:y,dx:dx,dy:dy})}));
+			this.dom.dispatchEvent(new CustomEvent("dragEnded",{detail:this.addKeyPressed(event,{target:event.target,prevX:prevX,prevY:prevY,x:x,y:y,dx:dx,dy:dy})}));
 			dx=x-this.downStartX;
 			dy=y-this.downStartY;
 			l=Math.sqrt(dx*dx+dy*dy);
-			this.dom.dispatchEvent(new CustomEvent("dragCompleted",{detail:this.addKeyPressed({endTarget:event.target,startX:this.downStartX,startY:this.downStartY,length:l,endX:x,endY:y,x:x,y:y})}));
+			this.dom.dispatchEvent(new CustomEvent("dragCompleted",{detail:this.addKeyPressed(event,{endTarget:event.target,startX:this.downStartX,startY:this.downStartY,length:l,endX:x,endY:y,x:x,y:y})}));
 		}
 		return;
 	}else if(this.longTimer){clearTimeout(this.longTimer);this.longTimer=null;this.clickCount++;}
 	if(this.clickCount==1){
 		this.prevClickX=x;
 		this.prevClickY=y;
-		this.doubleTimer=setTimeout(function(){self.doubleTimer=null;self.mouseDown=false;self.clickCount=0;self.singleClickHandler(event.target,x,y);},this.doubleSecond);
+		this.doubleTimer=setTimeout(function(){self.doubleTimer=null;self.mouseDown=false;self.clickCount=0;self.singleClickHandler(event,event.target,x,y);},this.doubleSecond);
 	}else if(this.clickCount>1){
 		if(this.doubleTimer){clearTimeout(this.doubleTimer);this.doubleTimer=null;}
 		this.clickCount=0;
-		this.doubleClickHandler(event.target,x,y);
+		this.doubleClickHandler(event,event.target,x,y);
 	}
 }
 MouseController.prototype.getScrollY=function(){
