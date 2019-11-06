@@ -211,7 +211,7 @@ RDF.prototype.toHTML=function(){
 	}
 	return html;
 }
-RDF.prototype.read=function(text){
+RDF.prototype.readTriple=function(text){
 	let lines=text.split(/\r?\n/);
 	for(let i=0;i<lines.length;i++){
 		let line=lines[i];
@@ -220,4 +220,52 @@ RDF.prototype.read=function(text){
 		this.add(tokens[0],tokens[1],tokens[2]);
 	}
 	return this;
+}
+RDF.prototype.readTable=function(text){
+	let lines=text.split(/\r?\n/);
+	let labels=lines[0].split(/\t/);
+	for(let i=1;i<lines.length;i++){
+		let line=lines[i];
+		if(line=="")continue;
+		let tokens=line.split(/\t/);
+		let subject=tokens[0];
+		for(let j=0;j<tokens.length;j++){
+			let predicate=labels[j];
+			let object=tokens[j];
+			if(predicate!="")this.add(subject,predicate,object);
+		}
+	}
+	return this;
+}
+RDF.prototype.toHTMLTable=function(labels){
+	let html=$("<table/>");
+	let thead=$("<thead/>");
+	let tr=$("<tr/>");
+	for(let i=0;i<labels.length;i++)tr.append($("<th/>").text(labels[i]));
+	thead.append(tr);
+	html.append(thead);
+	let tbody=$("<tbody/>");
+	html.append(tbody);
+	let hash={};
+	for(let i=0;i<labels.length;i++){
+		let label=labels[i];
+		let array=this.query("$key->"+label+"->$value");
+		for(let j=0;j<array.length;j++){
+			let h=array[j];
+			let key=h["$key"];
+			let value=h["$value"];
+			if(!(key in hash))hash[key]={};
+			if(!(label in hash[key]))hash[key][label]=value;
+			else if(Array.isArray(hash[key]))hash[key][label].push(value);
+			else hash[key][label]=[hash[key][label],value];
+		}
+	}
+	var keys=Object.keys(hash).sort();
+	for(let i=0;i<keys.length;i++){
+		let tr=$("<tr/>");
+		let h=hash[keys[i]];
+		for(let j=0;j<labels.length;j++)tr.append("<td>"+h[labels[j]]+"</td>");
+		tbody.append(tr);
+	}
+	return html;
 }
