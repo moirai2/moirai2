@@ -508,7 +508,7 @@ DesktopView.prototype.createButton=function(json){
 	var height=0;
 	var background=(json!=null&&"background" in json)?json["background"]:"white";
 	var foreground=(json!=null&&"foreground" in json)?json["foreground"]:"black";
-	var middleground =(json!=null&&"middleground" in json)?json["middleground"]:"grey";
+	var middleground=(json!=null&&"middleground" in json)?json["middleground"]:"grey";
 	var os=Array();
 	for(var i=0,newY=0;i<tokens.length;i++){
 		var o=new createjs.Text(tokens[i],font,foreground);

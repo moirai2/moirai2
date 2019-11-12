@@ -101,7 +101,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "             Retrieves scripts from URL.\n";
 	print "\n";
-	print "Usage: $program_name input -i INPUT -o OUTPUT [DEFAULT ..]\n";
+	print "Usage: $program_name prompt -i INPUT -o OUTPUT [DEFAULT ..]\n";
 	print "\n";
 	print "             Retrieves scripts from URL.\n";
 	print "\n";
@@ -173,12 +173,9 @@ mkdir("$ctrldir/update");
 mkdir("$ctrldir/completed");
 mkdir("$ctrldir/stdout");
 mkdir("$ctrldir/stderr");
-if($ARGV[0] eq "input"){input();exit(0);}
 my $workflows={};
 my $executes={};
 my @execurls=();
-my $jobcount=0;
-my $ctrlcount=0;
 my $cmdurl=(scalar(@ARGV)>0)?shift(@ARGV):undef;
 my @nodeids;
 my $returnvalue;
@@ -186,7 +183,7 @@ my ($arguments,$userdefined)=handleArguments(@ARGV);
 my $queryResults={};
 my $insertKeys;
 #just in case jobs are completed while moirai2.pl was not running
-controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);
+controlProcess($rdfdb,$executes);
 if(defined($opt_i)){checkInputOutput($opt_i);}
 if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){$queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);}
@@ -195,6 +192,7 @@ if(defined($opt_o)){
 	$insertKeys=handleKeys(replaceStringWithHash($userdefined,$opt_o));
 	if(defined($opt_i)){remove_unnecessary_executes($queryResults,$insertKeys);}
 }
+if(defined($opt_l)){print_rows($queryResults->{".keys"},$queryResults->{".hashs"});}
 if(defined($cmdurl)){
 	@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
@@ -211,31 +209,19 @@ if($showlog){
 	if(defined($use_qsub)){print STDERR "# job submission : qsub\n";}
 	else{print STDERR "# job submission : bash\n";}
 	if(defined($cmdurl)){print STDERR "# command URL    : $cmdurl\n";}
-	foreach my $nodeid(@nodeids){if(defined($nodeid)){print STDERR "# command NodeID : $nodeid\n";}}
-	print STDERR "year/mon/date\thr:min:sec\twork\tnewjob\tremain\tinsert\tdelete\tupdate\tdone\n";
 }
 while(true){
-	my $jobs_running=getNumberOfJobsRunning();
-	controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);
-	$jobcount=0;
-	$ctrlcount=0;
-	if($jobs_running<$maxjob){
+	controlProcess($rdfdb,$executes);
+	if(scalar(@execurls)<$maxjob){
 		foreach my $url(lookForNewCommands($rdfdb,$newExecuteQuery,$commands)){
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
-			if($job>0){$jobcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
-		}
-		if($jobcount==0){
-			controlProcess($rdfdb,$executes,$ctrlcount,$jobcount);
-			foreach my $url(lookForNewCommands($rdfdb,$newWorkflowQuery,$commands)){
-				my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
-				if($job>0){$ctrlcount+=$job;if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
-			}
+			if($job>0){if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
 		}
 	}
+	my $jobs_running=getNumberOfJobsRunning();
+	if($jobs_running<$maxjob){mainProcess(\@execurls,$commands,$executes,$maxjob-$jobs_running);}
 	$jobs_running=getNumberOfJobsRunning();
-	mainProcess(\@execurls,$commands,$executes,$maxjob-$jobs_running);
-	$jobs_running=getNumberOfJobsRunning();
-	if($runmode&&scalar(@execurls)==0&&$jobs_running==0&&$jobcount==0){last;}
+	if($runmode&&scalar(@execurls)==0&&$jobs_running==0){controlProcess($rdfdb,$executes);last;}
 	else{sleep($sleeptime);}
 }
 if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
@@ -363,7 +349,6 @@ sub getQueryResults{
 	}
 	$hash->{".keys"}=$keys;
 	$hash->{".hashs"}=\@hashs;
-	if(defined($opt_l)){print_rows($keys,\@hashs);}
 	return $hash;
 }
 ############################## writeScript ##############################
@@ -481,7 +466,7 @@ sub checkRDFObject{
 sub writeDeletes{
 	my @lines=@_;
 	if(scalar(@lines)>0){
-		my ($fh,$file)=mkstemps("$ctrldir/delete/XXXXXXXXXX",".insert");
+		my ($fh,$file)=mkstemps("$ctrldir/delete/XXXXXXXXXX",".delete");
 		foreach my $line(@lines){print $fh "$line\n";}
 		close($fh);
 	}
@@ -616,7 +601,7 @@ sub commandProcess{
 		push(@inserts,@array);
 	}
 	if(defined($showlog)){
-		print STDERR "Do you want to continue [y/n]? ";
+		print STDERR "Proceed running ".scalar(@nodeids)." jobs [y/n]? ";
 		my $prompt=<STDIN>;
 		chomp($prompt);
 		if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){exit(1);}
@@ -704,18 +689,25 @@ sub mainProcess{
 sub controlProcess{
 	my $rdfdb=shift();
 	my $executes=shift();
-	my $ctrlcount=shift();
-	my $jobcount=shift();
 	my $completed=controlCompleted();
 	my $inserted=controlInsert($rdfdb);
 	my $deleted=controlDelete($rdfdb);
-	my $update=controlUpdate($rdfdb);
+	my $updated=controlUpdate($rdfdb);
 	my $date=getDate("/");
 	my $time=getTime(":");
-	my @execurls=keys(%{$executes});
-	my $remaining=0;
-	foreach my $url(@execurls){my $count=scalar(@{$executes->{$url}});if($count>0){$remaining++;}}
-	if($showlog){print STDERR "$date\t$time\t$ctrlcount\t$jobcount\t$remaining\t$inserted\t$deleted\t$update\t$completed\n";}
+	if(!defined($opt_l)){return;}
+	if($completed>0){
+		my $remain=0;
+		foreach my $url(keys(%{$executes})){$remain+=scalar(@{$executes->{$url}});}
+		if($completed>1){print STDERR "$date $time Completed $completed jobs (Remaining $remain).\n";}
+		else{print STDERR "$date $time Completed $completed job ($remain remain).\n";}
+		}
+	if($inserted>1){print STDERR "$date $time Inserted $inserted triples.\n";}
+	elsif($inserted>0){print STDERR "$date $time Inserted $inserted triple.\n";}
+	if($deleted>1){print STDERR "$date $time Deleted $deleted triples.\n";}
+	elsif($deleted>0){print STDERR "$date $time Deleted $deleted triple.\n";}
+	if($updated>1){print STDERR "$date $time Updated $updated triples.\n";}
+	elsif($updated>0){print STDERR "$date $time Updated $updated triple.\n";}
 }
 ############################## throwJobs ##############################
 sub throwJobs{
@@ -736,8 +728,11 @@ sub throwJobs{
 	}
 	print $fh "PATH=$exportpath\n";
 	print $fh "export PATH\n";
+	my @ids=();
 	foreach my $files(@{$bashFiles}){
-		my ($bashFile,$stdoutFile,$stderrFile)=@{$files};
+		my ($bashFile,$stdoutFile,$stderrFile,$nodeid)=@{$files};
+		if($nodeid=~/(.+)#(.+)/){push(@ids,"#$2");}
+		else{push(@ids,$nodeid);}
 		print $fh "bash $bashFile > $stdoutFile 2> $stderrFile\n";
 	}
 	if($use_qsub){
@@ -751,15 +746,17 @@ sub throwJobs{
 	print $fh "rm -f $path\n";
 	close($fh);
 	my $number=scalar(@{$bashFiles});
+	my $date=getDate("/");
+	my $time=getTime(":");
 	if($use_qsub){
-		if($showlog){print STDERR "#Submitting $path:\t";}
+		if($showlog){print STDERR "$date $time Submitting job ".join(",",@ids).":\t";}
 		my $command="qsub";
 		if(defined($qsubopt)){$command.=" $qsubopt";}
 		$command.=" $path";
 		if(system($command)==0){print "OK\n";}
 		else{print "ERROR: Failed to $command\n";exit(1);}
 	}else{
-		if($showlog){print STDERR "#Executing $path:\t";}
+		if($showlog){print STDERR "$date $time Executing jobs ".join(",",@ids).":\t";}
 		my $command="bash $path";
 		if(defined($background)){$command.=" &";}
 		if(system($command)==0){if($showlog){print STDERR "OK\n";}}
@@ -1009,8 +1006,10 @@ sub getExecuteJobsNodeid{
 	my $rdfdb=shift();
 	my $command=shift();
 	my $executes=shift();
-	my $query="select distinct k.data,s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as k on e1.subject=k.id inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
 	my $url=$command->{$urls->{"daemon/command"}};
+	my $nodeids={};
+	foreach my $execute(@{$executes->{$url}}){$nodeids->{$execute->{"nodeid"}}=1;}
+	my $query="select distinct k.data,s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as k on e1.subject=k.id inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
 	my $dbh=openDB($rdfdb);
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
@@ -1022,6 +1021,7 @@ sub getExecuteJobsNodeid{
 		my @array=();
 		my $keyinput=$row->[0];
 		my $nodeid=$row->[1];
+		if(exists($nodeids->{$nodeid})){next;}
 		my $predicate=$row->[2];
 		my $object=$row->[3];
 		if(!exists($vars->{$nodeid})){$vars->{$nodeid}={};$vars->{$nodeid}->{"nodeid"}=$nodeid;}
@@ -1402,7 +1402,7 @@ sub bashCommand{
 	print OUT "mv \$cwd/\$tmpdir/\$completedfile $ctrldir/completed/\$dirname.sh\n";
 	close(OUT);
 	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$updatefile,$bashfile,\@scriptfiles,$tmpdir,$cwd);
-	if(exists($vars->{"bashfile"})){push(@{$bashFiles},[$vars->{"cwd"}."/".$vars->{"tmpdir"}."/".$vars->{"bashfile"},$vars->{"cwd"}."/".$vars->{"tmpdir"}."/".$vars->{"stdoutfile"},$vars->{"cwd"}."/".$vars->{"tmpdir"}."/".$vars->{"stderrfile"}]);}
+	if(exists($vars->{"bashfile"})){push(@{$bashFiles},[$vars->{"cwd"}."/".$vars->{"tmpdir"}."/".$vars->{"bashfile"},$vars->{"cwd"}."/".$vars->{"tmpdir"}."/".$vars->{"stdoutfile"},$vars->{"cwd"}."/".$vars->{"tmpdir"}."/".$vars->{"stderrfile"},$nodeid]);}
 }
 ############################## existsArray ##############################
 sub existsArray{
@@ -1979,15 +1979,16 @@ sub print_rows{
 		my $label=$labels[$i];
 		my $l=length($label);
 		$labelline.="|";
-		$labelline.=$label;
-		for(my $j=$l;$j<$lengths[$i];$j++){$labelline.=" ";}
+		my $string=$label;
+		for(my $j=$l;$j<$lengths[$i];$j++){if(($j-$l)%2==0){$string.=" ";}else{$string=" $string";}}
+		$labelline.=$string;
 	}
 	$labelline.="|";
 	print STDERR "$labelline\n";
 	print STDERR "$tableline\n";
 	for(my $i=0;$i<scalar(@{$hashtable});$i++){
 		my $hash=$hashtable->[$i];
-		my $line="$i";
+		my $line=$i+1;
 		my $l=length($line);
 		for(my $j=$l;$j<$indexlength;$j++){$line=" $line";}
 		$line="|$line";
