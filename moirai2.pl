@@ -45,6 +45,7 @@ $urls->{"daemon/stderr"}="https://moirai2.github.io/schema/daemon/stderr";
 $urls->{"daemon/stdout"}="https://moirai2.github.io/schema/daemon/stdout";
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
 $urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
+$urls->{"daemon/timethrown"}="https://moirai2.github.io/schema/daemon/timethrown";
 $urls->{"daemon/unzip"}="https://moirai2.github.io/schema/daemon/unzip";
 $urls->{"daemon/md5"}="https://moirai2.github.io/schema/daemon/md5";
 $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
@@ -115,9 +116,9 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print " AUTHOR: Akira Hasegawa\n";
 	print "\n";
 	if(defined($opt_H)){
-		print "Updates: 2019/07/04  opt_i is specified with opt_o, it'll check if executing is necessary or not.\n";
-		print "         2019/05/23  opt_r was added for return specified value.\n";
-		print "         2019/05/15  opt_o was added for post-insert and unused batch routine removed.\n";
+		print "Updates: 2019/07/04  \$opt_i is specified with \$opt_o, it'll check if executing is necessary or not.\n";
+		print "         2019/05/23  \$opt_r was added for return specified value.\n";
+		print "         2019/05/15  \$opt_o was added for post-insert and unused batch routine removed.\n";
 		print "         2019/05/05  Set up 'output' for a command mode.\n";
 		print "         2019/04/08  'inputs' to pass inputs as variable array.\n";
 		print "         2019/04/04  Changed program name from 'daemon.pl' to 'moirai2.pl'.\n";
@@ -182,14 +183,15 @@ my $returnvalue;
 my ($arguments,$userdefined)=handleArguments(@ARGV);
 my $queryResults={};
 my $insertKeys;
-#just in case jobs are completed while moirai2.pl was not running
+#just in case jobs are completed while moirai2.pl was not running by termination
 controlProcess($rdfdb,$executes);
 if(defined($opt_i)){checkInputOutput($opt_i);}
 if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){$queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);}
 if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}
 if(defined($opt_o)){
-	$insertKeys=handleKeys(replaceStringWithHash($userdefined,$opt_o));
+	#$insertKeys=handleKeys(replaceStringWithHash($userdefined,$opt_o));
+	$insertKeys=handleKeys($opt_o);
 	if(defined($opt_i)){remove_unnecessary_executes($queryResults,$insertKeys);}
 }
 if(defined($opt_l)){print_rows($queryResults->{".keys"},$queryResults->{".hashs"});}
@@ -212,7 +214,7 @@ if($showlog){
 }
 while(true){
 	controlProcess($rdfdb,$executes);
-	if(scalar(@execurls)<$maxjob){
+	if(getNumberOfJobsRemaining($executes)<$maxjob){
 		foreach my $url(lookForNewCommands($rdfdb,$newExecuteQuery,$commands)){
 			my $job=getExecuteJobs($rdfdb,$commands->{$url},$executes);
 			if($job>0){if(!existsArray(\@execurls,$url)){push(@execurls,$url);}}
@@ -221,7 +223,7 @@ while(true){
 	my $jobs_running=getNumberOfJobsRunning();
 	if($jobs_running<$maxjob){mainProcess(\@execurls,$commands,$executes,$maxjob-$jobs_running);}
 	$jobs_running=getNumberOfJobsRunning();
-	if($runmode&&scalar(@execurls)==0&&$jobs_running==0){controlProcess($rdfdb,$executes);last;}
+	if($runmode&&getNumberOfJobsRemaining($executes)==0&&$jobs_running==0){controlProcess($rdfdb,$executes);last;}
 	else{sleep($sleeptime);}
 }
 if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
@@ -231,6 +233,13 @@ if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 		chomp($result);
 		print "$result\n";
 	}
+}
+############################## getNumberOfJobsRemaining ##############################
+sub getNumberOfJobsRemaining{
+	my $executes=shift();
+	my $count=0;
+	foreach my $url(keys(%{$executes})){$count+=scalar(@{$executes->{$url}});}
+	return $count;
 }
 ############################## test ##############################
 sub test{
@@ -634,7 +643,6 @@ sub commandProcessVars{
 		if($found==1){$vars->{$output}=$value;}
 	}
 	while(my($key,$val)=each(%{$hash})){if(!exists($vars->{$key})){$vars->{$key}=$val;}}
-	#print_table("##### vars #####",$vars);
 	return $vars;
 }
 ############################## commandProcessSub ##############################
@@ -673,6 +681,8 @@ sub mainProcess{
 				initExecute($rdfdb,$command,$vars);
 				if(exists($command->{"selectKeys"})){push(@deletes,$vars->{"root"}."\t".$urls->{"daemon/workflow"}."\t$url");}
 				else{push(@deletes,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t".$vars->{"nodeid"});}
+				my $datetime=`date +%s`;chomp($datetime);
+				push(@inserts,$vars->{"nodeid"}."\t".$urls->{"daemon/timethrown"}."\t$datetime");
 				bashCommand($command,$vars,$bashFiles);
 				$maxjob--;
 				$thrown++;
@@ -693,21 +703,20 @@ sub controlProcess{
 	my $inserted=controlInsert($rdfdb);
 	my $deleted=controlDelete($rdfdb);
 	my $updated=controlUpdate($rdfdb);
+	if(!defined($opt_l)){return;}
 	my $date=getDate("/");
 	my $time=getTime(":");
-	if(!defined($opt_l)){return;}
 	if($completed>0){
-		my $remain=0;
-		foreach my $url(keys(%{$executes})){$remain+=scalar(@{$executes->{$url}});}
-		if($completed>1){print STDERR "$date $time Completed $completed jobs (Remaining $remain).\n";}
-		else{print STDERR "$date $time Completed $completed job ($remain remain).\n";}
-		}
-	if($inserted>1){print STDERR "$date $time Inserted $inserted triples.\n";}
-	elsif($inserted>0){print STDERR "$date $time Inserted $inserted triple.\n";}
-	if($deleted>1){print STDERR "$date $time Deleted $deleted triples.\n";}
-	elsif($deleted>0){print STDERR "$date $time Deleted $deleted triple.\n";}
-	if($updated>1){print STDERR "$date $time Updated $updated triples.\n";}
-	elsif($updated>0){print STDERR "$date $time Updated $updated triple.\n";}
+		my $remain=getNumberOfJobsRemaining($executes);
+		if($completed>1){print "$date $time Completed $completed jobs (Remaining $remain).\n";}
+		else{print "$date $time Completed $completed job ($remain remain).\n";}
+	}
+	if($inserted>1){print "$date $time Inserted $inserted triples.\n";}
+	elsif($inserted>0){print "$date $time Inserted $inserted triple.\n";}
+	if($deleted>1){print "$date $time Deleted $deleted triples.\n";}
+	elsif($deleted>0){print "$date $time Deleted $deleted triple.\n";}
+	if($updated>1){print "$date $time Updated $updated triples.\n";}
+	elsif($updated>0){print "$date $time Updated $updated triple.\n";}
 }
 ############################## throwJobs ##############################
 sub throwJobs{
@@ -936,7 +945,6 @@ sub loadCommandFromURLSub{
 	if(!exists($command->{$urls->{"daemon/maxjob"}})){$command->{$urls->{"daemon/maxjob"}}=1;}
 	if(exists($command->{$urls->{"daemon/script"}})){handleScript($command);}
 	if(scalar(keys(%{$default}))>0){$command->{"default"}=$default;}
-	#handleOutput($command);
 }
 ############################## handleOutput ##############################
 sub handleOutput{
@@ -1010,6 +1018,7 @@ sub getExecuteJobsNodeid{
 	my $nodeids={};
 	foreach my $execute(@{$executes->{$url}}){$nodeids->{$execute->{"nodeid"}}=1;}
 	my $query="select distinct k.data,s.data,p.data,o.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as k on e1.subject=k.id inner join node as s on e2.subject=s.id inner join node as p on e2.predicate=p.id inner join node as o on e2.object=o.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\")";
+	if(scalar(keys(%{$nodeids}))>0){$query.=" and e1.object not in(select id from node where data in (\"".join("\",\"",keys(%{$nodeids}))."\"))";}
 	my $dbh=openDB($rdfdb);
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
@@ -1291,6 +1300,7 @@ sub bashCommand{
 			my $found=0;
 			my $line=join("->",@{$insert});
 			foreach my $output(@{$command->{"output"}}){
+				print STDERR "$line\n";
 				if($line=~/\$$output/){push(@{$inserts->{$output}},$insert);$found=1;last;}
 			}
 			if($found==0){push(@{$inserts->{""}},$insert);}
@@ -1314,9 +1324,7 @@ sub bashCommand{
 		if(exists($vars->{$output})){print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$$output\">>\$tmpdir/\$updatefile\n";}
 		else{print OUT "echo \"\$nodeid\t\$cmdurl#$output\t\$$output\">>\$tmpdir/\$insertfile\n";}
 		if(exists($inserts->{$output})){
-			foreach my $row(@{$inserts->{$output}}){
-				print OUT "echo \"".join("\t",@{$row})."\">>\$tmpdir/\$insertfile\n";
-			}
+			foreach my $row(@{$inserts->{$output}}){print OUT "echo \"".join("\t",@{$row})."\">>\$tmpdir/\$insertfile\n";}
 		}
 		print OUT "fi\n";
 	}
