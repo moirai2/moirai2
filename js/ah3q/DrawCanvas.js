@@ -1,4 +1,4 @@
-function DesktopView(){
+function DrawCanvas(){
 	var self=this;
 	for(var i=0;i<arguments.length;i++){
 		var arg=arguments[i];
@@ -12,7 +12,7 @@ function DesktopView(){
 	else this.initialize();
 	if(typeof Utility!='undefined')this.utility=new Utility();
 }
-DesktopView.prototype.initialize=function(){
+DrawCanvas.prototype.initialize=function(){
 	var self=this;
 	this.dom=document.getElementById(this.id);
 	$(this.dom).css("margin","0px");
@@ -108,7 +108,7 @@ DesktopView.prototype.initialize=function(){
 	}
 	this.start();
 }
-DesktopView.prototype.resizeHandler=function(event){
+DrawCanvas.prototype.resizeHandler=function(event){
 	var self=this;
 	this.width=$(window).width();
 	this.height=$(window).height();
@@ -118,12 +118,12 @@ DesktopView.prototype.resizeHandler=function(event){
 	this.canvas.height=this.height;
 	desktop.stage.update();
 }
-DesktopView.prototype.start=function(fps){
+DrawCanvas.prototype.start=function(fps){
 	if(fps==null)fps=60;
 	createjs.Ticker.framerate=fps;
 	createjs.Ticker.addEventListener("tick",this.stage);
 }
-DesktopView.prototype.getChildFromPoint=function(x,y){
+DrawCanvas.prototype.getChildFromPoint=function(x,y){
 	var p=this.stage.globalToLocal(x,y);
 	var size=this.stage.children.length;
 	for(var i=size-1;i>=0;i--){
@@ -132,11 +132,11 @@ DesktopView.prototype.getChildFromPoint=function(x,y){
 		if(child.hitTest(p2.x,p2.y))return child;
 	}
 }
-DesktopView.prototype.addChild=function(child){this.stage.addChild(child);}
-DesktopView.prototype.removeChild=function(child){this.stage.removeChild(child);}
-DesktopView.prototype.clickAndHide=function(child){var self=this;child.addEventListener("singleClick",function(e){createjs.Tween.get(child).to({alpha:0},300).call(self.removeChild,child);});}
+DrawCanvas.prototype.addChild=function(child){this.stage.addChild(child);}
+DrawCanvas.prototype.removeChild=function(child){this.stage.removeChild(child);}
+DrawCanvas.prototype.clickAndHide=function(child){var self=this;child.addEventListener("singleClick",function(e){createjs.Tween.get(child).to({alpha:0},300).call(self.removeChild,child);});}
 //https://ics.media/tutorial-createjs/tween.html
-DesktopView.prototype.drawLineWithDrag=function(boolean){
+DrawCanvas.prototype.drawLineWithDrag=function(boolean){
 	if(boolean==null)boolean=true;
 	if(boolean){
 		this.mouseController.addEventListener("dragStarted",this.dragLineStart);
@@ -148,7 +148,7 @@ DesktopView.prototype.drawLineWithDrag=function(boolean){
 		this.mouseController.removeEventListener("dragCompleted",this.dragLineEnd);
 	}
 }
-DesktopView.prototype.drawRectangleWithDrag=function(boolean){
+DrawCanvas.prototype.drawRectangleWithDrag=function(boolean){
 	if(boolean==null)boolean=true;
 	if(boolean){
 		this.mouseController.addEventListener("dragStarted",this.dragRectangleStart);
@@ -160,7 +160,7 @@ DesktopView.prototype.drawRectangleWithDrag=function(boolean){
 		this.mouseController.removeEventListener("dragCompleted",this.dragRectangleEnd);
 	}
 }
-DesktopView.prototype.drawEllipseWithDrag=function(boolean){
+DrawCanvas.prototype.drawEllipseWithDrag=function(boolean){
 	if(boolean==null)boolean=true;
 	if(boolean){
 		this.mouseController.addEventListener("dragStarted",this.dragEllipseStart);
@@ -172,7 +172,7 @@ DesktopView.prototype.drawEllipseWithDrag=function(boolean){
 		this.mouseController.removeEventListener("dragCompleted",this.dragEllipseEnd);
 	}
 }
-DesktopView.prototype.createProcessingIcon=function(json){
+DrawCanvas.prototype.createProcessingIcon=function(json){
 	var icon=new createjs.Container();
 	icon.x=(json.x!=null)?json.x:this.width/2;
 	icon.y=(json.y!=null)?json.y:this.height/2;
@@ -190,7 +190,7 @@ DesktopView.prototype.createProcessingIcon=function(json){
 	var mtween=new createjs.Tween.get(icon,{loop:true}).to({rotation:-360},1000,createjs.Ease.linear);
 	return icon;
 }
-DesktopView.prototype.createCircleIcon=function(json){
+DrawCanvas.prototype.createCircleIcon=function(json){
 	var icon=new createjs.Shape();
 	icon.x=(json.x!=null)?json.x:this.width/2;
 	icon.y=(json.y!=null)?json.y:this.height/2;
@@ -205,7 +205,7 @@ DesktopView.prototype.createCircleIcon=function(json){
 	icon.radius=radius;
 	return icon;
 }
-DesktopView.prototype.createPolygonIcon=function(json){
+DrawCanvas.prototype.createPolygonIcon=function(json){
 	var icon=new createjs.Shape();
 	icon.x=(json.x!=null)?json.x:this.width/2;
 	icon.y=(json.y!=null)?json.y:this.height/2;
@@ -237,7 +237,7 @@ DesktopView.prototype.createPolygonIcon=function(json){
 	icon.radius=radius;
 	return icon;
 }
-DesktopView.prototype.createRectangleIcon=function(json){
+DrawCanvas.prototype.createRectangleIcon=function(json){
 	var icon=new createjs.Shape();
 	icon.x=(json.x!=null)?json.x:this.width/2;
 	icon.y=(json.y!=null)?json.y:this.height/2;
@@ -254,7 +254,7 @@ DesktopView.prototype.createRectangleIcon=function(json){
 	icon.radius=radius;
 	return icon;
 }
-DesktopView.prototype.createTextCircleIcon=function(text,json){
+DrawCanvas.prototype.createTextCircleIcon=function(text,json){
 	if(text==null)text="undefined";
 	var x=(json.x!=null)?json.x:this.width/2;
 	var y=(json.y!=null)?json.y:this.height/2;
@@ -278,7 +278,7 @@ DesktopView.prototype.createTextCircleIcon=function(text,json){
 	var mtween=new createjs.Tween.get(icon,{loop:true}).to({rotation:-360},10000,createjs.Ease.linear);
 	return icon;
 }
-DesktopView.prototype.createDirectoryIcon=function(path,json){
+DrawCanvas.prototype.createDirectoryIcon=function(path,json){
 	if(path==null)path="undefined";
 	var width=(json.width!=null)?json.width:40;
 	var height=(json.height!=null)?json.height:40;
@@ -325,7 +325,7 @@ DesktopView.prototype.createDirectoryIcon=function(path,json){
 	icon.height=height;
 	return icon;
 }
-DesktopView.prototype.createFileIcon=function(path,json){
+DrawCanvas.prototype.createFileIcon=function(path,json){
 	if(path==null)path="undefined";
 	var radius=(json.radius!=null)?json.radius:20;
 	var font=(font in json)?json.font:"18px Arial";
@@ -372,7 +372,7 @@ DesktopView.prototype.createFileIcon=function(path,json){
 	icon.radius=radius;
 	return icon;
 }
-DesktopView.prototype.createDialogIcon=function(text,json){
+DrawCanvas.prototype.createDialogIcon=function(text,json){
 	if(text==null)text="undefined";
 	var font=(font in json)?json.font:"18px Arial";
 	var icon=new createjs.Container();
@@ -433,9 +433,7 @@ DesktopView.prototype.createDialogIcon=function(text,json){
 	icon.radius=Math.sqrt(width/2*width/2+height/2*height/2);
 	return icon;
 }
-DesktopView.prototype.createImageIcon=function(image,json){
-	console.log(json);
-	if(image instanceof jQuery)image=image[0];
+DrawCanvas.prototype.createImageIcon=function(image,json){
 	var width=(json.width!=null)?json.width:40;
 	var height=(json.height!=null)?json.height:40;
 	var scaleX=width/image.width;
@@ -454,7 +452,7 @@ DesktopView.prototype.createImageIcon=function(image,json){
 	icon.radius=Math.sqrt(width/2*width/2+height/2*height/2);
 	return icon;
 }
-DesktopView.prototype.createTextIcon=function(text,json){
+DrawCanvas.prototype.createTextIcon=function(text,json){
 	if(text==null)text="undefined";
 	var icon=new createjs.Container();
 	icon.x=x;
@@ -499,7 +497,7 @@ DesktopView.prototype.createTextIcon=function(text,json){
 	icon.isRect=true;
 	return icon;
 }
-DesktopView.prototype.createButton=function(json){
+DrawCanvas.prototype.createButton=function(json){
 	if(text==null)text="undefined";
 	var icon=new createjs.Container();
 	icon.x=x;

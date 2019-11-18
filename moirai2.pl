@@ -100,7 +100,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "Usage: $program_name script URL\n";
 	print "\n";
-	print "             Retrieves scripts from URL.\n";
+	print "             Retrieves script files from URL and export them to a Desktop (default='current directory').\n";
 	print "\n";
 	print "Usage: $program_name prompt -i INPUT -o OUTPUT [DEFAULT ..]\n";
 	print "\n";
@@ -116,12 +116,12 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print " AUTHOR: Akira Hasegawa\n";
 	print "\n";
 	if(defined($opt_H)){
-		print "Updates: 2019/07/04  \$opt_i is specified with \$opt_o, it'll check if executing is necessary or not.\n";
+		print "Updates: 2019/07/04  \$opt_i is specified with \$opt_o, it'll check if executing commands are necessary.\n";
 		print "         2019/05/23  \$opt_r was added for return specified value.\n";
 		print "         2019/05/15  \$opt_o was added for post-insert and unused batch routine removed.\n";
 		print "         2019/05/05  Set up 'output' for a command mode.\n";
 		print "         2019/04/08  'inputs' to pass inputs as variable array.\n";
-		print "         2019/04/04  Changed program name from 'daemon.pl' to 'moirai2.pl'.\n";
+		print "         2019/04/04  Changed name of this program from 'daemon.pl' to 'moirai2.pl'.\n";
 		print "         2019/04/03  Array output functionality and command line functionality added.\n";
 		print "         2019/03/04  Stores run options in the SQLite database.\n";
 		print "         2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
