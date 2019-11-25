@@ -13,7 +13,7 @@ RDF.prototype.add=function(subject,predicate,object){
 RDF.prototype.delete=function(subject,predicate,object){
 	if(!(subject in this.rdf))return this;
 	if(!(predicate in this.rdf[subject]))return this;
-	else if(Array.isArray(this.rdf[subject][predicate])){
+	if(Array.isArray(this.rdf[subject][predicate])){
 		let array=this.rdf[subject][predicate];
 		let temp=[];
 		for(let i=0;i<array.length;i++)if(array[i]!=object)temp.push(array[i]);
@@ -90,6 +90,11 @@ RDF.prototype.insert=function(){
 		}
 	}
 	return this;
+}
+//#################### put ####################
+RDF.prototype.put=function(subject,predicate,object){
+	if(!(subject in this.rdf))this.rdf[subject]={};
+	this.rdf[subject][predicate]=object;
 }
 //#################### query ####################
 RDF.prototype.query=function(string){
@@ -256,30 +261,48 @@ RDF.prototype._getVariables=function(subject,predicate,object,hash){
 				if(subject.startsWith("$"))temp[subject]=subject2;
 				if(predicate.startsWith("$"))temp[predicate]=predicate2;
 				if(object.startsWith("$"))temp[object]=object2[k];
-				array.push(temp);
+				if(!this._includes(array,temp))array.push(temp);
 			}
 		}
 	}
 	return array;
 }
+RDF.prototype._includes=function(array,hash){
+	for(var i=0;i<array.length;i++)if(this._equals(array[i],hash))return 1;
+	return 0;
+}
+RDF.prototype._equals=function(hash1,hash2){
+	let keys1=Object.keys(hash1).sort();
+	let keys2=Object.keys(hash2).sort();
+	if(keys1.length!=keys2.length)return 0;
+	for(let i=0;i<keys1.length;i++){
+		if(keys1[i]!=keys2[i])return 0;
+		if(hash1[keys1[i]]!=hash2[keys2[i]])return 0;
+	}
+	return 1;
+}
 RDF.prototype._queryvalue=function(value,hash){
-	if(value==null){return null;}
-	else if(value.startsWith("$")){if(value in hash)return hash[value];}
-	return value;
+	if(value==null||value==""){return null;}
+	else if(value.startsWith("$")){if(value in hash)return hash[value];else return value;}
+	return new RegExp(value);
 }
 RDF.prototype._selectsub=function(value,value2){
-	if(value==null)return 0;
-	else if(value.startsWith("$")){return 0;}
+	if(value==null)return 1;
 	else if(Array.isArray(value)){for(let i=0;i<value.length;i++){if(this._selectsub(value[i],value2)==0)return 0;}return 1;}
+	else if(value instanceof RegExp)return !value2.match(value);
+	else if(value.startsWith("$"))return 0;
 	else if(value.startsWith("!")){if(value.substr(1)==value2)return 1;}
-	else{if(value!=value2)return 1;}
-	return 0;
+	else if(value==value2)return 0;
+	else if(value!=value2)return 1;
+	else return 0;
 }
 RDF.prototype._removesub=function(value,value2){
 	if(value==null)return 0;
-	else if(value.startsWith("$")){return 0;}
-	else if(Array.isArray(value)){for(let i=0;i<value.length;i++){if(this._selectsub(value[i],value2)==1)return 1;}return 0;}
+	else if(Array.isArray(value)){for(let i=0;i<value.length;i++){if(this._removesub(value[i],value2)==1)return 1;}return 0;}
+	else if(value instanceof RegExp)return value2.match(value);
+	else if(value.startsWith("$"))return 0;
 	else if(value.startsWith("!")){if(value.substr(1)==value2)return 0;}
-	else{if(value!=value2)return 0;}
-	return 1;
+	else if(value==value2)return 1;
+	else if(value!=value2)return 0;
+	else return 1;
 }
