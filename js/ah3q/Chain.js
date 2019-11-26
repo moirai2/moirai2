@@ -4,7 +4,7 @@ function Chain(){
 	this.jobs=[];
 	this.rdf=new RDF();
 	this.data=[];
-	this.temp=[];
+	this.tmp=[];
 	this.task=0;
 	for(var i=0;i<arguments.length;i++){
 		var arg=arguments[i];
@@ -16,7 +16,7 @@ function Chain(){
 			if("files" in event.dataTransfer){
 				for(let i=0;i<event.dataTransfer.files.length;i++){
 					this.rdf.add("dataTransfer","file",event.dataTransfer.files[i]);
-					this.temp.push(event.dataTransfer.files[i]);
+					this.tmp.push(event.dataTransfer.files[i]);
 				}
 			}
 		}else if(arg.constructor.name=="CustomEvent"){
@@ -30,16 +30,16 @@ function Chain(){
 			if("image" in arg.detail)this.rdf.add("CustomEvent","image",arg.detail.image);
 			if(arg.type!=null){
 				this.rdf.add("CustomEvent","type",arg.type);
-				if(arg.type=="imageWasRead")this.temp.push(arg.detail.image);
-				if(arg.type=="fileWasSaved")this.temp.push(arg.detail.path);
-				if(arg.type=="fileNameWasDropped")this.temp.push(arg.detail.filename);
-				if(arg.type=="urlWasDropped")this.temp.push(arg.detail.url);
-				if(arg.type=="textWasRead")this.temp.push(arg.detail.text);
-				if(arg.type=="textWasDropped")this.temp.push(arg.detail.text);
-				if(arg.type=="imageWasDropped")this.temp.push(arg.detail.file);
-				if(arg.type=="fileWasDropped")this.temp.push(arg.detail.file);
+				if(arg.type=="imageWasRead")this.tmp.push(arg.detail.image);
+				if(arg.type=="fileWasSaved")this.tmp.push(arg.detail.path);
+				if(arg.type=="fileNameWasDropped")this.tmp.push(arg.detail.filename);
+				if(arg.type=="urlWasDropped")this.tmp.push(arg.detail.url);
+				if(arg.type=="textWasRead")this.tmp.push(arg.detail.text);
+				if(arg.type=="textWasDropped")this.tmp.push(arg.detail.text);
+				if(arg.type=="imageWasDropped")this.tmp.push(arg.detail.file);
+				if(arg.type=="fileWasDropped")this.tmp.push(arg.detail.file);
 			}
-		}else{this.temp.push(arg);}
+		}else{this.tmp.push(arg);}
 	}
 }
 //######################################## BASIC ########################################
@@ -75,10 +75,10 @@ Chain.prototype.sleep=function(time){
 }
 Chain.prototype.next=function(){
 	if(--this.task>0){return;}
-	this.temp=[];
+	this.tmp=[];
 	for(let i=0;i<this.data.length;i++){
 		if("output" in this.data[i]){
-			this.temp.push(this.data[i]["output"]);
+			this.tmp.push(this.data[i]["output"]);
 		}
 	}
 	this.start();
@@ -92,7 +92,7 @@ Chain.prototype.start=function(mode){
 		else if((typeof job==='object')){hash=job;job=hash["job"];}
 		if(!("keep" in hash)&&!("keep" in mode)){
 			this.data=[];
-			for(let i=0;i<this.temp.length;i++)this.data[i]={input:this.temp[i]};
+			for(let i=0;i<this.tmp.length;i++)this.data[i]={input:this.tmp[i]};
 		}
 		if("put" in hash)this.startPut(hash["put"]);
 		if("put" in mode)this.startPut(mode["put"]);
@@ -113,45 +113,39 @@ Chain.prototype.startPut=function(data){
 	}
 }
 //######################################## data ########################################
-Chain.prototype.add=function(){
+Chain.prototype.dataAdd=function(){
 	let self=this;
 	let args=arguments;
 	this.jobs.push({once:true,job:function(self){
 		for(let i=0;i<self.data.length;i++){
 			for(let j=0;j<args.length;j++){
-				let keys=Object.keys(args[i]);
-				for(let k=0;k<keys.length;k++){
-					let key=keys[k];
-					let val=args[j][key];
-					self.data[i][key]=val;
+				let arg=args[j];
+				if((!Array.isArray(arg))&&(typeof arg==="object")){
+					let keys=Object.keys(arg);
+					for(let k=0;k<keys.length;k++){
+						let key=keys[k];
+						let val=arg[key];
+						self.data[i][key]=val;
+					}
+				}else{
+					let index=(j<self.tmp.length)?j:self.tmp.length-1;
+					self.data[i][arg]=self.tmp[index];
 				}
 			}
 		}
+		self.tmp=[];
 		self.start({keep:true});
 	}});
 	return this;
 }
-Chain.prototype.get=function(){
+Chain.prototype.dataGet=function(){
 	let self=this;
 	let args=arguments;
 	this.jobs.push({once:true,function(self){
-		self.temp=[];
+		self.tmp=[];
 		for(let i=0;i<args.length;i++){
-			self.data=self.rdf.query(args[i]);
 		}
 		self.start({keep:true});
-	}});
-	return this;
-}
-Chain.prototype.set=function(){
-	let self=this;
-	let args=arguments;
-	this.jobs.push({once:true,job:function(self){
-		self.temp=[];
-		for(let i=0;i<args.length;i++){
-			self.temp[i]=args[i];
-		}
-		self.start();
 	}});
 	return this;
 }
@@ -178,17 +172,23 @@ Chain.prototype.appendTo=function(target){
 	}});
 	return this;
 }
-Chain.prototype.dataToHTML=function(){
-	let self=this;
-	this.jobs.push(function(self,hash){
-		let html=$("<table/>");
-		let thead=$("<thead/>");
-		let tr=$("<tr/>");
-		tr.append($("<th/>").text("key"));
-		tr.append($("<th/>").text("value"));
-		thead.append(tr);
-		html.append(thead);
-		let tbody=$("<tbody/>");
+Chain.prototype.hashToHTML=function(hash){
+	let html=$("<table/>");
+	let thead=$("<thead/>");
+	let tr=$("<tr/>");
+	tr.append($("<th/>").text("key"));
+	tr.append($("<th/>").text("value"));
+	thead.append(tr);
+	html.append(thead);
+	let tbody=$("<tbody/>");
+	if(Array.isArray(hash)){
+		for(let i=0;i<hash.length;i++){
+			let tr=$("<tr/>");
+			tr.append($("<td/>").text(i));
+			tr.append($("<td/>").text(JSON.stringify(hash[i])));
+			tbody.append(tr);
+		}
+	}else if(typeof hash==="object"){
 		let keys=Object.keys(hash);
 		for(let i=0;i<keys.length;i++){
 			let key=keys[i];
@@ -199,8 +199,27 @@ Chain.prototype.dataToHTML=function(){
 			else tr.append($("<td/>").text(val));
 			tbody.append(tr);
 		}
-		html.append(tbody);
-		hash["output"]=html;
+	}else{
+		let tr=$("<tr/>");
+		tr.append($("<td/>").text(i));
+		tr.append($("<td/>").text(JSON.stringify(hash)));
+		tbody.append(tr);
+	}
+	html.append(tbody);
+	return html;
+}
+Chain.prototype.tmpToHTML=function(){
+	let self=this;
+	this.jobs.push({once:true,job:function(self){
+		self.tmp=[self.hashToHTML(self.tmp)];
+		self.start();
+	}});
+	return this;
+}
+Chain.prototype.dataToHTML=function(){
+	let self=this;
+	this.jobs.push(function(self,hash){
+		hash["output"]=self.hashToHTML(hash);
 		self.next();
 	});
 	return this;
@@ -216,7 +235,7 @@ Chain.prototype.rdfToHTML=function(){
 //######################################## read ########################################
 Chain.prototype.readFile=function(){
 	let self=this;
-	if(arguments.length>0)this.set.apply(this,arguments);
+	if(arguments.length>0)this.tmpSet.apply(this,arguments);
 	this.jobs.push(
 		function(self,hash){
 			let reader=new FileReader();
@@ -231,7 +250,7 @@ Chain.prototype.readFile=function(){
 }
 Chain.prototype.readURL=function(){
 	let self=this;
-	if(arguments.length>0)this.set.apply(this,arguments);
+	if(arguments.length>0)this.tmpSet.apply(this,arguments);
 	this.jobs.push(function(self,hash){
 		$.post("moirai2.php?command=proxy",{url:hash["input"]},function(data){
 			hash["output"]=data;
@@ -243,7 +262,7 @@ Chain.prototype.readURL=function(){
 //######################################## RDF ########################################
 Chain.prototype.rdfAdd=function(s,p,o){
 	let self=this;
-	if(s!=null&&p!=null&&o!=null)this.set([s,p,o]);
+	if(s!=null&&p!=null&&o!=null)this.tmpSet([s,p,o]);
 	this.jobs.push({once:true,job:function(self,hash){
 		let triple=hash["input"];
 		if(Array.isArray(triple))self.rdf.add(triple[0],triple[1],triple[2]);
@@ -253,7 +272,7 @@ Chain.prototype.rdfAdd=function(s,p,o){
 }
 Chain.prototype.rdfPut=function(s,p,o){
 	let self=this;
-	if(s!=null&&p!=null&&o!=null)this.set([s,p,o]);
+	if(s!=null&&p!=null&&o!=null)this.tmpSet([s,p,o]);
 	this.jobs.push({once:true,job:function(self,hash){
 		let triple=hash["input"];
 		if(Array.isArray(triple))self.rdf.put(triple[0],triple[1],triple[2]);
@@ -263,7 +282,7 @@ Chain.prototype.rdfPut=function(s,p,o){
 }
 Chain.prototype.rdfReadTable=function(text){
 	let self=this;
-	if(text!=null)this.set(text);
+	if(text!=null)this.tmpSet(text);
 	this.jobs.push(function(self,hash){
 		let text=hash["input"];
 		self.rdf.readTable(text);
@@ -273,11 +292,35 @@ Chain.prototype.rdfReadTable=function(text){
 }
 Chain.prototype.rdfReadTriple=function(text){
 	let self=this;
-	if(text!=null)this.set(text);
+	if(text!=null)this.tmpSet(text);
 	this.jobs.push(function(self,hash){
 		let text=hash["input"];
 		self.rdf.readTriple(text);
 		self.next();
 	});
+	return this;
+}
+//######################################## tmp ########################################
+Chain.prototype.tmpSet=function(){
+	let self=this;
+	let args=arguments;
+	this.jobs.push({once:true,job:function(self){
+		self.tmp=[];
+		for(let i=0;i<args.length;i++){
+			self.tmp[i]=args[i];
+		}
+		self.start();
+	}});
+	return this;
+}
+Chain.prototype.tmpAdd=function(){
+	let self=this;
+	let args=arguments;
+	this.jobs.push({once:true,keep:true,job:function(self){
+		for(let i=0;i<args.length;i++){
+			self.tmp.push(args[i]);
+		}
+		self.start();
+	}});
 	return this;
 }
