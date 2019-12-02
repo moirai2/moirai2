@@ -268,7 +268,7 @@ RDF.prototype._getVariables=function(subject,predicate,object,hash){
 	return array;
 }
 RDF.prototype._includes=function(array,hash){
-	for(var i=0;i<array.length;i++)if(this._equals(array[i],hash))return 1;
+	for(let i=0;i<array.length;i++)if(this._equals(array[i],hash))return 1;
 	return 0;
 }
 RDF.prototype._equals=function(hash1,hash2){

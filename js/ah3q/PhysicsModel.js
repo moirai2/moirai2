@@ -11,23 +11,23 @@ function PhysicsModel(page){
 	this.fixConstant=0.1;
 }
 PhysicsModel.prototype.newEdge=function(from,to,drawArrow=true,size=5){
-	var line=new createjs.Shape();
-	var g=line.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(3);
+	let line=new createjs.Shape();
+	let g=line.graphics.setStrokeDash([2,2]).beginStroke("red").setStrokeStyle(3);
 	line.from=from;
 	line.to=to;
-	var dx=to.x-from.x;
-	var dy=to.y-from.y;
-	var l=Math.sqrt(dx*dx+dy*dy);
+	let dx=to.x-from.x;
+	let dy=to.y-from.y;
+	let l=Math.sqrt(dx*dx+dy*dy);
 	dx/=l;
 	dy/=l;
-	var x1=from.x+from.radius*dx;
-	var y1=from.y+from.radius*dy;
-	var x2=to.x-to.radius*dx;
-	var y2=to.y-to.radius*dy;
-	var x3=x2-size*(dx+dy);
-	var y3=y2-size*(dy-dx);
-	var x4=x2-size*(dx-dy);
-	var y4=y2-size*(dy+dx);
+	let x1=from.x+from.radius*dx;
+	let y1=from.y+from.radius*dy;
+	let x2=to.x-to.radius*dx;
+	let y2=to.y-to.radius*dy;
+	let x3=x2-size*(dx+dy);
+	let y3=y2-size*(dy-dx);
+	let x4=x2-size*(dx-dy);
+	let y4=y2-size*(dy+dx);
 	line.cm1=g.moveTo(x1,y1).command;
 	line.cm2=g.lineTo(x2,y2).command;
 	line.graphics.setStrokeDash(null).beginFill("red");
@@ -52,7 +52,7 @@ PhysicsModel.prototype.addNode=function(node){
 	if(node.fy==null)node.fy=0;
 	return this;
 }
-PhysicsModel.prototype.removeChild=function(node){var index=this.nodes.indexOf(node);if(index>=0)this.nodes.splice(index,1);}
+PhysicsModel.prototype.removeChild=function(node){let index=this.nodes.indexOf(node);if(index>=0)this.nodes.splice(index,1);}
 PhysicsModel.prototype.calculate=function(){
 	this.resetAccelerations();
 	this.bounceWall(this.wallConstant);
@@ -72,12 +72,12 @@ PhysicsModel.prototype.expandBoundary=function(str){
 		if(this.page.getHeight()<this.page.maxHeight)this.page.ah+=str;
 		else if(this.page.getHeight()>this.page.maxHeight)this.page.ah-=str;
 	}else if(str<0){
-		var minX=this.page.getWidth()/2;
-		var minY=this.page.getHeight()/2;
-		var maxX=-this.page.getWidth()/2;
-		var maxY=-this.page.getHeight()/2;
-		for(var i=0;i<this.nodes.length;i++){
-			var node=this.nodes[i];
+		let minX=this.page.getWidth()/2;
+		let minY=this.page.getHeight()/2;
+		let maxX=-this.page.getWidth()/2;
+		let maxY=-this.page.getHeight()/2;
+		for(let i=0;i<this.nodes.length;i++){
+			let node=this.nodes[i];
 			if(node.isRect){
 				if( node.x-node.width<minX)minX=node.x-node.width;
 				if(node.y-node.height<minY)minY=node.y-node.height;
@@ -94,12 +94,12 @@ PhysicsModel.prototype.expandBoundary=function(str){
 		if(this.page.getHeight()>maxY-minY)this.page.ah=str;
 	}
 }
-PhysicsModel.prototype.reduceVelocity=function(str){for(var i=0;i<this.nodes.length;i++){var n=this.nodes[i];n.vx*=str;n.vy*=str;}}
-PhysicsModel.prototype.resetAccelerations=function(){for(var i=0;i<this.nodes.length;i++){var n=this.nodes[i];n.ax=0.0;n.ay=0.0;}}
+PhysicsModel.prototype.reduceVelocity=function(str){for(let i=0;i<this.nodes.length;i++){let n=this.nodes[i];n.vx*=str;n.vy*=str;}}
+PhysicsModel.prototype.resetAccelerations=function(){for(let i=0;i<this.nodes.length;i++){let n=this.nodes[i];n.ax=0.0;n.ay=0.0;}}
 PhysicsModel.prototype.bounceWall=function(str){
 	if(str==0)return;
-	for(var i=0;i<this.nodes.length;i++){
-		var node=this.nodes[i];
+	for(let i=0;i<this.nodes.length;i++){
+		let node=this.nodes[i];
 		if(node.isRect){
 			if(node.x-node.width/2<-this.page.getWidth()/2){node.ax+=str;}
 			else if(node.x+node.width/2>this.page.getWidth()/2){node.ax-=str;}
@@ -115,15 +115,15 @@ PhysicsModel.prototype.bounceWall=function(str){
 }
 PhysicsModel.prototype.rectRectCollision=function(str,n1,n2){
 	if((n1.x-n1.width/2>n2.x+n2.width/2||n2.x-n2.width/2>n1.x+n1.width/2)||(n1.y-n1.height/2>n2.y+n2.height/2||n2.y-n2.height/2>n1.y+n1.height/2))return;
-	var dx=n2.x-n1.x;
-	var dy=n2.y-n1.y;
-	var width=n1.width/2+n2.width/2;
-	var height=n1.height/2+n2.height/2
-	var w1=n1.width*n1.height;
-	var w2=n2.width*n2.height;
-	var const1=1-w1/(w1+w2);
-	var const2=1-w2/(w1+w2);
-	var d=Math.sqrt(dx*dx+dy*dy);
+	let dx=n2.x-n1.x;
+	let dy=n2.y-n1.y;
+	let width=n1.width/2+n2.width/2;
+	let height=n1.height/2+n2.height/2
+	let w1=n1.width*n1.height;
+	let w2=n2.width*n2.height;
+	let const1=1-w1/(w1+w2);
+	let const2=1-w2/(w1+w2);
+	let d=Math.sqrt(dx*dx+dy*dy);
 	if(d==0)d=1;
 	dx/=d;dy/=d;
 	if(dx==0&&dy==0){dx=0.5-Math.random();dy=0.5-Math.random();}
@@ -133,17 +133,17 @@ PhysicsModel.prototype.rectRectCollision=function(str,n1,n2){
 	n2.ay+=const2*dy;
 }
 PhysicsModel.prototype.circleCircleCollision=function(str,n1,n2){
-	var r=n1.radius+n2.radius;
-	var dx=n2.x-n1.x;
-	var dy=n2.y-n1.y;
-	var d=Math.sqrt(dx*dx+dy*dy);
+	let r=n1.radius+n2.radius;
+	let dx=n2.x-n1.x;
+	let dy=n2.y-n1.y;
+	let d=Math.sqrt(dx*dx+dy*dy);
 	if(d>=r)return;
 	dx/=r;dy/=r;
-	var l=(r-d)/10;
-	var w1=n1.radius*n1.radius;
-	var w2=n2.radius*n2.radius;
-	var const1=1-w1/(w1+w2);
-	var const2=1-w2/(w1+w2);
+	let l=(r-d)/10;
+	let w1=n1.radius*n1.radius;
+	let w2=n2.radius*n2.radius;
+	let const1=1-w1/(w1+w2);
+	let const2=1-w2/(w1+w2);
 	n1.ax-=l*const1*dx;
 	n1.ay-=l*const1*dy;
 	n2.ax+=l*const2*dx;
@@ -151,18 +151,18 @@ PhysicsModel.prototype.circleCircleCollision=function(str,n1,n2){
 }
 PhysicsModel.prototype.clamp=function(val,min,max){if(val<min)return min;else if(val>max)return max;else return val;}
 PhysicsModel.prototype.circleRectCollision=function(str,n1,n2){
-	var dx=n2.x-n1.x;
-	var dy=n2.y-n1.y;
-	var closestX=this.clamp(n1.x,n2.x-n2.width/2,n2.x+n2.width/2);
-	var closestY=this.clamp(n1.y,n2.y-n2.height/2,n2.y+n2.height/2);
-	var d=Math.sqrt((n1.x-closestX)*(n1.x-closestX)+(n1.y-closestY)*(n1.y-closestY));
+	let dx=n2.x-n1.x;
+	let dy=n2.y-n1.y;
+	let closestX=this.clamp(n1.x,n2.x-n2.width/2,n2.x+n2.width/2);
+	let closestY=this.clamp(n1.y,n2.y-n2.height/2,n2.y+n2.height/2);
+	let d=Math.sqrt((n1.x-closestX)*(n1.x-closestX)+(n1.y-closestY)*(n1.y-closestY));
 	if(d>=n1.radius)return;
 	dx/=n2.radius;dy/=n2.radius;
-	var l=(n1.radius-d)/10;
-	var w1=n1.width*n1.height;
-	var w2=n2.radius*n2.radius;
-	var const1=1-w1/(w1+w2);
-	var const2=1-w2/(w1+w2);
+	let l=(n1.radius-d)/10;
+	let w1=n1.width*n1.height;
+	let w2=n2.radius*n2.radius;
+	let const1=1-w1/(w1+w2);
+	let const2=1-w2/(w1+w2);
 	n1.ax-=l*const1*dx;
 	n1.ay-=l*const1*dy;
 	n2.ax+=l*const2*dx;
@@ -170,10 +170,10 @@ PhysicsModel.prototype.circleRectCollision=function(str,n1,n2){
 }
 PhysicsModel.prototype.nodeCollision=function(str){
 	if(str==0)return;
-	for(var i=0;i<this.nodes.length;i++){
-		var n1=this.nodes[i];
-		for(var j=i+1;j<this.nodes.length;j++){
-			var n2=this.nodes[j];
+	for(let i=0;i<this.nodes.length;i++){
+		let n1=this.nodes[i];
+		for(let j=i+1;j<this.nodes.length;j++){
+			let n2=this.nodes[j];
 			if(n1.isRect){
 				if(n2.isRect)this.rectRectCollision(str,n1,n2);
 				else this.circleRectCollision(str,n2,n1);
@@ -186,18 +186,18 @@ PhysicsModel.prototype.nodeCollision=function(str){
 }
 PhysicsModel.prototype.edgeForce=function(str){
 	if(str==0)return;
-	for(var i=0;i<this.edges.length;i++){
-		var edge=this.edges[i];
-		var dx=edge.to.x-edge.from.x;
-		var dy=edge.to.y-edge.from.y;
-		var d=Math.sqrt(dx*dx+dy*dy);
+	for(let i=0;i<this.edges.length;i++){
+		let edge=this.edges[i];
+		let dx=edge.to.x-edge.from.x;
+		let dy=edge.to.y-edge.from.y;
+		let d=Math.sqrt(dx*dx+dy*dy);
 		dx/=d;dy/=d;
-		var r=edge.to.radius+edge.from.radius;
-		var m=(d-r)/r;
-		var w1=edge.from.radius*edge.from.radius;
-		var w2=edge.to.radius*edge.to.radius;
-		var const1=edge.direction*(1-w1/(w1+w2));
-		var const2=edge.direction*(1-w2/(w1+w2));
+		let r=edge.to.radius+edge.from.radius;
+		let m=(d-r)/r;
+		let w1=edge.from.radius*edge.from.radius;
+		let w2=edge.to.radius*edge.to.radius;
+		let const1=edge.direction*(1-w1/(w1+w2));
+		let const2=edge.direction*(1-w2/(w1+w2));
 		edge.from.ax+=const1*str*m*m*dx;
 		edge.from.ay+=const1*str*m*m*dy;
 		edge.to.ax-=const2*str*m*m*dx;
@@ -206,23 +206,23 @@ PhysicsModel.prototype.edgeForce=function(str){
 }
 PhysicsModel.prototype.stabilize=function(str){
 	if(str==0)return;
-	for(var i=0;i<this.nodes.length;i++){
-		var n=this.nodes[i];
-		var dx=n.x-n.fx;
-		var dy=n.y-n.fy;
-		var d=Math.sqrt(dx*dx+dy*dy);
+	for(let i=0;i<this.nodes.length;i++){
+		let n=this.nodes[i];
+		let dx=n.x-n.fx;
+		let dy=n.y-n.fy;
+		let d=Math.sqrt(dx*dx+dy*dy);
 		if(d<1){n.ax*=str;n.ay*=str;}
 		else if(d<0.1){n.ax=0;n.ay=0;}
 	}
 }
 PhysicsModel.prototype.update=function(){
 	if(this.page.expandConstant!=0){
-		var width=this.page.getWidth()+this.page.aw;
-		var height=this.page.getHeight()+this.page.ah;
+		let width=this.page.getWidth()+this.page.aw;
+		let height=this.page.getHeight()+this.page.ah;
 		this.page.resize(width,height);
 	}
-	for(var i=0;i<this.nodes.length;i++){
-		var n=this.nodes[i];
+	for(let i=0;i<this.nodes.length;i++){
+		let n=this.nodes[i];
 		if(n.mousedown)continue;
 		n.vx+=n.ax;
 		n.vy+=n.ay;
@@ -233,27 +233,27 @@ PhysicsModel.prototype.update=function(){
 		n.fx+=this.fixConstant*n.x;
 		n.fy+=this.fixConstant*n.y;
 	}
-	for(var i=0;i<this.edges.length;i++){
-		var edge=this.edges[i];
-		var dx=edge.to.x-edge.from.x;
-		var dy=edge.to.y-edge.from.y;
-		var l=Math.sqrt(dx*dx+dy*dy);
+	for(let i=0;i<this.edges.length;i++){
+		let edge=this.edges[i];
+		let dx=edge.to.x-edge.from.x;
+		let dy=edge.to.y-edge.from.y;
+		let l=Math.sqrt(dx*dx+dy*dy);
 		dx/=l;
 		dy/=l;
-		var x1;
-		var y1;
+		let x1;
+		let y1;
 		if(edge.from.isRect){
-			var p=this.getLineRectIntersection(edge.to.x,edge.to.y,edge.from.x,edge.from.y,edge.from.x-edge.from.width/2,edge.from.y-edge.from.height/2,edge.from.width,edge.from.height);
+			let p=this.getLineRectIntersection(edge.to.x,edge.to.y,edge.from.x,edge.from.y,edge.from.x-edge.from.width/2,edge.from.y-edge.from.height/2,edge.from.width,edge.from.height);
 			x1=p[0]+3*dx;
 			y1=p[1]+3*dy;
 		}else{
 			x1=edge.from.x+edge.from.radius*dx;
 			y1=edge.from.y+edge.from.radius*dy;
 		}
-		var x2;
-		var y2;
+		let x2;
+		let y2;
 		if(edge.to.isRect){
-			var p=this.getLineRectIntersection(edge.from.x,edge.from.y,edge.to.x,edge.to.y,edge.to.x-edge.to.width/2,edge.to.y-edge.to.height/2,edge.to.width,edge.to.height);
+			let p=this.getLineRectIntersection(edge.from.x,edge.from.y,edge.to.x,edge.to.y,edge.to.x-edge.to.width/2,edge.to.y-edge.to.height/2,edge.to.width,edge.to.height);
 			x2=p[0]-3*dx;
 			y2=p[1]-3*dy;
 		}else{
@@ -266,10 +266,10 @@ PhysicsModel.prototype.update=function(){
 		edge.cm2.y=y2;
 		edge.cm3.x=x2;
 		// drawing arrow
-		var x3=x2-edge.size*(dx+dy);
-		var y3=y2-edge.size*(dy-dx);
-		var x4=x2-edge.size*(dx-dy);
-		var y4=y2-edge.size*(dy+dx);
+		let x3=x2-edge.size*(dx+dy);
+		let y3=y2-edge.size*(dy-dx);
+		let x4=x2-edge.size*(dx-dy);
+		let y4=y2-edge.size*(dy+dx);
 		edge.cm3.y=y2;
 		edge.cm4.x=x3;
 		edge.cm4.y=y3;
@@ -278,8 +278,8 @@ PhysicsModel.prototype.update=function(){
 	}
 }
 PhysicsModel.prototype.getRectDirection=function(dx,dy,width,height){
-	var ratio1=width/height;
-	var ratio2=Math.abs(dx/dy);
+	let ratio1=width/height;
+	let ratio2=Math.abs(dx/dy);
 	if(dx<0){
 		if(dy<0){// - -
 			if(ratio2>ratio1)return 2;
@@ -303,15 +303,15 @@ PhysicsModel.prototype.getRectDirection=function(dx,dy,width,height){
 	}
 }
 PhysicsModel.prototype.getLineIntersection=function(x1,y1,x2,y2,x3,y3,x4,y4){
-	var d=(y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
-	var ua=(x4-x3)*(y1-y3)-(y4-y3)*(x1-x3);
-	var ub=(x2-x1)*(y1-y3)-(y2-y1)*(x1-x3);
+	let d=(y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
+	let ua=(x4-x3)*(y1-y3)-(y4-y3)*(x1-x3);
+	let ub=(x2-x1)*(y1-y3)-(y2-y1)*(x1-x3);
 	if(d==0)return new Array((x1+x2)/2,(y1+y2)/2);
 	ua/=d;ub/=d;
 	return new Array(x1+ua*(x2-x1),y1+ua*(y2-y1));
 }
 PhysicsModel.prototype.getLineRectIntersection=function(x1,y1,x2,y2,x,y,w,h){
-	var direction=this.getRectDirection(x1-x2,y1-y2,w,h);
+	let direction=this.getRectDirection(x1-x2,y1-y2,w,h);
 	if(direction==2)return this.getLineIntersection(x1,y1,x2,y2,x,y,x,y+h);
 	else if(direction==1)return this.getLineIntersection(x1,y1,x2,y2,x+w,y,x+w,y+h);
 	else if(direction==4)return this.getLineIntersection(x1,y1,x2,y2,x,y,x+w,y);

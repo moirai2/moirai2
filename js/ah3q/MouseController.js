@@ -18,7 +18,6 @@ function MouseController(id){
 	this.doubleTimer;//double click timer
 	if(document.readyState=="loading")$(document).ready(function(){self.initialize();});
 	else this.initialize();
-	if(typeof Utility!='undefined')this.utility=new Utility();
 }
 MouseController.prototype.initialize=function(){
 	var self=this;
@@ -93,7 +92,7 @@ MouseController.prototype.touchEndHandler=function(event){
 }
 MouseController.prototype.mouseDownHandler=function(event){
 	var self=this;
-	if((this.movableTarget=this.utility.searchClassRecursively(event.target,"movable"))!=null){}
+	if((this.movableTarget=this.searchClassRecursively(event.target,"movable"))!=null){}
 	else if(event.target!=this.dom){return;}//2018/04/02 Added to stop mouse propagation
 	this.downStartX=this.getPositionX(event,0);
 	this.downStartY=this.getPositionY(event,0);
@@ -206,3 +205,4 @@ MouseController.prototype.removeRegisteredDom=function(parent){
 	for(var i=0;i<tmp.length;i++)parent.removeChild(tmp[i]);
 	return tmp.length>0;
 }
+MouseController.prototype.searchClassRecursively=function(target,className){var tmp=target;while(tmp!=null){if($(tmp).hasClass(className))return tmp;else tmp=tmp.parentNode;}return null;}

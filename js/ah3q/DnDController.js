@@ -1,12 +1,12 @@
 function DnDController(id){
-	var self=this;
+	let self=this;
 	this.id=id;
 	if(typeof Utility!='undefined')this.utility=new Utility();
 	if(document.readyState=="loading")$(document).ready(function(){self.initialize();});
 	else this.initialize();
 }
 DnDController.prototype.initialize=function(){
-	var self=this;
+	let self=this;
 	this.dom=document.getElementById(this.id);
 	this.dom.addEventListener("dragenter",function(event){event.stopPropagation();event.preventDefault();},true);
 	this.dom.addEventListener("dragover",function(event){event.stopPropagation();event.preventDefault();},true);
@@ -22,16 +22,16 @@ DnDController.prototype.whenFileIsDroppedGetFilename=function(boolean){if(boolea
 DnDController.prototype.whenUrlIsDroppedGetFilename=function(boolean){if(boolean==null)boolean=true;this.getFilenameFromUrl=boolean;return this;}
 DnDController.prototype.addEventListener=function(type,listener,useCapture,wantsUntrusted){this.dom.addEventListener(type,listener,useCapture,wantsUntrusted);}
 DnDController.prototype.dropped=function(event){
-	var self=this;
-	var rectangle=this.dom.getBoundingClientRect();
-	var x=event.clientX-rectangle.left;
-	var y=event.clientY-rectangle.top;
-	var dataTransfer=event.dataTransfer;
-	var text=dataTransfer.getData("text");
+	let self=this;
+	let rectangle=this.dom.getBoundingClientRect();
+	let x=event.clientX-rectangle.left;
+	let y=event.clientY-rectangle.top;
+	let dataTransfer=event.dataTransfer;
+	let text=dataTransfer.getData("text");
 	if(text!==""){
 		if(!text.match(/\n/)&&text.startsWith("http://")||text.startsWith("https://")){
-			var url=text;
-			var filename=this.utility.filename(text);
+			let url=text;
+			let filename=this.utility.filename(text);
 			if(this.readFromUrl){
 				if(this.utility.isImageFile(text))this.utility.readImage(text,function(image){self.dom.dispatchEvent(new CustomEvent("imageWasRead",{detail:{x:x,y:y,image:image,url:url,filename:filename}}));});
 				else this.utility.readUrl(text,function(text){self.dom.dispatchEvent(new CustomEvent("textWasRead",{detail:{x:x,y:y,text:text,url:url,filename:filename}}));});
@@ -43,16 +43,16 @@ DnDController.prototype.dropped=function(event){
 				this.dom.dispatchEvent(new CustomEvent("urlWasDropped",{detail:{x:x,y:y,url:url}}));
 			}
 		}else if(this.acceptServerPath&&text.startsWith("/")){
-			var url=text;
-			var filename=this.utility.filename(text);
+			let url=text;
+			let filename=this.utility.filename(text);
 			this.utility.symlinkFile(text,function(path){self.dom.dispatchEvent(new CustomEvent("fileWasSaved",{detail:{x:x,y:y,url:url,path:path,filename:filename}}));});
 		}else{
 			this.dom.dispatchEvent(new CustomEvent("textWasDropped",{detail:{x:x,y:y,text:text}}));
 		}
 	}else{
-		for(var i=0;i<dataTransfer.files.length;i++){
-			var file=dataTransfer.files[i];
-			var filename=this.utility.filename(file.name);
+		for(let i=0;i<dataTransfer.files.length;i++){
+			let file=dataTransfer.files[i];
+			let filename=this.utility.filename(file.name);
 			if(this.readFromFile){
 				if(this.utility.isImageFile(file.name))this.utility.readImage(file,function(image){self.dom.dispatchEvent(new CustomEvent("imageWasRead",{detail:{x:x,y:y,image:image,filename:filename}}));});
 				else this.utility.readFile(file,function(text){self.dom.dispatchEvent(new CustomEvent("textWasRead",{detail:{x:x,y:y,text:text,filename:filename}}));});

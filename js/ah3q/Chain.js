@@ -2,34 +2,35 @@
 function Chain(){
 	this.job=0;
 	this.jobs=[];
-	this.rdf=new RDF();
+	this.rdf;
 	this.data=[];
 	this.tmp=[];
 	this.task=0;
-	for(var i=0;i<arguments.length;i++){
-		var arg=arguments[i];
+	if(typeof RDF!='undefined')this.rdf=new RDF();
+	if(typeof Utility!='undefined')this.utility=new Utility();
+	for(let i=0;i<arguments.length;i++){
+		let arg=arguments[i];
 		if(arg.constructor.name=="SQLiteRDFModel")this.sqliteRDFModel=arg;
 		else if(arg.constructor.name=="DnDController")this.dndController=arg;
-		else if(arg.constructor.name=="DesktopView")this.desktopView=arg;
+		else if(arg.constructor.name=="DrawView")this.drawView=arg;
 		else if(arg.constructor.name=="MouseController")this.mouseController=arg;
 		else if(arg.constructor.name=="FileList"){
 			if("files" in event.dataTransfer){
-				for(let i=0;i<event.dataTransfer.files.length;i++){
-					this.rdf.add("dataTransfer","file",event.dataTransfer.files[i]);
-					this.tmp.push(event.dataTransfer.files[i]);
-				}
+				this.file=[];
+				for(let i=0;i<event.dataTransfer.files.length;i++)this.file.push(event.dataTransfer.files[i]);
+				this.tmp=this.file;
 			}
 		}else if(arg.constructor.name=="CustomEvent"){
-			if("x" in arg.detail)this.rdf.add("CustomEvent","x",arg.detail.x);
-			if("y" in arg.detail)this.rdf.add("CustomEvent","y",arg.detail.y);
-			if("filename" in arg.detail)this.rdf.add("CustomEvent","filename",arg.detail.filename);
-			if("text" in arg.detail)this.rdf.add("CustomEvent","text",arg.detail.text);
-			if("filepath" in arg.detail)this.rdf.add("CustomEvent","filepath",arg.detail.path);
-			if("url" in arg.detail)this.rdf.add("CustomEvent","url",arg.detail.url);
-			if("file" in arg.detail)this.rdf.add("CustomEvent","file",arg.detail.file);
-			if("image" in arg.detail)this.rdf.add("CustomEvent","image",arg.detail.image);
+			if("x" in arg.detail)this.x=arg.detail.x;
+			if("y" in arg.detail)this.y=arg.detail.y;
+			if("filename" in arg.detail)this.filename=arg.detail.filename;
+			if("text" in arg.detail)this.text=arg.detail.text;
+			if("filepath" in arg.detail)this.path=arg.detail.path;
+			if("url" in arg.detail)this.url=arg.detail.url;
+			if("file" in arg.detail)this.file=arg.detail.file;
+			if("image" in arg.detail)this.image=arg.detail.image;
 			if(arg.type!=null){
-				this.rdf.add("CustomEvent","type",arg.type);
+				this.type=arg.type;
 				if(arg.type=="imageWasRead")this.tmp.push(arg.detail.image);
 				if(arg.type=="fileWasSaved")this.tmp.push(arg.detail.path);
 				if(arg.type=="fileNameWasDropped")this.tmp.push(arg.detail.filename);
@@ -45,43 +46,38 @@ function Chain(){
 //######################################## BASIC ########################################
 Chain.prototype.execute=function(func){
 	let self=this;
-	this.jobs.push(function(self,hash){
-		func(self);
-		self.next();
-	});
+	this.jobs.push(function(self,hash){func(self);self.next();});
 	return this;
 }
 Chain.prototype.log=function(){
 	let self=this;
-	this.jobs.push({once:true,keep:true,job:function(self){
-		console.log(self);
+	this.jobs.push({once:true,keep:true,job:function(self){console.log(self);self.start();}});
+	return this;
+}
+Chain.prototype.prompt=function(question,answer){
+	this.jobs.push({once:true,job:function(self){
+		let text=prompt(question,answer);
+		if(text==null||text=="")return;
+		self.tmp=[text];
 		self.start();
 	}});
 	return this;
 }
 Chain.prototype.reload=function(){
 	let self=this;
-	this.jobs.push({once:true,job:function(self){
-		location.reload();
-	}});
+	this.jobs.push({once:true,job:function(self){location.reload();}});
 	return this;
 }
 Chain.prototype.sleep=function(time){
 	if(time==null)time=500;
-	this.jobs.push({once:true,job:function(self){
-		setTimeout(function(){self.next();},time);
-	}});
+	this.jobs.push({once:true,job:function(self){setTimeout(function(){self.next();},time);}});
 	return this;
 }
 Chain.prototype.next=function(){
 	if(--this.task>0){return;}
 	this.tmp=[];
-	for(let i=0;i<this.data.length;i++){
-		if("output" in this.data[i]){
-			this.tmp.push(this.data[i]["output"]);
-		}
-	}
-	this.start();
+	for(let i=0;i<this.data.length;i++){if("output" in this.data[i])this.tmp.push(this.data[i]["output"]);}
+	if(this.tmp.length>0)this.start();
 }
 Chain.prototype.start=function(mode){
 	if(this.job<this.jobs.length){
@@ -90,14 +86,16 @@ Chain.prototype.start=function(mode){
 		let job=this.jobs[this.job++];
 		if((typeof job==='function')){}
 		else if((typeof job==='object')){hash=job;job=hash["job"];}
+		if("set" in hash&&hash["set"]!=null)this.tmp=[hash["set"]];
+		if("set" in mode&&hash["set"]!=null)this.tmp=[mode["set"]];
 		if(!("keep" in hash)&&!("keep" in mode)){
 			this.data=[];
 			for(let i=0;i<this.tmp.length;i++)this.data[i]={input:this.tmp[i]};
 		}
-		if("put" in hash)this.startPut(hash["put"]);
-		if("put" in mode)this.startPut(mode["put"]);
+		if("put" in hash&&hash["put"]!=null)this.startPut(hash["put"]);
+		if("put" in mode&&mode["put"]!=null)this.startPut(mode["put"]);
 		if(this.data.length==0){this.data.push({});}
-		var task=this.data.length;
+		let task=this.data.length;
 		this.task=task;
 		if("once" in hash){job(this,this.data[0]);}
 		else{for(let i=0;i<task;i++){job(this,this.data[i]);}}
@@ -107,10 +105,44 @@ Chain.prototype.start=function(mode){
 Chain.prototype.startPut=function(data){
 	let keys=Object.keys(data);
 	for(let i=0;i<keys.length;i++){
-		for(let j=0;j<this.data.length;j++){
-			this.data[j][keys[i]]=data[keys[i]];
-		}
+		for(let j=0;j<this.data.length;j++)this.data[j][keys[i]]=data[keys[i]];
 	}
+}
+Chain.prototype.attr=function(json){
+	let self=this;
+	this.jobs.push({job:function(self,hash){
+		let object=hash["input"];
+		let keys=Object.keys(json);
+		for(let i=0;i<keys.length;i++)$(object).attr(keys[i],json[keys[i]]);
+		hash["output"]=object;
+		self.next();
+	}});
+	return this;
+}
+//######################################## canvas ########################################
+Chain.prototype.addChild=function(){
+	let self=this;
+	if(this.drawView==null){alert("Please specify DrawView");return this;}
+	this.jobs.push({job:function(self,hash){self.drawView.addChild(hash["input"]);self.next();}});
+	return this;
+}
+Chain.prototype.createImageIcon=function(image){
+	let self=this;
+	if(this.drawView==null){alert("Please specify DrawView");return this;}
+	this.jobs.push({set:image,job:function(self,hash){hash["output"]=self.drawView.createImageIcon(hash["input"],self);self.next();}});
+	return this;
+}
+Chain.prototype.createTextIcon=function(text){
+	let self=this;
+	if(this.drawView==null){alert("Please specify DrawView");return this;}
+	this.jobs.push({set:text,job:function(self,hash){hash["output"]=self.drawView.createTextIcon(hash["input"],self);self.next();}});
+	return this;
+}
+Chain.prototype.createButtonIcon=function(){
+	let self=this;
+	if(this.drawView==null){alert("Please specify DrawView");return this;}
+	this.jobs.push(function(self,hash){hash["output"]=self.drawView.createButtonIcon(self);self.next();});
+	return this;
 }
 //######################################## data ########################################
 Chain.prototype.dataAdd=function(){
@@ -144,6 +176,7 @@ Chain.prototype.dataGet=function(){
 	this.jobs.push({once:true,function(self){
 		self.tmp=[];
 		for(let i=0;i<args.length;i++){
+
 		}
 		self.start({keep:true});
 	}});
@@ -210,53 +243,30 @@ Chain.prototype.hashToHTML=function(hash){
 }
 Chain.prototype.tmpToHTML=function(){
 	let self=this;
-	this.jobs.push({once:true,job:function(self){
-		self.tmp=[self.hashToHTML(self.tmp)];
-		self.start();
-	}});
+	this.jobs.push({once:true,job:function(self){self.tmp=[self.hashToHTML(self.tmp)];self.start();}});
 	return this;
 }
 Chain.prototype.dataToHTML=function(){
 	let self=this;
-	this.jobs.push(function(self,hash){
-		hash["output"]=self.hashToHTML(hash);
-		self.next();
-	});
+	this.jobs.push(function(self,hash){hash["output"]=self.hashToHTML(hash);self.next();});
 	return this;
 }
 Chain.prototype.rdfToHTML=function(){
 	let self=this;
-	this.jobs.push(function(self,hash){
-		hash["output"]=self.rdf.toHTML();
-		self.next();
-	});
+	this.jobs.push(function(self,hash){hash["output"]=self.rdf.toHTML();self.next();});
 	return this;
 }
 //######################################## read ########################################
 Chain.prototype.readFile=function(){
 	let self=this;
 	if(arguments.length>0)this.tmpSet.apply(this,arguments);
-	this.jobs.push(
-		function(self,hash){
-			let reader=new FileReader();
-			reader.onload=function(e){
-				hash["output"]=e.target.result;
-				self.next();
-			};
-			reader.fail=function(xhr,textStatus){console.log("failed",xhr,textStatus);};
-			reader.readAsText(hash["input"]);
-		});
+	this.jobs.push(function(self,hash){self.utility.readFile(hash["input"],function(text){hash["output"]=text;self.next();});});
 	return this;
 }
-Chain.prototype.readURL=function(){
+Chain.prototype.readImage=function(){
 	let self=this;
 	if(arguments.length>0)this.tmpSet.apply(this,arguments);
-	this.jobs.push(function(self,hash){
-		$.post("moirai2.php?command=proxy",{url:hash["input"]},function(data){
-			hash["output"]=data;
-			self.next();
-		});
-	});
+	this.jobs.push(function(self,hash){self.utility.readImage(hash["input"],function(image){hash["output"]=image;self.next();});});
 	return this;
 }
 //######################################## RDF ########################################
@@ -306,9 +316,7 @@ Chain.prototype.tmpSet=function(){
 	let args=arguments;
 	this.jobs.push({once:true,job:function(self){
 		self.tmp=[];
-		for(let i=0;i<args.length;i++){
-			self.tmp[i]=args[i];
-		}
+		for(let i=0;i<args.length;i++)self.tmp[i]=args[i];
 		self.start();
 	}});
 	return this;
@@ -317,9 +325,7 @@ Chain.prototype.tmpAdd=function(){
 	let self=this;
 	let args=arguments;
 	this.jobs.push({once:true,keep:true,job:function(self){
-		for(let i=0;i<args.length;i++){
-			self.tmp.push(args[i]);
-		}
+		for(let i=0;i<args.length;i++)self.tmp.push(args[i]);
 		self.start();
 	}});
 	return this;
