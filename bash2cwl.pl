@@ -18,13 +18,13 @@ foreach my $arg(@ARGV){
 	my @lines=();
 	if(-e $arg){
 		foreach my $line(readLines($arg)){
-			my $command=decode($line);
+			my $command=decoder($line);
 			my ($lines,$args)=encoder($command);
 			print_table($lines);
 			print_table($args);
 		}
 	}else{
-		my $command=decode($arg);
+		my $command=decoder($arg);
 		my ($lines,$args)=encoder($command);
 		my $cwlfile="$outdir/$basename.cwl";
 		my $ymlfile="$outdir/$basename.yml";
@@ -80,28 +80,65 @@ sub test{
 	tester2(encodeType("whale.txt"),"File");#41
 	tester2(encodeType("Hello World"),"string");#42
 	#https://www.commonwl.org/user_guide/02-1st-example/index.html
-	my $command=decode("echo 'Hello World!'");
+	my $command=decoder("echo 'Hello World!'");
 	my ($lines,$args)=encoder($command);
 	tester2($command,{"command"=>"echo","inputs"=>["Hello World!"]});#43
 	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","outputs: []"]);#44
 	tester2($args,{"input1"=>"Hello World!"});#45
 	#https://www.commonwl.org/user_guide/03-input/index.html
-	$command=decode("echo -f -i42 --example-string hello --file=whale.txt");
-	tester2($command,{"command"=>"echo","inputs"=>["-f","-i42","--example-string","hello","--file=whale.txt"]});
+	$command=decoder("echo -f -i42 --example-string hello --file=whale.txt");
+	tester2($command,{"command"=>"echo","inputs"=>["-f","-i42","--example-string","hello","--file=whale.txt"]});#46
 	($lines,$args)=encoder($command);
-	writeHash("hash.txt",$args);
-	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -f","  input2:","    type: int","    inputBinding:","      position: 2","      prefix: -i","      separate: false","  input3:","    type: string","    inputBinding:","      position: 3","      prefix: --example-string","  input4:","    type: File","    inputBinding:","      position: 4","      prefix: --file=","      separate: false","outputs: []"]);#46
-	tester2($args,{"input1"=>"true","input2"=>"42","input3"=>"hello","input4"=>{"class"=>"File","path"=>"whale.txt"}});#47
+	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -f","  input2:","    type: int","    inputBinding:","      position: 2","      prefix: -i","      separate: false","  input3:","    type: string","    inputBinding:","      position: 3","      prefix: --example-string","  input4:","    type: File","    inputBinding:","      position: 4","      prefix: --file=","      separate: false","outputs: []"]);#47
+	tester2($args,{"input1"=>"true","input2"=>"42","input3"=>"hello","input4"=>{"class"=>"File","path"=>"whale.txt"}});#48
 	#https://www.commonwl.org/user_guide/04-output/index.html
-	$command=decode("tar --extract --file hello.tar");
-	tester2($command,{"command"=>"tar","inputs"=>["--extract","--file","hello.tar"]});#48
-	$command->{"outputs"}=["hello.txt"];
+	$command=decoder("tar --extract --file hello.tar","hello.txt");
+	tester2($command,{"command"=>"tar","inputs"=>["--extract","--file","hello.tar"],"outputs"=>["hello.txt"]});#49
 	$command->{"command"}=[$command->{"command"},shift(@{$command->{"inputs"}})];
-	tester2($command,{"command"=>["tar","--extract"],"inputs"=>["--file","hello.tar"],"outputs"=>["hello.txt"]});#48
+	tester2($command,{"command"=>["tar","--extract"],"inputs"=>["--file","hello.tar"],"outputs"=>["hello.txt"]});#50
+	($lines,$args)=encoder($command,{"argstart"=>-1});
+	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: [tar, --extract]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","      prefix: --file","outputs:","  output1:","    type: File","    outputBinding:","      glob: hello.txt"]);#51
+	tester2($args,{"input1"=>{"class"=>"File","path"=>"hello.tar"}});#52
+	#https://www.commonwl.org/user_guide/05-stdout/index.html
+	$command=decoder("echo 'Hello World!' > output.txt");
+	tester2($command,{"command"=>"echo","inputs"=>["Hello World!"],"stdout"=>"output.txt"});#53
+	($lines,$args)=encoder($command);
+	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","outputs:","  output1:","    type: stdout","stdout: output.txt"]);#54
+	tester2($args,{"input1"=>"Hello World!"});#55
+	#https://www.commonwl.org/user_guide/06-params/index.html
+	$command=decoder("tar --extract --file hello.tar goodbye.txt","goodbye.txt");
+	tester2($command,{"command"=>"tar","inputs"=>["--extract","--file","hello.tar","goodbye.txt"],"outputs"=>["goodbye.txt"]});#56
+	$command->{"command"}=[$command->{"command"},shift(@{$command->{"inputs"}})];
+	($lines,$args)=encoder($command,{"argstart"=>2});
+	tester2(encodeType("hello.txt",{"hello.txt"=>1}),"string");#57
+	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: [tar, --extract]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","      prefix: --file","  input2:","    type: string","    inputBinding:","      position: 2","outputs:","  output1:","    type: File","    outputBinding:","      glob: \$(inputs.input2)"]);#58
+	tester2($args,{"input1"=>{"class"=>"File","path"=>"hello.tar"},"input2"=>"goodbye.txt"});#59
+	#https://www.commonwl.org/user_guide/07-containers/index.html
+	$command=decoder("node hello.js > output.txt");
+	tester2($command,{"command"=>"node","inputs"=>["hello.js"],"stdout"=>"output.txt"});#60
+	($lines,$args)=encoder($command,{"dockerPull"=>"node:slim"});
+	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","hints:","  DockerRequirement:","   dockerPull: node:slim","baseCommand: node","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","outputs:","  output1:","    type: stdout","stdout: output.txt"]);#61
+	tester2($args,{"input1"=>{"class"=>"File","path"=>"hello.js"}});#62
+	#https://www.commonwl.org/user_guide/08-arguments/index.html
+	$command=decoder("javac Hello.java","*.class");
+	tester2($command,{"command"=>"javac","inputs"=>["Hello.java"],"outputs"=>["*.class"]});#63
+	($lines,$args)=encoder($command,{"label"=>"Example trivial wrapper for Java 9 compiler","dockerPull"=>"openjdk:9.0.1-11-slim","arguments"=>["-d","\$(runtime.outdir)"]});
+	tester2($args,{"input1"=>{"class"=>"File","path"=>"Hello.java"}});#64
+	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","label: Example trivial wrapper for Java 9 compiler","hints:","  DockerRequirement:","   dockerPull: openjdk:9.0.1-11-slim","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","outputs:","  output1:","    type: File","    outputBinding:","      glob: \"*.class\""]);#65
+	#https://www.commonwl.org/user_guide/09-array-inputs/index.html
+	tester2(encodeTypeArray(["one","two","three"]),"string[]");#66
+	tester2(encodeTypeArray([1,2,3]),"int[]");#67
+	tester2(encodeTypeArray([1.1,2.2,3.3]),"double[]");#68
+	tester2(encodeTypeArray(["one.txt","two.txt","three.txt"]),"File[]");#69
+	tester2(encodeTypeArray(["one",2,3]),"string[]");#70
+	tester2(encodeTypeArray([1.1,2,3]),"double[]");#71
+	$command=decoder("echo -A=one,two,three>out/output.txt");
+	push(@{$command->{"inputs"}},["four","five","six"]);
+	tester2($command,{"command"=>"echo","inputs"=>["-A=one,two,three",["four","five","six"]],"stdout"=>"out/output.txt"});#72
 	($lines,$args)=encoder($command);
 	#print_table($command);
-	print_table($lines);
-	print_table($args);
+	writeArray("out/bash.cwl",$lines);
+	writeHash("out/bash.yml",$args);
 }
 ############################## readLines ##############################
 sub readLines{
@@ -141,37 +178,87 @@ sub writeHash{
 }
 ############################## encoder ##############################
 sub encoder{
-	my $hash=shift();
-	my $command=$hash->{"command"};
+	my $command=shift();
+	my $param=shift();
+	if(!defined($param)){$param={};}
+	my $base=$command->{"command"};
 	my @lines=();
 	push(@lines,"cwlVersion: v1.0");
 	push(@lines,"class: CommandLineTool");
-	if(ref($command)eq"ARRAY"){push(@lines,"baseCommand: [".join(", ",@{$command})."]");}
-	else{push(@lines,"baseCommand: $command");}
+	if(exists($param->{"label"})){
+		push(@lines,"label: ".$param->{"label"});
+	}
+	if(exists($param->{"dockerPull"})){
+		push(@lines,"hints:");
+		push(@lines,"  DockerRequirement:");
+		push(@lines,"   dockerPull: ".$param->{"dockerPull"});
+	}
+	if(ref($base)eq"ARRAY"){push(@lines,"baseCommand: [".join(", ",@{$base})."]");}
+	else{push(@lines,"baseCommand: $base");}
+	if(exists($param->{"arguments"})){
+		my $line="arguments: [";
+		my $index=0;
+		foreach my $argument(@{$param->{"arguments"}}){
+			if($index>0){$line.=",";}
+			if($argument=~/^\$\(\S+\)$/){$line.=$argument;}
+			else{$line.="\"$argument\"";}
+			$index++;
+		}
+		$line.="]";
+		push(@lines,$line);
+	}
 	push(@lines,"inputs:");
-	my ($inputs,$args)=encodeInput($hash);
+	my ($inputs,$args)=encodeInput($command,$param);
 	push(@lines,@{$inputs});
-	push(@lines,encodeOutput($hash));
+	push(@lines,encodeOutput($command,$args));
+	if(exists($command->{"stdout"})){push(@lines,"stdout: ".$command->{"stdout"});}
 	return (\@lines,$args);
 }
 sub encodeOutput{
 	my $command=shift();
+	my $args=shift();
 	my @lines=();
-	if(exists($command->{"stdout"})){
-		push(@lines,"outputs:");
-		push(@lines,"  output1:");
-		push(@lines,"  type: File");
-		push(@lines,"  outputBinding:");
-		push(@lines,"    glob: ".$command->{"stdout"});
-	}else{
-		push(@lines,"outputs: []");
+	my $index=1;
+	my $inouts={};
+	if(exists($command->{"outputs"})){
+		my $hash={};
+		while(my ($k,$v)=each(%{$args})){
+			if(ref($v)eq"HASH"){}
+			elsif(ref($v)eq"ARRAY"){}
+			else{$hash->{$v}="\$(inputs.$k)";}
+		}
+		foreach my $output(@{$command->{"outputs"}}){
+			if(exists($hash->{$output})){$inouts->{$output}=$hash->{$output}}
+		}
 	}
+	if(exists($command->{"stdout"})){
+		if($index==1){push(@lines,"outputs:");}
+		push(@lines,"  output$index:");
+		push(@lines,"    type: stdout");
+		$index++;
+	}
+	if(exists($command->{"outputs"})){
+		if($index==1){push(@lines,"outputs:");}
+		foreach my $output(@{$command->{"outputs"}}){
+			if(exists($inouts->{$output})){$output=$inouts->{$output};}
+			elsif($output=~/\*/){$output="\"$output\"";}
+			push(@lines,"  output$index:");
+			push(@lines,"    type: File");
+			push(@lines,"    outputBinding:");
+			push(@lines,"      glob: $output");
+			$index++;
+		}
+	}
+	if(scalar(@lines)==0){push(@lines,"outputs: []");}
 	return @lines;
 }
 #https://www.commonwl.org/user_guide/03-input/
 sub encodeInput{
 	my $command=shift();
+	my $param=shift();
 	my @inputs=@{$command->{"inputs"}};
+	my $outputs={};
+	if(exists($command->{"outputs"})){foreach my $output(@{$command->{"outputs"}}){$outputs->{$output}=1;}}
 	#0=argument
 	#1=option boolean flag -f
 	#2=option flag --example-string
@@ -180,22 +267,26 @@ sub encodeInput{
 	#5=option with '-' with arguments (no separation) -i42
 	my @options=();
 	for(my $i=0;$i<scalar(@inputs);$i++){
-		if($inputs[$i]=~/^\-\-/){
-			if($inputs[$i]=~/\=/){$options[$i]=4;}
-			else{$options[$i]=1;}
-		}elsif($inputs[$i]=~/^\-\w\w+/){$options[$i]=5;}
+		if($inputs[$i]=~/\=/){$options[$i]=4;}
+		elsif($inputs[$i]=~/^\-\-/){$options[$i]=1;}
+		elsif($inputs[$i]=~/^\-\w\w+/){$options[$i]=5;}
 		elsif($inputs[$i]=~/^\-\w/){$options[$i]=1;}
 		else{$options[$i]=0;}
 	}
-	my $argstart=scalar(@inputs)-1;
-	for(my $i=$argstart;$i>=0;$i--){if($options[$i]==0){$argstart=$i;}else{last;}}
+	my $argstart=scalar(@inputs);
+	if(exists($param->{"argstart"})){
+		if($param->{"argstart"}<0){}
+		else{$argstart=$param->{"argstart"};}
+	}else{
+		for(my $i=$argstart;$i>=0;$i--){if($options[$i]==0){$argstart=$i;}else{last;}}
+	}
 	for(my $i=0;$i<scalar(@inputs)&&$i<$argstart-1;$i++){if($options[$i]==1&&$options[$i+1]==0){$options[$i]=2;$options[$i+1]=3;}}
 	my $position=1;
 	my @lines=();
 	my $args={};
 	for(my $i=0;$i<scalar(@inputs);$i++,$position++){
 		if($options[$i]==0){
-			my $type=encodeType($inputs[$i]);
+			my $type=encodeType($inputs[$i],$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
 			push(@lines,"    inputBinding:");
@@ -210,7 +301,7 @@ sub encodeInput{
 			push(@lines,"      prefix: ".$inputs[$i]);
 			$args->{"input$position"}=encodeValue($type,"true");
 		}elsif($options[$i]==2&&$options[$i+1]==3){
-			my $type=encodeType($inputs[$i+1]);
+			my $type=encodeType($inputs[$i+1],$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
 			push(@lines,"    inputBinding:");
@@ -219,8 +310,8 @@ sub encodeInput{
 			$args->{"input$position"}=encodeValue($type,$inputs[$i+1]);
 			$i++;
 		}elsif($options[$i]==4){
-			my ($argument,$value)=split(/\=/,$inputs[$i]);
-			my $type=encodeType($value);
+			my ($argument,$value)=split(/\=/,$inputs[$i],2);
+			my $type=encodeType($value,$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
 			push(@lines,"    inputBinding:");
@@ -233,7 +324,7 @@ sub encodeInput{
 			my $value;
 			if($inputs[$i]=~/^(\-\w)(\w+)$/){$argument=$1;$value=$2;}
 			split(/\-(\w)/,);
-			my $type=encodeType($value);
+			my $type=encodeType($value,$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
 			push(@lines,"    inputBinding:");
@@ -248,31 +339,67 @@ sub encodeInput{
 # string, int, long, float, double, and null, array, record, File, Directory
 sub encodeType{
 	my $argument=shift();
+	my $outputs=shift();
+	if(ref($argument)eq"ARRAY"){
+		encodeTypeArray($argument,$outputs);
+	}elsif($argument=~/,/){
+		my @temp=split(/,/,$argument);
+		encodeTypeArray(\@temp,$outputs);
+	}else{
+		return encodeTypeSub($argument,$outputs);
+	}
+}
+sub encodeTypeArray{
+	my $arguments=shift();
+	my $outputs=shift();
+	my $types={};
+	foreach my $arg(@{$arguments}){$types->{encodeTypeSub($arg,$outputs)}++;}
+	my @diffs=keys(%{$types});
+	if(scalar(@diffs)==1){return $diffs[0]."[]";}
+	elsif(exists($types->{"string"})){return "string[]";}
+	elsif(exists($types->{"double"})){return "double[]";}
+	else{return "string[]";}
+}
+sub encodeTypeSub{
+	my $argument=shift();
+	my $outputs=shift();
 	#https://docstore.mik.ua/orelly/perl4/cook/ch02_02.htm
 	if($argument=~/^[+-]?\d+$/){return "int";}
 	if($argument=~/^([+-]?)(?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?$/){return "double";}
-	if($argument=~/[\w_]+\.\w+/){return "File";}
+	if($argument=~/[\w_]+\.\w+/){
+		if(exists($outputs->{$argument})){return "string";}
+		else{return "File";}
+	}
 	return "string";
 }
 sub encodeValue{
 	my $type=shift();
 	my $value=shift();
 	if($type eq "File"){return {"class"=>"File","path"=>$value};}
-	else{return "$value";}
+	else{return $value;}
 }
 ############################## decoder ##############################
 #https://devhints.io/bash
-sub decode{
+sub decoder{
 	my $string=shift();
-	my @codes=();
+	my $outputs=shift();
+	my @commands=();
   my $value;
 	my $index=0;
 	my @chars=split(//,$string);
 	while($index<scalar(@chars)){
 		($value,$index)=decodeCommand(\@chars,$index);
-		push(@codes,$value);
+		push(@commands,$value);
 	}
-	return wantarray?@codes:$codes[0];
+	if(defined($outputs)){
+		my $command=$commands[scalar(@commands)-1];
+		if(ref($outputs)eq"ARRAY"){
+			foreach my $output(@{$outputs}){push(@{$command->{"outputs"}},$output);}
+		}else{
+			push(@{$command->{"outputs"}},$outputs);
+		}
+	}
+	return wantarray?@commands:$commands[0];
 }
 sub decodeCommand{
 	my $chars=shift();
@@ -280,23 +407,23 @@ sub decodeCommand{
   my $value;
 	($value,$index)=decodeCommandName($chars,$index);
   if($chars->[$index]eq"="){
-    my $hash={"command"=>"_assign_","name"=>$value};
+    my $command={"command"=>"_assign_","name"=>$value};
     ($value,$index)=decodeCommandToken($chars,$index+1);
-    $hash->{"value"}=$value;
-    return ($hash,$index);
+    $command->{"value"}=$value;
+    return ($command,$index);
   }
-  my $hash={"command"=>$value};
+  my $command={"command"=>$value};
   if($chars->[$index]eq" "){
     ($value,$index)=decodeCommandTokens($chars,$index+1);
-    if(scalar(@{$value})>0){$hash->{"inputs"}=$value;}
+    if(scalar(@{$value})>0){$command->{"inputs"}=$value;}
   }
   $index=decodeSpace($chars,$index);
   if($chars->[$index]eq">"){
     $index=decodeSpace($chars,$index+1);
     ($value,$index)=decodeCommandToken($chars,$index);
-		$hash->{"stdout"}=$value;
+		$command->{"stdout"}=$value;
   }
-  return ($hash,$index);
+  return ($command,$index);
 }
 sub decodeSpace{
   my $chars=shift();
