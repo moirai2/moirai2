@@ -132,9 +132,9 @@ sub test{
 	tester2(encodeTypeArray(["one.txt","two.txt","three.txt"]),"File[]");#69
 	tester2(encodeTypeArray(["one",2,3]),"string[]");#70
 	tester2(encodeTypeArray([1.1,2,3]),"double[]");#71
-	$command=decoder("echo -A=one,two,three>out/output.txt");
-	push(@{$command->{"inputs"}},["four","five","six"]);
-	tester2($command,{"command"=>"echo","inputs"=>["-A=one,two,three",["four","five","six"]],"stdout"=>"out/output.txt"});#72
+	$command=decoder("echo -A=one,two,three -B four,five,six>out/output.txt");
+	push(@{$command->{"inputs"}},["seven","eight","nine"]);
+	tester2($command,{"command"=>"echo","inputs"=>["-A=one,two,three","-B","four,five,six",["seven","eight","nine"]],"stdout"=>"out/output.txt"});#72
 	($lines,$args)=encoder($command);
 	#print_table($command);
 	writeArray("out/bash.cwl",$lines);
@@ -286,11 +286,13 @@ sub encodeInput{
 	my $args={};
 	for(my $i=0;$i<scalar(@inputs);$i++,$position++){
 		if($options[$i]==0){
+			my $itemSeparator=($inputs[$i]=~/,/)?",":undef;
 			my $type=encodeType($inputs[$i],$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
 			push(@lines,"    inputBinding:");
 			push(@lines,"      position: $position");
+			if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
 			$args->{"input$position"}=encodeValue($type,$inputs[$i]);
 		}elsif($options[$i]==1){
 			my $type="boolean";
@@ -301,16 +303,19 @@ sub encodeInput{
 			push(@lines,"      prefix: ".$inputs[$i]);
 			$args->{"input$position"}=encodeValue($type,"true");
 		}elsif($options[$i]==2&&$options[$i+1]==3){
+			my $itemSeparator=($inputs[$i+1]=~/,/)?",":undef;
 			my $type=encodeType($inputs[$i+1],$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
 			push(@lines,"    inputBinding:");
 			push(@lines,"      position: $position");
 			push(@lines,"      prefix: ".$inputs[$i]);
+			if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
 			$args->{"input$position"}=encodeValue($type,$inputs[$i+1]);
 			$i++;
 		}elsif($options[$i]==4){
 			my ($argument,$value)=split(/\=/,$inputs[$i],2);
+			my $itemSeparator=($value=~/,/)?",":undef;
 			my $type=encodeType($value,$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
@@ -318,12 +323,14 @@ sub encodeInput{
 			push(@lines,"      position: $position");
 			push(@lines,"      prefix: $argument=");
 			push(@lines,"      separate: false");
+			if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
 			$args->{"input$position"}=encodeValue($type,$value);
 		}elsif($options[$i]==5){
 			my $argument;
 			my $value;
 			if($inputs[$i]=~/^(\-\w)(\w+)$/){$argument=$1;$value=$2;}
 			split(/\-(\w)/,);
+			my $itemSeparator=($value=~/,/)?",":undef;
 			my $type=encodeType($value,$outputs);
 			push(@lines,"  input$position:");
 			push(@lines,"    type: $type");
@@ -331,6 +338,7 @@ sub encodeInput{
 			push(@lines,"      position: $position");
 			push(@lines,"      prefix: $argument");
 			push(@lines,"      separate: false");
+			if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
 			$args->{"input$position"}=encodeValue($type,$value);
 		}
 	}
@@ -341,10 +349,10 @@ sub encodeType{
 	my $argument=shift();
 	my $outputs=shift();
 	if(ref($argument)eq"ARRAY"){
-		encodeTypeArray($argument,$outputs);
+		return encodeTypeArray($argument,$outputs);
 	}elsif($argument=~/,/){
 		my @temp=split(/,/,$argument);
-		encodeTypeArray(\@temp,$outputs);
+		return encodeTypeArray(\@temp,$outputs);
 	}else{
 		return encodeTypeSub($argument,$outputs);
 	}
@@ -376,7 +384,10 @@ sub encodeValue{
 	my $type=shift();
 	my $value=shift();
 	if($type eq "File"){return {"class"=>"File","path"=>$value};}
-	else{return $value;}
+	elsif($type =~ /\[\]/){
+		if(ref($value)eq"ARRAY"){return "[".join(",",@{$value})."]";}
+		else{return "[$value]";}
+	}else{return $value;}
 }
 ############################## decoder ##############################
 #https://devhints.io/bash
