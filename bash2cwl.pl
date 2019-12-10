@@ -68,7 +68,8 @@ sub test{
   tester(\&decodeCommand,"\"l\"\"s\" '-''l'",0,[{"command"=>"ls","inputs"=>["-l"]},13]);#29
   tester(\&decodeCommand,"ls -l -t",0,[{"command"=>"ls","inputs"=>["-l","-t"]},8]);#30
   tester(\&decodeCommand,"ls -l -t ",0,[{"command"=>"ls","inputs"=>["-l","-t"]},9]);#31
-  tester(\&decodeCommand,"ls -l -t|",0,[{"command"=>"ls","inputs"=>["-l","-t"]},8]);#32
+  tester(\&decodeCommand,"ls -l -t|",0,[{"command"=>"ls","inputs"=>["-l","-t"],
+	"stdout"=>"\|"},9]);#32
   tester(\&decodeCommand,"ls -l -t>output.txt",0,[{"command"=>"ls","inputs"=>["-l","-t"],"stdout"=>"output.txt"},19]);#33
   tester(\&decodeCommand,"ls  -l  -t>output.txt",0,[{"command"=>"ls","inputs"=>["-l","-t"],"stdout"=>"output.txt"},21]);#34
   tester(\&decodeCommand,"ls -l -t > output.txt",0,[{"command"=>"ls","inputs"=>["-l","-t"],"stdout"=>"output.txt"},21]);#35
@@ -136,9 +137,26 @@ sub test{
 	push(@{$command->{"inputs"}},["seven","eight","nine"]);
 	tester2($command,{"command"=>"echo","inputs"=>["-A=one,two,three","-B","four,five,six",["seven","eight","nine"]],"stdout"=>"out/output.txt"});#72
 	($lines,$args)=encoder($command);
-	#print_table($command);
-	writeArray("out/bash.cwl",$lines);
-	writeHash("out/bash.yml",$args);
+	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string[]","    inputBinding:","      position: 1","      prefix: -A=","      separate: false","      itemSeparator: \",\"","  input2:","    type: boolean","    inputBinding:","      position: 2","      prefix: -B","  input3:","    type: string[]","    inputBinding:","      position: 3","      itemSeparator: \",\"","  input4:","    type: string[]","    inputBinding:","      position: 4","outputs:","  output1:","    type: stdout","stdout: out/output.txt"]);#73
+	tester2($args,{"input1"=>"[one,two,three]","input2"=>"true","input3"=>"[four,five,six]","input4"=>"[seven,eight,nine]"});#74
+	#https://github.com/pitagora-galaxy/cwl/wiki/CWL-Start-Guide-JP
+	my @commands=decoder("grep one < mock.txt | wc -l > wcount.txt");
+	tester2(\@commands,[{"command"=>"grep","inputs"=>["one"],"stdin"=>"mock.txt","stdout"=>"_pipe_0.txt"},{"command"=>"wc","inputs"=>["-l"],"stdin"=>"_pipe_0.txt","stdout"=>"wcount.txt"}]);#75
+	my $results=encoders(@commands);
+	print_table($results);
+}
+############################## encoders ##############################
+sub encoders{
+	my @commands=@_;
+	my $stepindex=1;
+	my $results={};
+	foreach my $command(@commands){
+		my ($lines,$args)=encoder($command);
+		my $cwlfile="step$stepindex.cwl";
+		$results->{$cwlfile}=$lines;
+		$stepindex++;
+	}
+	return $results;
 }
 ############################## readLines ##############################
 sub readLines{
@@ -211,7 +229,8 @@ sub encoder{
 	my ($inputs,$args)=encodeInput($command,$param);
 	push(@lines,@{$inputs});
 	push(@lines,encodeOutput($command,$args));
-	if(exists($command->{"stdout"})){push(@lines,"stdout: ".$command->{"stdout"});}
+	if(exists($command->{"stdin"})){push(@lines,"streamable: true");}
+	if(exists($command->{"stdout"})&&$command->{"stdout"}ne"\|"){push(@lines,"stdout: ".$command->{"stdout"});}
 	return (\@lines,$args);
 }
 sub encodeOutput{
@@ -398,8 +417,16 @@ sub decoder{
   my $value;
 	my $index=0;
 	my @chars=split(//,$string);
+	my $piped=undef;
 	while($index<scalar(@chars)){
 		($value,$index)=decodeCommand(\@chars,$index);
+		if(defined($piped)){$value->{"stdin"}=$piped;}
+		if(exists($value->{"stdout"})&&$value->{"stdout"}eq"\|"){
+			$piped="_pipe_".scalar(@commands).".txt";
+			$value->{"stdout"}=$piped;
+		}else{
+			$piped=undef;
+		}
 		push(@commands,$value);
 	}
 	if(defined($outputs)){
@@ -433,7 +460,19 @@ sub decodeCommand{
     $index=decodeSpace($chars,$index+1);
     ($value,$index)=decodeCommandToken($chars,$index);
 		$command->{"stdout"}=$value;
+		$index=decodeSpace($chars,$index);
   }
+	if($chars->[$index]eq"<"){
+    $index=decodeSpace($chars,$index+1);
+    ($value,$index)=decodeCommandToken($chars,$index);
+		$command->{"stdin"}=$value;
+		$index=decodeSpace($chars,$index);
+	}
+  $index=decodeSpace($chars,$index);
+	if($chars->[$index]eq"\|"){
+		$command->{"stdout"}="\|";
+		$index=decodeSpace($chars,$index+1);
+	}
   return ($command,$index);
 }
 sub decodeSpace{
@@ -453,7 +492,8 @@ sub decodeCommandToken{
 	while($index<scalar(@{$chars})){
     if($chars->[$index]eq" "){last;}
     elsif($chars->[$index]eq"|"){last;}
-    elsif($chars->[$index]eq">"){last;}
+		elsif($chars->[$index]eq"<"){last;}
+		elsif($chars->[$index]eq">"){last;}
 		elsif($chars->[$index] eq "\$"){
       ($value,$index)=decodeVariable($chars,$index);
       $token.=$value;
@@ -478,7 +518,8 @@ sub decodeCommandTokens{
   while($index<scalar(@{$chars})){
     if($chars->[$index]eq" "){$index++;next;}
     elsif($chars->[$index]eq"|"){last;}
-    elsif($chars->[$index]eq">"){last;}
+		elsif($chars->[$index]eq"<"){last;}
+		elsif($chars->[$index]eq">"){last;}
     ($value,$index)=decodeCommandToken($chars,$index);
     if(scalar($value)){push(@tokens,$value);}
   }
