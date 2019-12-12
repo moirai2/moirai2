@@ -28,7 +28,7 @@ foreach my $arg(@ARGV){
 		my ($lines,$args)=encoder($command);
 		my $cwlfile="$outdir/$basename.cwl";
 		my $ymlfile="$outdir/$basename.yml";
-		writeCml($cwlfile,$lines);
+		writeCwl($cwlfile,$lines);
 		writeYml($ymlfile,$args);
 		my $command="cwltool $cwlfile $ymlfile";
 		print STDERR ">$command\n";
@@ -143,7 +143,6 @@ sub test{
 	tester2($inputs,{"input1"=>{"type"=>"string[]","value"=>"[one,two,three]"},"input2"=>{"type"=>"boolean","value"=>"true"},"input3"=>{"type"=>"string[]","value"=>"[four,five,six]"},"input4"=>{"type"=>"string[]","value"=>"[seven,eight,nine]"}});#74
 	#https://www.commonwl.org/user_guide/10-array-outputs/index.html
 
-
 	#https://github.com/pitagora-galaxy/cwl/wiki/CWL-Start-Guide-JP
 	my @commands=decoder("grep one < mock.txt | wc -l > wcount.txt");
 	tester2(\@commands,[{"command"=>"grep","inputs"=>["one"],"stdin"=>"mock.txt","stdout"=>"_pipe1_stdout.txt"},{"command"=>"wc","inputs"=>["-l"],"stdin"=>"_pipe1_stdout.txt","stdout"=>"wcount.txt"}]);#75
@@ -153,11 +152,33 @@ sub test{
 	($lines,$inputs)=encoder($commands[1]);
 	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#78
 	tester2($inputs,{"input1"=>{"type"=>"boolean","value"=>"true"},"input2"=>{"type"=>"File","value"=>"_pipe1_stdout.txt"}});#79
-	writeYml("out/bash.yml",$inputs);
-	writeCwl("out/bash.cwl",$lines);
-	($lines,$inputs)=workflow(@commands);
-	print_table($lines);
-	print_table($inputs);
+	my $files=workflow(@commands);
+	writeWorkflow($files,"workflow","bash");
+	tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: _pipe1_stdout.txt",]);#80
+	tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#81
+	tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#82
+	tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#83
+}
+############################## writeWorkflow ##############################
+sub writeWorkflow{
+	my $files=shift();
+	my $directory=shift();
+	my $basename=shift();
+	my $cwlFile;
+	my $ymlFile;
+	mkdir($directory);
+	mkdir("$directory/cwl");
+	while(my($filename,$data)=each(%{$files})){
+		if($filename eq "workflow.cwl"){
+			$cwlFile="$directory/$basename.cwl";
+			writeCwl($cwlFile,$data);
+		}elsif($filename eq "workflow.yml"){
+			$ymlFile="$directory/$basename.yml";
+			writeYml($ymlFile,$data);
+		}else{
+			writeCwl("$directory/$filename",$data);
+		}
+	}
 }
 ############################## workflow ##############################
 sub workflow{
@@ -176,11 +197,12 @@ sub workflow{
 	my @outputLines=();
 	my $args={};
 	my $outins={};
+	my $files={};
 	foreach my $command(@commands){
 		my $basename="step$stepindex";
-		my $cwlfile="$basename.cwl";
 		push(@steps,$basename);
 		my ($lines,$ins,$outs)=encoder($command);
+		$files->{"cwl/$basename.cwl"}=$lines;
 		while(my($name,$hash)=each(%{$outs})){
 			my $value=$hash->{"value"};
 			if($value!~/^_/){next;}
@@ -231,7 +253,7 @@ sub workflow{
 	my $stepIndex=1;
 	foreach my $step(@steps){
 		push(@lines,"  step$stepIndex:");
-		push(@lines,"    run: $step.cwl");
+		push(@lines,"    run: cwl/$step.cwl");
 		push(@lines,"    in:");
 		my @keys=sort{$a cmp $b}keys(%{$inputs->{$step}});
 		foreach my $key(@keys){
@@ -242,7 +264,9 @@ sub workflow{
 		push(@lines,"    out: [".join(", ",@keys)."]");
 		$stepIndex++;
 	}
-	return (\@lines,$args);
+	$files->{"workflow.cwl"}=\@lines;
+	$files->{"workflow.yml"}=$args;
+	return $files;
 }
 ############################## readLines ##############################
 sub readLines{
@@ -329,6 +353,7 @@ sub encoder{
 	if(exists($command->{"stdout"})){push(@lines,"stdout: ".$command->{"stdout"});}
 	return (\@lines,$inputs,$outputs);
 }
+############################## encodeOutput ##############################
 sub encodeOutput{
 	my $command=shift();
 	my $args=shift();
@@ -381,6 +406,7 @@ sub encodeOutput{
 	if(scalar(@lines)==0){push(@lines,"outputs: []");}
 	return (\@lines,$outputs);
 }
+############################## encodeInput ##############################
 #https://www.commonwl.org/user_guide/03-input/
 sub encodeInput{
 	my $command=shift();
@@ -481,6 +507,7 @@ sub encodeInput{
 	}
 	return (\@lines,$args);
 }
+############################## encodeType ##############################
 # string, int, long, float, double, and null, array, record, File, Directory
 sub encodeType{
 	my $argument=shift();
