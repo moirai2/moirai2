@@ -14,27 +14,10 @@ if(defined($opt_o)){@inputs=split(/,/,$opt_o);}
 my $outdir=defined($opt_d)?$opt_d:"out";
 my $basename=defined($opt_b)?$opt_b:"bash";
 mkdir($outdir);
-foreach my $arg(@ARGV){
-	my @lines=();
-	if(-e $arg){
-		foreach my $line(readLines($arg)){
-			my $command=decoder($line);
-			my ($lines,$args)=encoder($command);
-			print_table($lines);
-			print_table($args);
-		}
-	}else{
-		my $command=decoder($arg);
-		my ($lines,$args)=encoder($command);
-		my $cwlfile="$outdir/$basename.cwl";
-		my $ymlfile="$outdir/$basename.yml";
-		writeCwl($cwlfile,$lines);
-		writeYml($ymlfile,$args);
-		my $command="cwltool $cwlfile $ymlfile";
-		print STDERR ">$command\n";
-		if(defined($opt_r)){system($command);}
-	}
-}
+my @lines=(scalar(@ARGV)==1&&$ARGV[0]=~/\.(ba)?sh$/)?readLines($ARGV[0]):@ARGV;
+my @commands=decoder(@lines);
+my ($inputs,$outputs)=promptInputOutput(@commands);
+print_table($inputs,$outputs);
 ############################## test ##############################
 sub test{
   tester(\&decodeParenthesis,"hello",0,[undef,0]);#1
@@ -141,8 +124,6 @@ sub test{
 	($lines,$inputs)=encoder($command);
 	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string[]","    inputBinding:","      position: 1","      prefix: -A=","      separate: false","      itemSeparator: \",\"","  input2:","    type: boolean","    inputBinding:","      position: 2","      prefix: -B","  input3:","    type: string[]","    inputBinding:","      position: 3","      itemSeparator: \",\"","  input4:","    type: string[]","    inputBinding:","      position: 4","outputs:","  output1:","    type: stdout","stdout: out/output.txt"]);#73
 	tester2($inputs,{"input1"=>{"type"=>"string[]","value"=>"[one,two,three]"},"input2"=>{"type"=>"boolean","value"=>"true"},"input3"=>{"type"=>"string[]","value"=>"[four,five,six]"},"input4"=>{"type"=>"string[]","value"=>"[seven,eight,nine]"}});#74
-	#https://www.commonwl.org/user_guide/10-array-outputs/index.html
-
 	#https://github.com/pitagora-galaxy/cwl/wiki/CWL-Start-Guide-JP
 	my @commands=decoder("grep one < mock.txt | wc -l > wcount.txt");
 	tester2(\@commands,[{"command"=>"grep","inputs"=>["one"],"stdin"=>"mock.txt","stdout"=>"_pipe1_stdout.txt"},{"command"=>"wc","inputs"=>["-l"],"stdin"=>"_pipe1_stdout.txt","stdout"=>"wcount.txt"}]);#75
@@ -152,37 +133,42 @@ sub test{
 	($lines,$inputs)=encoder($commands[1]);
 	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#78
 	tester2($inputs,{"input1"=>{"type"=>"boolean","value"=>"true"},"input2"=>{"type"=>"File","value"=>"_pipe1_stdout.txt"}});#79
-	my $files=workflow(@commands);
+	my $files=workflow(\@commands);
 	writeWorkflow($files,"workflow","bash");
 	tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: _pipe1_stdout.txt",]);#80
 	tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#81
 	tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#82
 	tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#83
+	# Connecting two command lines
+	@commands=decoder("  grep  one  <  mock.txt  >  tmp.txt  ","   wc   -l   tmp.txt>wcount.txt   ");
+	tester2(\@commands,[{"command"=>"grep","inputs"=>["one"],"stdin"=>"mock.txt","stdout"=>"tmp.txt"},{"command"=>"wc","inputs"=>["-l","tmp.txt"],"stdout"=>"wcount.txt"}]);#84
+	my $files=workflow(\@commands,"mock.txt","wcount.txt");
 }
-############################## writeWorkflow ##############################
-sub writeWorkflow{
-	my $files=shift();
-	my $directory=shift();
-	my $basename=shift();
-	my $cwlFile;
-	my $ymlFile;
-	mkdir($directory);
-	mkdir("$directory/cwl");
-	while(my($filename,$data)=each(%{$files})){
-		if($filename eq "workflow.cwl"){
-			$cwlFile="$directory/$basename.cwl";
-			writeCwl($cwlFile,$data);
-		}elsif($filename eq "workflow.yml"){
-			$ymlFile="$directory/$basename.yml";
-			writeYml($ymlFile,$data);
-		}else{
-			writeCwl("$directory/$filename",$data);
+############################## promptInputOutput ##############################
+sub promptInputOutput{
+	my @commands=@_;
+	my $files={};
+	my $inputs={};
+	my $outputs={};
+	foreach my $command(@commands){
+		if(exists($command->{"stdin"})){$inputs->{$command->{"stdin"}}=1;}
+		if(exists($command->{"stdout"})){$outputs->{$command->{"stdout"}}=1;}
+	}
+	foreach my $command(@commands){
+		foreach my $file(@{$command->{"inputs"}}){
+			if($file!~/\./){next;}
+			if($file=~/ /){next;}
+			if(exists($outputs->{$file})){next;}
+			$files->{$file}=1;
 		}
 	}
+	my @ins=sort{$a cmp $b}keys(%{$inputs});
+	my @outs=sort{$a cmp $b}keys(%{$outputs});
+	return (\@ins,\@outs);
 }
 ############################## workflow ##############################
 sub workflow{
-	my @commands=@_;
+	my $commands=shift();
 	my $stepindex=1;
 	my @lines=();
 	push(@lines,"cwlVersion: v1.0");
@@ -198,7 +184,7 @@ sub workflow{
 	my $args={};
 	my $outins={};
 	my $files={};
-	foreach my $command(@commands){
+	foreach my $command(@{$commands}){
 		my $basename="step$stepindex";
 		push(@steps,$basename);
 		my ($lines,$ins,$outs)=encoder($command);
@@ -275,7 +261,7 @@ sub readLines{
 	my @lines=();
 	while(<IN>){
 		chomp;s/\r//g;
-		open(@lines,$_);
+		push(@lines,$_);
 	}
 	return @lines;
 }
@@ -305,6 +291,27 @@ sub writeYml{
 		}
 	}
 	close(OUT);
+}
+############################## writeWorkflow ##############################
+sub writeWorkflow{
+	my $files=shift();
+	my $directory=shift();
+	my $basename=shift();
+	my $cwlFile;
+	my $ymlFile;
+	mkdir($directory);
+	mkdir("$directory/cwl");
+	while(my($filename,$data)=each(%{$files})){
+		if($filename eq "workflow.cwl"){
+			$cwlFile="$directory/$basename.cwl";
+			writeCwl($cwlFile,$data);
+		}elsif($filename eq "workflow.yml"){
+			$ymlFile="$directory/$basename.yml";
+			writeYml($ymlFile,$data);
+		}else{
+			writeCwl("$directory/$filename",$data);
+		}
+	}
 }
 ############################## encoder ##############################
 sub encoder{
@@ -555,23 +562,24 @@ sub encodeValue{
 ############################## decoder ##############################
 #https://devhints.io/bash
 sub decoder{
-	my $string=shift();
+	my @strings=@_;
 	my @commands=();
-  my $value;
-	my $index=0;
-	my @chars=split(//,$string);
 	my $piped=undef;
-	my $count=1;
-	while($index<scalar(@chars)){
-		($value,$index)=decodeCommand(\@chars,$index);
-		if(defined($piped)){$value->{"stdin"}=$piped;}
-		if(exists($value->{"stdout"})&&$value->{"stdout"}eq"\|"){
-			$piped="_pipe".(scalar(@commands)+1)."_stdout.txt";
-			$value->{"stdout"}=$piped;
-		}else{
-			$piped=undef;
+	foreach my $string(@strings){
+		my @chars=split(//,$string);
+		my $value;
+		my $index=0;
+		while($index<scalar(@chars)){
+			($value,$index)=decodeCommand(\@chars,$index);
+			if(defined($piped)){$value->{"stdin"}=$piped;}
+			if(exists($value->{"stdout"})&&$value->{"stdout"}eq"\|"){
+				$piped="_pipe".(scalar(@commands)+1)."_stdout.txt";
+				$value->{"stdout"}=$piped;
+			}else{
+				$piped=undef;
+			}
+			push(@commands,$value);
 		}
-		push(@commands,$value);
 	}
 	return wantarray?@commands:$commands[0];
 }
@@ -579,6 +587,7 @@ sub decodeCommand{
 	my $chars=shift();
 	my $index=shift();
   my $value;
+  $index=decodeSpace($chars,$index);
 	($value,$index)=decodeCommandName($chars,$index);
   if($chars->[$index]eq"="){
     my $command={"command"=>"_assign_","name"=>$value};
@@ -591,22 +600,20 @@ sub decodeCommand{
     ($value,$index)=decodeCommandTokens($chars,$index+1);
     if(scalar(@{$value})>0){$command->{"inputs"}=$value;}
   }
-  $index=decodeSpace($chars,$index);
-  if($chars->[$index]eq">"){
-    $index=decodeSpace($chars,$index+1);
-    ($value,$index)=decodeCommandToken($chars,$index);
-		$command->{"stdout"}=$value;
-		$index=decodeSpace($chars,$index);
-  }
 	if($chars->[$index]eq"<"){
     $index=decodeSpace($chars,$index+1);
     ($value,$index)=decodeCommandToken($chars,$index);
 		$command->{"stdin"}=$value;
 		$index=decodeSpace($chars,$index);
 	}
-  $index=decodeSpace($chars,$index);
+  if($chars->[$index]eq">"){
+    $index=decodeSpace($chars,$index+1);
+    ($value,$index)=decodeCommandToken($chars,$index);
+		$command->{"stdout"}=$value;
+		$index=decodeSpace($chars,$index);
+  }
 	if($chars->[$index]eq"\|"){
-		$command->{"stdout"}="\|";
+  	$command->{"stdout"}="\|";
 		$index=decodeSpace($chars,$index+1);
 	}
   return ($command,$index);
