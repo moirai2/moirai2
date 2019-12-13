@@ -11,13 +11,15 @@ my @inputs=();
 my @outputs=();
 if(defined($opt_i)){@inputs=split(/,/,$opt_i);}
 if(defined($opt_o)){@inputs=split(/,/,$opt_o);}
-my $outdir=defined($opt_d)?$opt_d:"out";
+my $outdir=defined($opt_d)?$opt_d:".";
 my $basename=defined($opt_b)?$opt_b:"bash";
 mkdir($outdir);
 my @lines=(scalar(@ARGV)==1&&$ARGV[0]=~/\.(ba)?sh$/)?readLines($ARGV[0]):@ARGV;
 my @commands=decoder(@lines);
 my ($inputs,$outputs)=promptInputOutput(@commands);
-print_table($inputs,$outputs);
+my $files=workflow(\@commands,$inputs,$outputs);
+my $command=writeWorkflow($files,$basename,$outdir);
+print STDERR "$command\n";
 ############################## test ##############################
 sub test{
   tester(\&decodeParenthesis,"hello",0,[undef,0]);#1
@@ -133,16 +135,20 @@ sub test{
 	($lines,$inputs)=encoder($commands[1]);
 	tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#78
 	tester2($inputs,{"input1"=>{"type"=>"boolean","value"=>"true"},"input2"=>{"type"=>"File","value"=>"_pipe1_stdout.txt"}});#79
-	my $files=workflow(\@commands);
-	writeWorkflow($files,"workflow","bash");
+	my $files=workflow(\@commands,"mock.txt","wcount.txt");
+	writeWorkflow($files);
 	tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: _pipe1_stdout.txt",]);#80
 	tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#81
 	tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#82
 	tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#83
-	# Connecting two command lines
+	# Connecting two command lines with tmp.txt
 	@commands=decoder("  grep  one  <  mock.txt  >  tmp.txt  ","   wc   -l   tmp.txt>wcount.txt   ");
 	tester2(\@commands,[{"command"=>"grep","inputs"=>["one"],"stdin"=>"mock.txt","stdout"=>"tmp.txt"},{"command"=>"wc","inputs"=>["-l","tmp.txt"],"stdout"=>"wcount.txt"}]);#84
 	my $files=workflow(\@commands,"mock.txt","wcount.txt");
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: tmp.txt",]);#80
+	tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    inputBinding:","      position: 2","outputs:","  output1:","    type: stdout","stdout: wcount.txt"]);#81
+	tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#82
+	tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#83
 }
 ############################## promptInputOutput ##############################
 sub promptInputOutput{
@@ -151,8 +157,14 @@ sub promptInputOutput{
 	my $inputs={};
 	my $outputs={};
 	foreach my $command(@commands){
-		if(exists($command->{"stdin"})){$inputs->{$command->{"stdin"}}=1;}
-		if(exists($command->{"stdout"})){$outputs->{$command->{"stdout"}}=1;}
+		if(exists($command->{"stdin"})){
+      my $stdin=$command->{"stdin"};
+      if($stdin!~/^_/){$inputs->{$stdin}=1;}
+    }
+		if(exists($command->{"stdout"})){
+      my $stdout=$command->{"stdout"};
+      if($stdout!~/^_/){$outputs->{$command->{"stdout"}}=1;}
+    }
 	}
 	foreach my $command(@commands){
 		foreach my $file(@{$command->{"inputs"}}){
@@ -162,6 +174,13 @@ sub promptInputOutput{
 			$files->{$file}=1;
 		}
 	}
+  foreach my $file(keys(%{$files})){
+    print STDERR "Is $file [i]nput or [o]utput ? ";
+    my $answer=<STDIN>;
+    chomp($answer);
+    if($answer=~/^[Ii]/){$inputs->{$file}=1;}
+    elsif($answer=~/^[Oo]/){$outputs->{$file}=1;}
+  }
 	my @ins=sort{$a cmp $b}keys(%{$inputs});
 	my @outs=sort{$a cmp $b}keys(%{$outputs});
 	return (\@ins,\@outs);
@@ -169,7 +188,18 @@ sub promptInputOutput{
 ############################## workflow ##############################
 sub workflow{
 	my $commands=shift();
-	my $stepindex=1;
+	my $userInputs=shift();
+  my $userOutputs=shift();
+  my $inputHash={};
+  my $outputHash={};
+  if(defined($userInputs)){
+    if(ref($userInputs)ne"ARRAY"){$userInputs=[$userInputs];}
+    foreach my $tmp(@{$userInputs}){$inputHash->{$tmp}=1;}
+  }
+  if(defined($userOutputs)){
+    if(ref($userOutputs)ne"ARRAY"){$userOutputs=[$userOutputs];}
+    foreach my $tmp(@{$userOutputs}){$outputHash->{$tmp}=1;}
+  }
 	my @lines=();
 	push(@lines,"cwlVersion: v1.0");
 	push(@lines,"class: Workflow");
@@ -181,9 +211,10 @@ sub workflow{
 	my $parameters={};
 	my @inputLines=();
 	my @outputLines=();
-	my $args={};
 	my $outins={};
 	my $files={};
+  my $tmps={};
+  my $stepindex=1;
 	foreach my $command(@{$commands}){
 		my $basename="step$stepindex";
 		push(@steps,$basename);
@@ -198,19 +229,22 @@ sub workflow{
 		foreach my $key(@keys){
 			my $hash=$ins->{$key};
 			my $value=$hash->{"value"};
-			if(!exists($inputs->{$basename})){$inputs->{$basename}={};}
+      my $type=$hash->{"type"};
+      if(!exists($inputs->{$basename})){$inputs->{$basename}={};}
 			if($value=~/^_/){
-				if(exists($outins->{$value})){$inputs->{$basename}->{$key}=$outins->{$value};}
-				next;
-			}
-			my $name="param$inputindex";
-			$args->{$name}=$hash;
-			push(@inputLines,"  $name:");
-			push(@inputLines,"    type: ".$hash->{"type"});
-			$parameters->{$name}=$value;
-			$inputs->{$basename}->{$key}=$name;
-			$inputindex++;
-		}
+        if(exists($outins->{$value})){$inputs->{$basename}->{$key}=$outins->{$value};}
+        next;
+      }elsif(($type eq"File"||$type eq"stdin")&&!exists($inputHash->{$value})){
+        if(exists($tmps->{$value})){$inputs->{$basename}->{$key}=$tmps->{$value};}
+        next;
+      }
+      my $name="param$inputindex";
+      $inputs->{$basename}->{$key}=$name;
+      push(@inputLines,"  $name:");
+  		push(@inputLines,"    type: $type");
+      $parameters->{$name}=$hash;
+      $inputindex++;
+  	}
 		@keys=sort{$a cmp $b}keys(%{$outs});
 		foreach my $key(@keys){
 			my $hash=$outs->{$key};
@@ -218,12 +252,14 @@ sub workflow{
 			my $value=$hash->{"value"};
 			if(!exists($outputs->{$basename})){$outputs->{$basename}={};}
 			$outputs->{$basename}->{$key}=$value;
+      $tmps->{$value}="$basename/$key";
 			if($value=~/^_/){next;}
-			my $name="result$outputindex";
-			push(@outputLines,"  $name:");
-			push(@outputLines,"    type: File");
-			push(@outputLines,"    outputSource: $basename/output$outputindex");
-			$outputindex++;
+      my $name="result$outputindex";
+      if(($type eq"File"||$type eq"stdout")&&!exists($outputHash->{$value})){next;}
+      push(@outputLines,"  $name:");
+      push(@outputLines,"    type: File");
+  		push(@outputLines,"    outputSource: $basename/output$outputindex");
+      $outputindex++;
 		}
 		$stepindex++;
 	}
@@ -242,16 +278,13 @@ sub workflow{
 		push(@lines,"    run: cwl/$step.cwl");
 		push(@lines,"    in:");
 		my @keys=sort{$a cmp $b}keys(%{$inputs->{$step}});
-		foreach my $key(@keys){
-			my $val=$inputs->{$step}->{$key};
-			push(@lines,"      $key: $val");
-		}
+		foreach my $key(@keys){push(@lines,"      $key: ".$inputs->{$step}->{$key});}
 		@keys=sort{$a cmp $b}keys(%{$outputs->{$step}});
 		push(@lines,"    out: [".join(", ",@keys)."]");
 		$stepIndex++;
 	}
 	$files->{"workflow.cwl"}=\@lines;
-	$files->{"workflow.yml"}=$args;
+	$files->{"workflow.yml"}=$parameters;
 	return $files;
 }
 ############################## readLines ##############################
@@ -295,8 +328,10 @@ sub writeYml{
 ############################## writeWorkflow ##############################
 sub writeWorkflow{
 	my $files=shift();
+  my $basename=shift();
 	my $directory=shift();
-	my $basename=shift();
+  if(!defined($basename)){$basename="bash";}
+  if(!defined($directory)){$directory=".";}
 	my $cwlFile;
 	my $ymlFile;
 	mkdir($directory);
@@ -312,6 +347,7 @@ sub writeWorkflow{
 			writeCwl("$directory/$filename",$data);
 		}
 	}
+  return ($directory ne ".")?"cwltool $directory/$basename.cwl $directory/$basename.yml":"cwltool $basename.cwl $basename.yml";
 }
 ############################## encoder ##############################
 sub encoder{
