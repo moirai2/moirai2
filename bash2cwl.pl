@@ -111,10 +111,10 @@ sub test{
   #https://www.commonwl.org/user_guide/04-output/index.html
   $command=decoder("tar --extract --file hello.tar");
   push(@{$command->{"output"}},"hello.txt");
-  tester2($command,{"command"=>"tar","input"=>["--extract","--file","hello.tar"],"output"=>["hello.txt"]});#49
+  push(@{$command->{"options"}},"extract","file:");
+  tester2($command,{"command"=>"tar","input"=>["--extract","--file","hello.tar"],"output"=>["hello.txt"],"options"=>["extract","file:"]});#49
   $command->{"command"}=[$command->{"command"},shift(@{$command->{"input"}})];
-  tester2($command,{"command"=>["tar","--extract"],"input"=>["--file","hello.tar"],"output"=>["hello.txt"]});#50
-  $command->{"argstart"}=-1;
+  tester2($command,{"command"=>["tar","--extract"],"input"=>["--file","hello.tar"],"output"=>["hello.txt"],"options"=>["extract","file:"]});#50
   ($lines,$inputs)=encoder($command);
   tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: [tar, --extract]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","      prefix: --file","outputs:","  output1:","    type: File","    outputBinding:","      glob: hello.txt"]);#51
   tester2($inputs,{"input1"=>{"type"=>"File","value"=>"hello.tar"}});#52
@@ -129,7 +129,7 @@ sub test{
   push(@{$command->{"output"}},"goodbye.txt");
   tester2($command,{"command"=>"tar","input"=>["--extract","--file","hello.tar","goodbye.txt"],"output"=>["goodbye.txt"]});#56
   $command->{"command"}=[$command->{"command"},shift(@{$command->{"input"}})];
-  $command->{"argstart"}=2;
+  $command->{"options"}=["file:"];
   ($lines,$inputs)=encoder($command);
   tester2(encodeType("hello.txt",{"hello.txt"=>1}),"string");#57
   tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: [tar, --extract]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","      prefix: --file","  input2:","    type: string","    inputBinding:","      position: 2","outputs:","  output1:","    type: File","    outputBinding:","      glob: \$(inputs.input2)"]);#58
@@ -188,7 +188,7 @@ sub test{
   tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    inputBinding:","      position: 2","outputs:","  output1:","    type: stdout","stdout: wcount.txt"]);#86
   tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#87
   tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#88
-  #https://www.commonwl.org/user_guide/10-array-outputs/index.html
+  #Testing "joinargs" and "options" specified by comment json
   tester2(decodeJson("[]"),[]);#89
   tester2(decodeJson("{}"),{});#90
   tester2(decodeJson("[\"A\",\"B\"]"),["A","B"]);#91
@@ -200,12 +200,30 @@ sub test{
   tester2(decodeJson("{\"A\":\"B\",\"C\":\"D\"}"),{"A"=>"B","C"=>"D"});#97
   tester2(decodeJson("{\"A\":\"B\",\"C\":{\"D\":\"E\"},\"F\":\"G\"}"),{"A"=>"B","C"=>{"D"=>"E"},"F"=>"G"});#98
   tester2(decodeJson("[\"A\",\"B\",[\"C\",\"D\"]]"),["A","B",["C","D"]]);#99
-  tester2(decoder("javac Hello.java","#{\"arguments\":[\"-d\",\"\$(runtime.outdir)\"],\"output\":[\"*.class\"]}"),{"command"=>"javac","input"=>["Hello.java"],"output"=>["*.class"],"arguments"=>["-d","\$(runtime.outdir)"]});#100
-  @commands=decoder("touch foo.txt bar.dat baz.txt","#{\"argjoin\":0,\"output\":[\"*.txt\"]}");
-  $files=workflow(\@commands);
+  tester2(decodeJson("\"Akira Hasegawa\""),"Akira Hasegawa");#100
+  my @commands=decoder("javac Hello.java World.java","#{\"arguments\":[\"-d\",\"\$(runtime.outdir)\"],\"output\":[\"*.class\"],\"options\":[\"deprecation\",\"classpath:\"],\"joinargs\":true}");
+  tester2($commands[0],{ "command"=>"javac","input"=>["Hello.java","World.java"],"output"=>["*.class"],"arguments"=>["-d","\$(runtime.outdir)"],"options"=>["deprecation","classpath:"],"joinargs"=>"true"});#101
+  ($lines,$inputs)=encoder($commands[0]);
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File[]","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.class\""]);#102
+  tester2($inputs,{"input1"=>{"type"=>"File[]","value"=>"[Hello.java,World.java]"}});
+  #https://www.commonwl.org/user_guide/10-array-outputs/index.html
+  #@commands=decoder("touch foo.txt bar.dat baz.txt","#{\"joinargs\":0,\"output\":[\"*.txt\"]}");
+  #$files=workflow(\@commands);
   #    fq:
   #      source: [fastq]
   #      linkMerge: merge_flattened
+  #conformance test
+}
+############################## handleOptions ##############################
+sub handleOptions{
+  my $string=shift();
+  my @tokens=split(/,/,$string);
+  my $options={};
+  foreach my $option(@tokens){
+    if($option=~/^(.+):$/){$options->{$1}=2;}
+    else{$options->{$option}=1;}
+  }
+  return $options;
 }
 ############################## showWorkflow ##############################
 sub showWorkflow{
@@ -460,17 +478,6 @@ sub encoder{
     push(@lines,"  DockerRequirement:");
     push(@lines,"   dockerPull: ".$command->{"dockerPull"});
   }
-  if(exists($command->{"argjoin"})){
-    my $start=$command->{"argjoin"};
-    my $input=$command->{"input"};
-    if(ref($input)ne"ARRAY"){$input=[$input];}
-    my @array=();
-    for(my $i=0;$i<$start;$i++){push(@array,$input->[$i]);}
-    my @temp=();
-    for(my $i=$start;$i<scalar(@{$input});$i++){push(@temp,$input->[$i]);}
-    if(scalar(@temp)>0){push(@array,\@temp);}
-    $command->{"input"}=\@array;
-  }
   if(ref($base)eq"ARRAY"){push(@lines,"baseCommand: [".join(", ",@{$base})."]");}
   else{push(@lines,"baseCommand: $base");}
   if(exists($command->{"arguments"})){
@@ -562,6 +569,14 @@ sub encodeInput{
   my @inputs=@{$command->{"input"}};
   my $outputs={};
   if(exists($command->{"output"})){foreach my $output(@{$command->{"output"}}){$outputs->{$output}=1;}}
+  my $flags={};
+  if(exists($command->{"options"})){
+    foreach my $option(@{$command->{"options"}}){
+      if($option=~/\-*(\S+)\:(\S)$/){$flags->{$1}=$2;}
+      elsif($option=~/\-*(\S+)\:$/){$flags->{$1}=1;}
+      elsif($option=~/\-*(\S+)\:$/){$flags->{$1}=0;}
+    }
+  }
   #0=argument
   #1=option boolean flag -f
   #2=option flag --example-string
@@ -571,19 +586,25 @@ sub encodeInput{
   my @options=();
   for(my $i=0;$i<scalar(@inputs);$i++){
     if($inputs[$i]=~/\=/){$options[$i]=4;}
-    elsif($inputs[$i]=~/^\-\-/){$options[$i]=1;}
-    elsif($inputs[$i]=~/^\-\w\w+/){$options[$i]=5;}
-    elsif($inputs[$i]=~/^\-\w/){$options[$i]=1;}
-    else{$options[$i]=0;}
+    elsif($inputs[$i]=~/^\-\-([\w_]+)/){
+      my $key=$1;
+      if(exists($flags->{$key})){
+        if($flags->{$key}==0){$options[$i]=1;}
+        else{$options[$i]=2;$options[$i+1]=3;$i++;}
+      }else{$options[$i]=1;}
+    }elsif($inputs[$i]=~/^\-\w\w+/){$options[$i]=5;}
+    elsif($inputs[$i]=~/^\-([\w_])/){
+      my $key=$1;
+      if(exists($flags->{$key})){
+        if($flags->{$key}==0){$options[$i]=1;}
+        else{$options[$i]=2;$options[$i+1]=3;$i++;}
+      }else{$options[$i]=1;}
+    }else{$options[$i]=0;}
   }
   my $argstart=scalar(@inputs);
-  if(exists($command->{"argstart"})){
-    if($command->{"argstart"}<0){}
-    else{$argstart=$command->{"argstart"};}
-  }else{
-    for(my $i=$argstart;$i>=0;$i--){if($options[$i]==0){$argstart=$i;}else{last;}}
-  }
+  for(my $i=$argstart;$i>=0;$i--){if($options[$i]==0){$argstart=$i;}else{last;}}
   for(my $i=0;$i<scalar(@inputs)&&$i<$argstart-1;$i++){if($options[$i]==1&&$options[$i+1]==0){$options[$i]=2;$options[$i+1]=3;}}
+  if(exists($command->{"joinargs"})){my @array=splice(@inputs,$argstart);push(@inputs,\@array);}
   my $position=1;
   my @lines=();
   my $args={};
@@ -977,6 +998,8 @@ sub decodeJson{
   my $value;
   if($chars->[$index] eq "["){($value,$index)=decodeArray($chars,$index);return $value;}
   elsif($chars->[$index] eq "{"){($value,$index)=decodeHash($chars,$index);return $value;}
+  elsif($chars->[$index] eq "\""){($value,$index)=decodeDoubleQuote($chars,$index);return $value;}
+  elsif($chars->[$index] eq "\'"){($value,$index)=decodeSingleQuote($chars,$index);return $value;}
 }
 ############################## print_table ##############################
 sub print_table{
