@@ -21,9 +21,11 @@ my @lines=(scalar(@ARGV)==1&&$ARGV[0]=~/\.(ba)?sh$/)?readLines($ARGV[0]):@ARGV;
 my @commands=decoder(@lines);
 if(scalar(@{$inputs})==0&&scalar(@{$outputs})==0){($inputs,$outputs)=promptInputOutput(@commands);}
 my $files=workflow(\@commands,$inputs,$outputs);
-my ($command,$files)=writeWorkflow($files,$basename,$outdir);
-showWorkflow($files,$inputs,$outdir);
-if(defined($opt_r)){runWorkflow($command);}
+my $results=writeWorkflow($files,$basename,$outdir);
+if(scalar(@{$inputs})>0){$results->{"inputs"}=$inputs;}
+if(scalar(@{$outputs})>0){$results->{"outputs"}=$outputs;}
+showWorkflow($results);
+if(defined($opt_r)){runWorkflow($results);}
 ############################## help ##############################
 sub help{
   print "\n";
@@ -38,6 +40,8 @@ sub help{
   print "         -i  Register input files of a workflow separated with ',' (default='none').\n";
   print "         -o  Register output files of a workflow separated with ',' (default='none').\n";
   print "         -r  Run workfile with cmltool (default='none').\n";
+  print "\n";
+  print "    Example: bash2cwl \"echo 'hello world' | wc > count.txt\"\n";
   print "\n";
   print "Usage: bash2cwl BASH\n";
   print "       BASH  A BASH file with command lines to convert.\n";
@@ -151,8 +155,8 @@ sub test{
   ($lines,$inputs)=encoder($command,{"label"=>"Example trivial wrapper for Java 9 compiler","dockerPull"=>"openjdk:9.0.1-11-slim","arguments"=>["-d","\$(runtime.outdir)"]});
   tester2($inputs,{"input1"=>{"type"=>"File","value"=>"Hello.java"}});#64
   tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","label: Example trivial wrapper for Java 9 compiler","hints:","  DockerRequirement:","   dockerPull: openjdk:9.0.1-11-slim","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.class\""]);#65
-  writeCwl("bash.cwl",$lines);
-  writeYml("bash.yml",$inputs);
+  #writeCwl("bash.cwl",$lines);
+  #writeYml("bash.yml",$inputs);
   #https://www.commonwl.org/user_guide/09-array-inputs/index.html
   tester2(encodeTypeArray(["one","two","three"]),"string[]");#66
   tester2(encodeTypeArray([1,2,3]),"int[]");#67
@@ -205,10 +209,18 @@ sub test{
   tester2($commands[0],{ "command"=>"javac","input"=>["Hello.java","World.java"],"output"=>["*.class"],"arguments"=>["-d","\$(runtime.outdir)"],"options"=>["deprecation","classpath:"],"joinargs"=>"true"});#101
   ($lines,$inputs)=encoder($commands[0]);
   tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File[]","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.class\""]);#102
-  tester2($inputs,{"input1"=>{"type"=>"File[]","value"=>"[Hello.java,World.java]"}});
+  tester2($inputs,{"input1"=>{"type"=>"File[]","value"=>[{"class"=>"File","path"=>"Hello.java"},{"class"=>"File","path"=>"World.java"}]}});#103
+  $files=workflow(\@commands);
+  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"File[]","value"=>[{"class"=>"File","path"=>"Hello.java"},{"class"=>"File","path"=>"World.java"}]}});#104
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: File[]","outputs:","  result1:","    type: File[]","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","    out: [output1]"]);#105
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File[]","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.class\""]);#106
   #https://www.commonwl.org/user_guide/10-array-outputs/index.html
-  #@commands=decoder("touch foo.txt bar.dat baz.txt","#{\"joinargs\":0,\"output\":[\"*.txt\"]}");
-  #$files=workflow(\@commands);
+  @commands=decoder("touch Hello.java World.java","#{\"joinargs\":\"true\",\"output\":[\"*.txt\"]}");
+  $files=workflow(\@commands);
+  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"File[]","value"=>[{"class"=>"File","path"=>"Hello.java"},{"class"=>"File","path"=>"World.java"}]}});#107
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: File[]","outputs:","  result1:","    type: File[]","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","    out: [output1]"]);#108
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: touch","inputs:","  input1:","    type: File[]","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.txt\""]);#109
+  #writeWorkflow($files);
   #    fq:
   #      source: [fastq]
   #      linkMerge: merge_flattened
@@ -227,10 +239,12 @@ sub handleOptions{
 }
 ############################## showWorkflow ##############################
 sub showWorkflow{
-  my $files=shift();
-  my $inputs=shift();
-  my $directory=shift();
-  if(!defined($directory)){$directory=".";}
+  my $results=shift();
+  my $files=$results->{"files"};
+  my $directory=$results->{"directory"};
+  my $inputs=$results->{"inputs"};
+  my $command=$results->{"command"};
+  if(!defined($inputs)){$inputs=[];}
   print STDERR "\nfiles:\n";
   foreach my $file(sort{$a cmp $b}@{$files}){print STDERR "  $file\n";}
   if($directory ne "."){
@@ -252,7 +266,8 @@ sub showWorkflow{
 }
 ############################## runWorkflow ##############################
 sub runWorkflow{
-  my $command=shift();
+  my $results=shift();
+  my $command=$results->{"command"};
   print STDERR "\nRun [y/n] ?";
   my $prompt=<STDIN>;
   chomp($prompt);
@@ -365,8 +380,9 @@ sub workflow{
       if($value=~/^_/){next;}
       my $name="result$outputindex";
       if(($type eq"File"||$type eq"stdout")&&!exists($outputHash->{$value})){next;}
+      if($type eq "stdout"){$type="File";}
       push(@outputLines,"  $name:");
-      push(@outputLines,"    type: File");
+      push(@outputLines,"    type: $type");
       push(@outputLines,"    outputSource: $basename/$key");
       $outputindex++;
     }
@@ -428,6 +444,16 @@ sub writeYml{
       print OUT "$key:\n";
       print OUT "  class: $type\n";
       print OUT "  path: $value\n";
+    }elsif($type eq "File[]"){
+      #https://www.biostars.org/p/303663/
+      print OUT "$key: [\n";
+      for(my $i=0;$i<scalar(@{$value});$i++){
+        my $h=$value->[$i];
+        print OUT "  {class: ".$h->{"class"}.", path: ".$h->{"path"}."}";
+        if($i+1<scalar(@{$value})){print OUT ",";}
+        print OUT "\n";
+      }
+      print OUT "]\n";
     }else{
       print OUT "$key: $value\n";
     }
@@ -463,7 +489,12 @@ sub writeWorkflow{
   push(@files,$ymlFile);
   push(@files,$cwlFile);
   my $command="cwltool $cwlFile $ymlFile";
-  return ($command,\@files);
+  my $results={};
+  $results->{"directory"}=$directory;
+  $results->{"basename"}=$basename;
+  $results->{"files"}=\@files;
+  $results->{"command"}=$command;
+  return $results;
 }
 ############################## encoder ##############################
 sub encoder{
@@ -716,7 +747,11 @@ sub encodeTypeSub{
 sub encodeValue{
   my $type=shift();
   my $value=shift();
-  if($type =~ /\[\]/){
+  if($type=~/File\[\]/){
+    my @array=();
+    for(my $i=0;$i<scalar(@{$value});$i++){push(@array,{"class"=>"File","path"=>$value->[$i]});}
+    return {"type"=>$type,"value"=>\@array};
+  }elsif($type=~/\[\]/){
     if(ref($value)eq"ARRAY"){return {"type"=>$type,"value"=>"[".join(",",@{$value})."]"};}
     else{return {"type"=>$type,"value"=>"[$value]"};}
   }else{return {"type"=>$type,"value"=>$value};}
