@@ -220,22 +220,26 @@ sub test{
   tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"File[]","value"=>[{"class"=>"File","path"=>"Hello.java"},{"class"=>"File","path"=>"World.java"}]}});#107
   tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: File[]","outputs:","  result1:","    type: File[]","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","    out: [output1]"]);#108
   tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: touch","inputs:","  input1:","    type: File[]","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.txt\""]);#109
-  #writeWorkflow($files);
+  #https://www.commonwl.org/user_guide/11-records/index.html
+  @commands=decoder("echo -A one -B -C -D two -E etc > output.txt","#{\"dependent\":[[\"-A\",\"-B\"],[\"-C\",\"-D\"]]}");
+  $files=workflow(\@commands);
+  writeWorkflow($files);
+  #https://www.commonwl.org/user_guide/12-env/index.html
+  #https://www.commonwl.org/user_guide/13-expressions/index.html
+  #https://www.commonwl.org/user_guide/14-runtime/index.html
+  #https://www.commonwl.org/user_guide/15-staging/index.html
+  #https://www.commonwl.org/user_guide/16-file-formats/index.html
+  #https://www.commonwl.org/user_guide/17-metadata/index.html
+  #https://www.commonwl.org/user_guide/19-custom-types/index.html
+  #https://www.commonwl.org/user_guide/20-software-requirements/index.html
+  #https://www.commonwl.org/user_guide/21-1st-workflow/index.html
+  #https://www.commonwl.org/user_guide/22-nested-workflows/index.html
+  #https://www.commonwl.org/user_guide/23-scatter-workflow/index.html
+
   #    fq:
   #      source: [fastq]
   #      linkMerge: merge_flattened
   #conformance test
-}
-############################## handleOptions ##############################
-sub handleOptions{
-  my $string=shift();
-  my @tokens=split(/,/,$string);
-  my $options={};
-  foreach my $option(@tokens){
-    if($option=~/^(.+):$/){$options->{$1}=2;}
-    else{$options->{$option}=1;}
-  }
-  return $options;
 }
 ############################## showWorkflow ##############################
 sub showWorkflow{
@@ -636,90 +640,122 @@ sub encodeInput{
   for(my $i=$argstart;$i>=0;$i--){if($options[$i]==0){$argstart=$i;}else{last;}}
   for(my $i=0;$i<scalar(@inputs)&&$i<$argstart-1;$i++){if($options[$i]==1&&$options[$i+1]==0){$options[$i]=2;$options[$i+1]=3;}}
   if(exists($command->{"joinargs"})){my @array=splice(@inputs,$argstart);push(@inputs,\@array);}
+  my $binds={};
+  if(exists($command->{"dependent"})){my $bindIndex=0;$binds->{"dependent"}={};foreach my $group(@{$command->{"dependent"}}){foreach my $option(@{$group}){$binds->{"dependent"}->{$option}=$bindIndex;}$bindIndex++;}}
+  if(exists($command->{"exclusive"})){my $bindIndex=0;$binds->{"exclusive"}={};foreach my $group(@{$command->{"exclusive"}}){foreach my $option(@{$group}){$binds->{"exclusive"}->{$option}=$bindIndex;}$bindIndex++;}}
+  my $lines=[];
+  $lines->[0]=[];#normal input lines
+  $lines->[1]=[];#dependent input lines
+  $lines->[2]=[];#exclusive input lines
   my $position=1;
-  my @lines=();
+  my $delim=",";
   my $args={};
   for(my $i=0;$i<scalar(@inputs);$i++,$position++){
-    if($options[$i]==0){
-      my $itemSeparator=($inputs[$i]=~/,/)?",":undef;
-      my $type=encodeType($inputs[$i],$outputs);
-      push(@lines,"  input$position:");
-      push(@lines,"    type: $type");
-      push(@lines,"    inputBinding:");
-      push(@lines,"      position: $position");
-      if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
-      $args->{"input$position"}=encodeValue($type,$inputs[$i]);
-    }elsif($options[$i]==1){
-      my $type="boolean";
-      push(@lines,"  input$position:");
-      push(@lines,"    type: $type");
-      push(@lines,"    inputBinding:");
-      push(@lines,"      position: $position");
-      push(@lines,"      prefix: ".$inputs[$i]);
-      $args->{"input$position"}=encodeValue($type,"true");
-    }elsif($options[$i]==2&&$options[$i+1]==3){
-      my $itemSeparator=($inputs[$i+1]=~/,/)?",":undef;
-      my $type=encodeType($inputs[$i+1],$outputs);
-      push(@lines,"  input$position:");
-      push(@lines,"    type: $type");
-      push(@lines,"    inputBinding:");
-      push(@lines,"      position: $position");
-      push(@lines,"      prefix: ".$inputs[$i]);
-      if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
-      $args->{"input$position"}=encodeValue($type,$inputs[$i+1]);
-      $i++;
-    }elsif($options[$i]==4){
-      my ($argument,$value)=split(/\=/,$inputs[$i],2);
-      my $itemSeparator=($value=~/,/)?",":undef;
-      my $type=encodeType($value,$outputs);
-      push(@lines,"  input$position:");
-      push(@lines,"    type: $type");
-      push(@lines,"    inputBinding:");
-      push(@lines,"      position: $position");
-      push(@lines,"      prefix: $argument=");
-      push(@lines,"      separate: false");
-      if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
-      $args->{"input$position"}=encodeValue($type,$value);
-    }elsif($options[$i]==5){
-      my $argument;
-      my $value;
-      if($inputs[$i]=~/^(\-\w)(\w+)$/){$argument=$1;$value=$2;}
-      split(/\-(\w)/,);
-      my $itemSeparator=($value=~/,/)?",":undef;
-      my $type=encodeType($value,$outputs);
-      push(@lines,"  input$position:");
-      push(@lines,"    type: $type");
-      push(@lines,"    inputBinding:");
-      push(@lines,"      position: $position");
-      push(@lines,"      prefix: $argument");
-      push(@lines,"      separate: false");
-      if(defined($itemSeparator)){push(@lines,"      itemSeparator: \"$itemSeparator\"");}
-      $args->{"input$position"}=encodeValue($type,$value);
-    }
+    if($options[$i]==0){encodeInputSub($position,undef,$inputs[$i],$delim,$lines,$args,$outputs,$binds);}
+    elsif($options[$i]==1){encodeInputSub($position,$inputs[$i],undef,$delim,$lines,$args,$outputs,$binds);}
+    elsif($options[$i]==2&&$options[$i+1]==3){encodeInputSub($position,$inputs[$i],$inputs[$i+1],$delim,$lines,$args,$outputs,$binds);$i++;}
+    elsif($options[$i]==4){my ($prefix,$value)=split(/\=/,$inputs[$i],2);encodeInputSub($position,"$prefix=",$value,$delim,$lines,$args,$outputs,$binds,1);}
+    elsif($options[$i]==5){if($inputs[$i]=~/^(\-\w)(\w+)$/){encodeInputSub($position,$1,$2,$delim,$lines,$args,$outputs,$binds,1);}}
   }
   if(exists($command->{"stdin"})){
     my $type="File";
-    push(@lines,"  input$position:");
-    push(@lines,"    type: $type");
-    push(@lines,"    streamable: true");
+    push(@{$lines->[0]},"  input$position:");
+    push(@{$lines->[0]},"    type: $type");
+    push(@{$lines->[0]},"    streamable: true");
     $args->{"input$position"}=encodeValue($type,$command->{"stdin"});
     $position++;
   }
-  return (\@lines,$args);
+  my @temps=();
+  if(scalar(@{$lines->[1]})>0){
+    push(@temps,"  type:");
+    if(scalar(@{$lines->[1]})>1){
+      for(my $i=0;$i<scalar(@{$lines->[1]});$i++){
+        push(@temps,"    - type: record");
+        for(my $j=0;$j<scalar(@{$lines->[1]->[$i]});$j++){push(@temps,$lines->[1]->[$i]->[$j]);}
+      }
+    }else{
+      push(@temps,"    type: record");
+      push(@temps,@{$lines->[1]->[0]});
+    }
+  }
+  if(scalar(@{$lines->[2]})>0){
+    push(@temps,"  exclusive_parameters:");
+    push(@temps,"    type:");
+    if(scalar(@{$lines->[2]})>1){
+      for(my $i=0;$i<scalar(@{$lines->[2]});$i++){
+        push(@temps,"      - type: record");
+        for(my $j=0;$j<scalar(@{$lines->[2]->[$i]});$j++){push(@temps,"  ".$lines->[2]->[$i]->[$j]);}
+      }
+    }else{
+      push(@temps,"      type: record");
+      push(@temps,@{$lines->[2]->[0]});
+    }
+  }
+  if(scalar(@{$lines->[0]})){push(@temps,@{$lines->[0]})}
+  return (\@temps,$args);
 }
+sub encodeInputSub{
+  my $position=shift();
+  my $prefix=shift();
+  my $value=shift();
+  my $delim=shift();
+  my $lines=shift();
+  my $args=shift();
+  my $outputs=shift();
+  my $groups=shift();
+  my $nonseparate=shift();
+  my $indent="";
+  my $pointer=$lines->[0];
+  if(exists($groups->{"dependent"}->{$prefix})){
+    my $index=$groups->{"dependent"}->{$prefix};
+    if(!defined($pointer=$lines->[1]->[$index])){$lines->[1]->[$index]=[];}
+    $pointer=$lines->[1]->[$index];
+    if(scalar(@{$pointer})==0){
+      push(@{$pointer},"      fields:");
+    }
+    $indent="      ";
+  }
+  if(exists($groups->{"exclusive"}->{$prefix})){
+    my $index=$groups->{"exclusive"}->{$prefix};
+    if(!defined($pointer=$lines->[2]->[$index])){$lines->[2]->[$index]=[];}
+    $pointer=$lines->[2]->[$index];
+    if(scalar(@{$pointer})==0){
+      push(@{$pointer},"      fields:");
+    }
+    $indent="      ";
+  }
+  if(defined($value)){
+    my $itemSeparator=($value=~/$delim/)?$delim:undef;
+    my $type=encodeType($value,$outputs,$itemSeparator);
+    push(@{$pointer},"$indent  input$position:");
+    push(@{$pointer},"$indent    type: $type");
+    push(@{$pointer},"$indent    inputBinding:");
+    push(@{$pointer},"$indent      position: $position");
+    if(defined($prefix)){push(@{$pointer},"$indent      prefix: $prefix");}
+    if($nonseparate==1){push(@{$pointer},"$indent      separate: false");}
+    if(defined($itemSeparator)){push(@{$pointer},"$indent      itemSeparator: \"$itemSeparator\"");}
+    $args->{"input$position"}=encodeValue($type,$value);
+  }else{
+    my $type="boolean";
+    push(@{$pointer},"$indent  input$position:");
+    push(@{$pointer},"$indent    type: $type");
+    push(@{$pointer},"$indent    inputBinding:");
+    push(@{$pointer},"$indent      position: $position");
+    push(@{$pointer},"$indent      prefix: ".$prefix);
+    $args->{"input$position"}=encodeValue($type,"true");
+  }
+}
+
 ############################## encodeType ##############################
 # string, int, long, float, double, and null, array, record, File, Directory
 sub encodeType{
   my $argument=shift();
   my $outputs=shift();
-  if(ref($argument)eq"ARRAY"){
-    return encodeTypeArray($argument,$outputs);
-  }elsif($argument=~/,/){
-    my @temp=split(/,/,$argument);
-    return encodeTypeArray(\@temp,$outputs);
-  }else{
-    return encodeTypeSub($argument,$outputs);
-  }
+  my $delim=shift();
+  if(!defined($delim)){$delim=",";}
+  if(ref($argument)eq"ARRAY"){return encodeTypeArray($argument,$outputs);}
+  elsif($argument=~/$delim/){my @temp=split(/$delim/,$argument);return encodeTypeArray(\@temp,$outputs);}
+  else{return encodeTypeSub($argument,$outputs);}
 }
 sub encodeTypeArray{
   my $arguments=shift();
