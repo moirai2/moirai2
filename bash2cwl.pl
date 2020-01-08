@@ -152,7 +152,7 @@ sub test{
   $command->{"label"}="Example trivial wrapper for Java 9 compiler";
   $command->{"dockerPull"}="openjdk:9.0.1-11-slim";
   $command->{"arguments"}=["-d","\$(runtime.outdir)"];
-  ($lines,$inputs)=encoder($command,{"label"=>"Example trivial wrapper for Java 9 compiler","dockerPull"=>"openjdk:9.0.1-11-slim","arguments"=>["-d","\$(runtime.outdir)"]});
+  ($lines,$inputs)=encoder($command);
   tester2($inputs,{"input1"=>{"type"=>"File","value"=>"Hello.java"}});#64
   tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","label: Example trivial wrapper for Java 9 compiler","hints:","  DockerRequirement:","   dockerPull: openjdk:9.0.1-11-slim","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.class\""]);#65
   #writeCwl("bash.cwl",$lines);
@@ -168,8 +168,8 @@ sub test{
   push(@{$command->{"input"}},["seven","eight","nine"]);
   tester2($command,{"command"=>"echo","input"=>["-A=one,two,three","-B","four,five,six",["seven","eight","nine"]],"stdout"=>"out/output.txt"});#72
   ($lines,$inputs)=encoder($command);
-  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string[]","    inputBinding:","      position: 1","      prefix: -A=","      separate: false","      itemSeparator: \",\"","  input2:","    type: boolean","    inputBinding:","      position: 2","      prefix: -B","  input3:","    type: string[]","    inputBinding:","      position: 3","      itemSeparator: \",\"","  input4:","    type: string[]","    inputBinding:","      position: 4","outputs:","  output1:","    type: stdout","stdout: out/output.txt"]);#73
-  tester2($inputs,{"input1"=>{"type"=>"string[]","value"=>"[one,two,three]"},"input2"=>{"type"=>"boolean","value"=>"true"},"input3"=>{"type"=>"string[]","value"=>"[four,five,six]"},"input4"=>{"type"=>"string[]","value"=>"[seven,eight,nine]"}});#74
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string[]","    inputBinding:","      position: 1","      prefix: -A=","      separate: false","      itemSeparator: \",\"","  input2:","    type: string[]","    inputBinding:","      position: 2","      prefix: -B","      itemSeparator: \",\"","  input3:","    type: string[]","    inputBinding:","      position: 3","outputs:","  output1:","    type: stdout","stdout: out/output.txt"]);#73
+  tester2($inputs,{"input1"=>{"type"=>"string[]","value"=>"[one,two,three]"},"input2"=>{"type"=>"string[]","value"=>"[four,five,six]"},"input3"=>{"type"=>"string[]","value"=>"[seven,eight,nine]"}});#74
   #https://github.com/pitagora-galaxy/cwl/wiki/CWL-Start-Guide-JP
   my @commands=decoder("grep one < mock.txt | wc -l > wcount.txt");
   tester2(\@commands,[{"command"=>"grep","input"=>["one"],"stdin"=>"mock.txt","stdout"=>"_pipe1_stdout.txt"},{"command"=>"wc","input"=>["-l"],"stdin"=>"_pipe1_stdout.txt","stdout"=>"wcount.txt"}]);#75
@@ -185,8 +185,8 @@ sub test{
   tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#82
   tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#83
   # Connecting two command lines with tmp.txt
-  @commands=decoder("  grep  one  <  mock.txt  >  tmp.txt  ","   wc   -l   tmp.txt>wcount.txt   ");
-  tester2(\@commands,[{"command"=>"grep","input"=>["one"],"stdin"=>"mock.txt","stdout"=>"tmp.txt"},{"command"=>"wc","input"=>["-l","tmp.txt"],"stdout"=>"wcount.txt"}]);#84
+  @commands=decoder("  grep  one  <  mock.txt  >  tmp.txt  ","   wc   -l   tmp.txt>wcount.txt   ","#{\"options\":\"-l\"}");
+  tester2(\@commands,[{"command"=>"grep","input"=>["one"],"stdin"=>"mock.txt","stdout"=>"tmp.txt"},{"command"=>"wc","input"=>["-l","tmp.txt"],"stdout"=>"wcount.txt","options"=>"-l"}]);#84
   my $files=workflow(\@commands,"mock.txt","wcount.txt");
   tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: tmp.txt",]);#85
   tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    inputBinding:","      position: 2","outputs:","  output1:","    type: stdout","stdout: wcount.txt"]);#86
@@ -221,11 +221,19 @@ sub test{
   tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: File[]","outputs:","  result1:","    type: File[]","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","    out: [output1]"]);#108
   tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: touch","inputs:","  input1:","    type: File[]","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.txt\""]);#109
   #https://www.commonwl.org/user_guide/11-records/index.html
-  @commands=decoder("echo -A one -B -C -D two -E etc > output.txt","#{\"dependent\":[[\"-A\",\"-B\"],[\"-C\",\"-D\"]]}");
+  @commands=decoder("echo -A one -B -C -D two -E etc > output.txt","#{\"dependent\":[[\"-A\",\"-B\"],[\"-C\",\"-D\"]],\"exclusive\":[[\"-E\",\"-F\"]]}");
   $files=workflow(\@commands);
-  writeWorkflow($files);
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  inclusive0:","    type:","      - type: record","        fields:","          input1:","            type: string","            inputBinding:","              position: 1","              prefix: -A","          input2:","            type: boolean","            inputBinding:","              position: 2","              prefix: -B","  inclusive1:","    type:","      - type: record","        fields:","          input3:","            type: boolean","            inputBinding:","              position: 3","              prefix: -C","          input4:","            type: string","            inputBinding:","              position: 4","              prefix: -D","  exclusive:","    type:","      type: record","      fields:","        input5:","          type: string","          inputBinding:","            position: 5","            prefix: -E","outputs:","  output1:","    type: stdout","stdout: output.txt"]);#110
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: boolean","  param3:","    type: boolean","  param4:","    type: string","  param5:","    type: string","outputs: []","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","      input3: param3","      input4: param4","      input5: param5","    out: [output1]"]);#111
+  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"boolean","value"=>"true"},"param3"=>{"type"=>"boolean","value"=>"true"},"param4"=>{"type"=>"string","value"=>"two"},"param5"=>{"type"=>"string","value"=>"etc"}});#112
   #https://www.commonwl.org/user_guide/12-env/index.html
+  @commands=decoder("export FIRST=AKIRA","export LAST=HASEGAWA","env>env.txt");
+  tester2(\@commands,[{"command"=>"export","input"=>["FIRST=AKIRA"]},{"command"=>"export","input"=>["LAST=HASEGAWA"]},{"command"=>"env","stdout"=>"env.txt"}]);#113
+  $files=workflow(\@commands,undef,"env.txt");
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs: []","outputs:","  result1:","    type: File","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in: []","    out: [output1]"]);#114
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: env","requirements:","  EnvVarRequirement:","    envDef:","      FIRST: AKIRA","      LAST: HASEGAWA","inputs: []","outputs:","  output1:","    type: stdout","stdout: env.txt"]);#115
   #https://www.commonwl.org/user_guide/13-expressions/index.html
+  
   #https://www.commonwl.org/user_guide/14-runtime/index.html
   #https://www.commonwl.org/user_guide/15-staging/index.html
   #https://www.commonwl.org/user_guide/16-file-formats/index.html
@@ -342,11 +350,16 @@ sub workflow{
   my $outins={};
   my $files={};
   my $tmps={};
+  my $exports={};
   my $stepindex=1;
   foreach my $command(@{$commands}){
+    if($command->{"command"}eq"export"){
+      foreach my $input(@{$command->{"input"}}){if($input=~/(\S+)\=(\S+)/){$exports->{$1}=$2;}}
+      next;
+    }
     my $basename="step$stepindex";
     push(@steps,$basename);
-    my ($lines,$ins,$outs)=encoder($command);
+    my ($lines,$ins,$outs)=encoder($command,$exports);
     $files->{"cwl/$basename.cwl"}=$lines;
     while(my($name,$hash)=each(%{$outs})){
       my $value=$hash->{"value"};
@@ -400,18 +413,24 @@ sub workflow{
     push(@lines,"outputs:");
     push(@lines,@outputLines);
   }else{push(@lines,"outputs: []");}
-  push(@lines,"steps:");
-  my $stepIndex=1;
-  foreach my $step(@steps){
-    push(@lines,"  step$stepIndex:");
-    push(@lines,"    run: cwl/$step.cwl");
-    push(@lines,"    in:");
-    my @keys=sort{$a cmp $b}keys(%{$inputs->{$step}});
-    foreach my $key(@keys){push(@lines,"      $key: ".$inputs->{$step}->{$key});}
-    @keys=sort{$a cmp $b}keys(%{$outputs->{$step}});
-    push(@lines,"    out: [".join(", ",@keys)."]");
-    $stepIndex++;
-  }
+  if(scalar(@steps)>0){
+    push(@lines,"steps:");
+    my $stepIndex=1;
+    foreach my $step(@steps){
+      push(@lines,"  step$stepIndex:");
+      push(@lines,"    run: cwl/$step.cwl");
+      my @keys=sort{$a cmp $b}keys(%{$inputs->{$step}});
+      if(scalar(@keys)>0){
+        push(@lines,"    in:");
+        foreach my $key(@keys){push(@lines,"      $key: ".$inputs->{$step}->{$key});}
+      }else{
+        push(@lines,"    in: []");
+      }
+      @keys=sort{$a cmp $b}keys(%{$outputs->{$step}});
+      push(@lines,"    out: [".join(", ",@keys)."]");
+      $stepIndex++;
+    }
+  }else{push(@lines,"steps: []");}
   $files->{"workflow.cwl"}=\@lines;
   $files->{"workflow.yml"}=$parameters;
   return $files;
@@ -440,26 +459,31 @@ sub writeYml{
   my $file=shift();
   my $hash=shift();
   open(OUT,">$file");
-  foreach my $key(sort{$a cmp $b}keys(%{$hash})){
-    my $h=$hash->{$key};
-    my $type=$h->{"type"};
-    my $value=$h->{"value"};
-    if($type eq "File"){
-      print OUT "$key:\n";
-      print OUT "  class: $type\n";
-      print OUT "  path: $value\n";
-    }elsif($type eq "File[]"){
-      #https://www.biostars.org/p/303663/
-      print OUT "$key: [\n";
-      for(my $i=0;$i<scalar(@{$value});$i++){
-        my $h=$value->[$i];
-        print OUT "  {class: ".$h->{"class"}.", path: ".$h->{"path"}."}";
-        if($i+1<scalar(@{$value})){print OUT ",";}
-        print OUT "\n";
+  my @keys=keys(%{$hash});
+  if(scalar(@keys)==0){
+    print OUT "{}";
+  }else{
+    foreach my $key(sort{$a cmp $b}@keys){
+      my $h=$hash->{$key};
+      my $type=$h->{"type"};
+      my $value=$h->{"value"};
+      if($type eq "File"){
+        print OUT "$key:\n";
+        print OUT "  class: $type\n";
+        print OUT "  path: $value\n";
+      }elsif($type eq "File[]"){
+        #https://www.biostars.org/p/303663/
+        print OUT "$key: [\n";
+        for(my $i=0;$i<scalar(@{$value});$i++){
+          my $h=$value->[$i];
+          print OUT "  {class: ".$h->{"class"}.", path: ".$h->{"path"}."}";
+          if($i+1<scalar(@{$value})){print OUT ",";}
+          print OUT "\n";
+        }
+        print OUT "]\n";
+      }else{
+        print OUT "$key: $value\n";
       }
-      print OUT "]\n";
-    }else{
-      print OUT "$key: $value\n";
     }
   }
   close(OUT);
@@ -503,6 +527,7 @@ sub writeWorkflow{
 ############################## encoder ##############################
 sub encoder{
   my $command=shift();
+  my $exports=shift();
   my $base=$command->{"command"};
   my @lines=();
   push(@lines,"cwlVersion: v1.0");
@@ -515,6 +540,16 @@ sub encoder{
   }
   if(ref($base)eq"ARRAY"){push(@lines,"baseCommand: [".join(", ",@{$base})."]");}
   else{push(@lines,"baseCommand: $base");}
+  my @requirements=();
+  if(scalar(keys(%{$exports}))>0){
+    push(@requirements,"  EnvVarRequirement:");
+    push(@requirements,"    envDef:");
+    foreach my $key(keys(%{$exports})){push(@requirements,"      $key: ".$exports->{$key});}
+  }
+  if(scalar(@requirements)>0){
+    push(@lines,"requirements:");
+    foreach my $line(@requirements){push(@lines,$line);}
+  }
   if(exists($command->{"arguments"})){
     my $line="arguments: [";
     my $index=0;
@@ -527,9 +562,9 @@ sub encoder{
     $line.="]";
     push(@lines,$line);
   }
-  push(@lines,"inputs:");
   my ($inputLines,$inputs)=encodeInput($command);
-  push(@lines,@{$inputLines});
+  if(scalar(@{$inputLines})>0){push(@lines,"inputs:");push(@lines,@{$inputLines});}
+  else{push(@lines,"inputs: []");}
   my ($outputLines,$outputs)=encodeOutput($command,$inputs);
   push(@lines,@{$outputLines});
   if(exists($command->{"stdin"})){
@@ -606,39 +641,47 @@ sub encodeInput{
   if(exists($command->{"output"})){foreach my $output(@{$command->{"output"}}){$outputs->{$output}=1;}}
   my $flags={};
   if(exists($command->{"options"})){
-    foreach my $option(@{$command->{"options"}}){
-      if($option=~/\-*(\S+)\:(\S)$/){$flags->{$1}=$2;}
+    my $array=$command->{"options"};
+    if(ref($array)ne"ARRAY"){$array=[$array];}
+    foreach my $option(@{$array}){
+      if($option=~/\-*(\S+)\:(\S)$/){$flags->{$1}=$2;}#with delim
       elsif($option=~/\-*(\S+)\:$/){$flags->{$1}=1;}
-      elsif($option=~/\-*(\S+)\:$/){$flags->{$1}=0;}
+      elsif($option=~/\-*(\S+)$/){$flags->{$1}=0;}
     }
   }
   #0=argument
-  #1=option boolean flag -f
-  #2=option flag --example-string
-  #3=option argument hello
-  #4=option with '=' with argument (no separation) --file=whale.txt
-  #5=option with '-' with arguments (no separation) -i42
+  #1=option boolean
+  #2=option argument flag
+  #3=option argument value
+  #4=option argument with '=' (no separation) --file=whale.txt
+  #5=optionargument  with '-' (no separation) -i42
+  #6=option boolean(1) or argument(2) flag -f
   my @options=();
   for(my $i=0;$i<scalar(@inputs);$i++){
-    if($inputs[$i]=~/\=/){$options[$i]=4;}
+    if($inputs[$i]=~/\=/){$options[$i]=4;}#4
     elsif($inputs[$i]=~/^\-\-([\w_]+)/){
       my $key=$1;
       if(exists($flags->{$key})){
-        if($flags->{$key}==0){$options[$i]=1;}
-        else{$options[$i]=2;$options[$i+1]=3;$i++;}
-      }else{$options[$i]=1;}
-    }elsif($inputs[$i]=~/^\-\w\w+/){$options[$i]=5;}
+        if($flags->{$key}==0){$options[$i]=1;}#1
+        else{$options[$i]=2;$options[$i+1]=3;$i++;}#2+3
+      }else{$options[$i]=6;}#1or2
+    }elsif($inputs[$i]=~/^\-\w\w+/){$options[$i]=5;}#5
     elsif($inputs[$i]=~/^\-([\w_])/){
       my $key=$1;
       if(exists($flags->{$key})){
-        if($flags->{$key}==0){$options[$i]=1;}
-        else{$options[$i]=2;$options[$i+1]=3;$i++;}
-      }else{$options[$i]=1;}
-    }else{$options[$i]=0;}
+        if($flags->{$key}==0){$options[$i]=1;}#1
+        else{$options[$i]=2;$options[$i+1]=3;$i++;}#2+3
+      }else{$options[$i]=6;}#1or2
+    }else{$options[$i]=0;}#0
   }
   my $argstart=scalar(@inputs);
-  for(my $i=$argstart;$i>=0;$i--){if($options[$i]==0){$argstart=$i;}else{last;}}
-  for(my $i=0;$i<scalar(@inputs)&&$i<$argstart-1;$i++){if($options[$i]==1&&$options[$i+1]==0){$options[$i]=2;$options[$i+1]=3;}}
+  for(my $i=0;$i<$argstart;$i++){
+    if($options[$i]==6){
+      if($i+1<$argstart&&$options[$i+1]==0){$options[$i]=2;$options[$i+1]=3;}
+      else{$options[$i]=1;}
+    }
+  }
+  for(my $i=$argstart-1;$i>=0;$i--){if($options[$i]==0){$argstart=$i;}else{last;}}
   if(exists($command->{"joinargs"})){my @array=splice(@inputs,$argstart);push(@inputs,\@array);}
   my $binds={};
   if(exists($command->{"dependent"})){my $bindIndex=0;$binds->{"dependent"}={};foreach my $group(@{$command->{"dependent"}}){foreach my $option(@{$group}){$binds->{"dependent"}->{$option}=$bindIndex;}$bindIndex++;}}
@@ -667,19 +710,20 @@ sub encodeInput{
   }
   my @temps=();
   if(scalar(@{$lines->[1]})>0){
-    push(@temps,"  type:");
     if(scalar(@{$lines->[1]})>1){
       for(my $i=0;$i<scalar(@{$lines->[1]});$i++){
-        push(@temps,"    - type: record");
-        for(my $j=0;$j<scalar(@{$lines->[1]->[$i]});$j++){push(@temps,$lines->[1]->[$i]->[$j]);}
+        push(@temps,"  inclusive$i:");
+        push(@temps,"    type:");
+        push(@temps,"      - type: record");
+        for(my $j=0;$j<scalar(@{$lines->[1]->[$i]});$j++){push(@temps,"  ".$lines->[1]->[$i]->[$j]);}
       }
     }else{
-      push(@temps,"    type: record");
+      push(@temps,"      type: record");
       push(@temps,@{$lines->[1]->[0]});
     }
   }
   if(scalar(@{$lines->[2]})>0){
-    push(@temps,"  exclusive_parameters:");
+    push(@temps,"  exclusive:");
     push(@temps,"    type:");
     if(scalar(@{$lines->[2]})>1){
       for(my $i=0;$i<scalar(@{$lines->[2]});$i++){
@@ -708,20 +752,16 @@ sub encodeInputSub{
   my $pointer=$lines->[0];
   if(exists($groups->{"dependent"}->{$prefix})){
     my $index=$groups->{"dependent"}->{$prefix};
-    if(!defined($pointer=$lines->[1]->[$index])){$lines->[1]->[$index]=[];}
+    if(!defined($lines->[1]->[$index])){$lines->[1]->[$index]=[];}
     $pointer=$lines->[1]->[$index];
-    if(scalar(@{$pointer})==0){
-      push(@{$pointer},"      fields:");
-    }
+    if(scalar(@{$pointer})==0){push(@{$pointer},"      fields:");}
     $indent="      ";
   }
   if(exists($groups->{"exclusive"}->{$prefix})){
     my $index=$groups->{"exclusive"}->{$prefix};
-    if(!defined($pointer=$lines->[2]->[$index])){$lines->[2]->[$index]=[];}
+    if(!defined($lines->[2]->[$index])){$lines->[2]->[$index]=[];}
     $pointer=$lines->[2]->[$index];
-    if(scalar(@{$pointer})==0){
-      push(@{$pointer},"      fields:");
-    }
+    if(scalar(@{$pointer})==0){push(@{$pointer},"      fields:");}
     $indent="      ";
   }
   if(defined($value)){
