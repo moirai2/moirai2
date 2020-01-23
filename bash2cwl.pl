@@ -29,7 +29,7 @@ if(defined($opt_r)){runWorkflow($results);}
 ############################## help ##############################
 sub help{
   print "\n";
-  print "Program: Conver bash command lines to CWL and YML format files.\n";
+  print "Program: Convert bash command lines to CWL and YML format files.\n";
   print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
   print "\n";
   print "Usage: bash2cwl COMMAND [COMMAND ..]\n";
@@ -153,10 +153,10 @@ sub test{
   $command->{"dockerPull"}="openjdk:9.0.1-11-slim";
   $command->{"arguments"}=["-d","\$(runtime.outdir)"];
   ($lines,$inputs)=encoder($command);
-  tester2($inputs,{"input1"=>{"type"=>"File","value"=>"Hello.java"}});#64
-  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","label: Example trivial wrapper for Java 9 compiler","hints:","  DockerRequirement:","   dockerPull: openjdk:9.0.1-11-slim","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.class\""]);#65
   #writeCwl("bash.cwl",$lines);
   #writeYml("bash.yml",$inputs);
+  tester2($inputs,{"input1"=>{"type"=>"File","value"=>"Hello.java"}});#64
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","label: Example trivial wrapper for Java 9 compiler","hints:","  DockerRequirement:","   dockerPull: openjdk:9.0.1-11-slim","baseCommand: javac","arguments: [\"-d\",\$(runtime.outdir)]","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","outputs:","  output1:","    type:","      type: array","      items: File","    outputBinding:","      glob: \"*.class\""]);#65
   #https://www.commonwl.org/user_guide/09-array-inputs/index.html
   tester2(encodeTypeArray(["one","two","three"]),"string[]");#66
   tester2(encodeTypeArray([1,2,3]),"int[]");#67
@@ -232,8 +232,11 @@ sub test{
   $files=workflow(\@commands,undef,"env.txt");
   tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs: []","outputs:","  result1:","    type: File","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in: []","    out: [output1]"]);#114
   tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: env","requirements:","  EnvVarRequirement:","    envDef:","      FIRST: AKIRA","      LAST: HASEGAWA","inputs: []","outputs:","  output1:","    type: stdout","stdout: env.txt"]);#115
+  #assign
+  @commands=decoder("output=`echo hello world`");
+  print_table(\@commands);
+
   #https://www.commonwl.org/user_guide/13-expressions/index.html
-  
   #https://www.commonwl.org/user_guide/14-runtime/index.html
   #https://www.commonwl.org/user_guide/15-staging/index.html
   #https://www.commonwl.org/user_guide/16-file-formats/index.html
@@ -243,11 +246,17 @@ sub test{
   #https://www.commonwl.org/user_guide/21-1st-workflow/index.html
   #https://www.commonwl.org/user_guide/22-nested-workflows/index.html
   #https://www.commonwl.org/user_guide/23-scatter-workflow/index.html
-
   #    fq:
   #      source: [fastq]
   #      linkMerge: merge_flattened
   #conformance test
+  #
+  # noguchi - intergenic genomic contamination
+  # melissa - unmapped
+  # imad - QC pipeline
+  #writeCwl("bash.cwl",$lines);
+  #writeYml("bash.yml",$inputs);
+  #writeWorkflow($files);
 }
 ############################## showWorkflow ##############################
 sub showWorkflow{
@@ -880,8 +889,15 @@ sub decodeCommand{
   if(defined($value)){return ({"command"=>"_cwl_","value"=>$value},$index);}
   ($value,$index)=decodeCommandName($chars,$index);
   if($chars->[$index]eq"="){
-    my $command={"command"=>"_assign_","name"=>$value};
-    ($value,$index)=decodeCommandToken($chars,$index+1);
+    $index++;
+    my $command={"name"=>$value};
+    if($chars->[$index]eq"`"){
+      ($value,$index)=decodeBackQuote($chars,$index);
+      $command->{"command"}="_put_";
+    }else{
+      ($value,$index)=decodeCommandToken($chars,$index);
+      $command->{"command"}="_assign_";
+    }
     $command->{"value"}=$value;
     return ($command,$index);
   }
@@ -1026,6 +1042,17 @@ sub decodeDoubleQuote{
   my $value;
   for($index++;$index<scalar(@{$chars});$index++){
     if($chars->[$index] eq "\""){if($chars->[$index-1] ne "\\"){last;}}
+    $value.=$chars->[$index];
+  }
+  return (jsonUnescape($value),$index+1);
+}
+sub decodeBackQuote{
+  my $chars=shift();
+  my $index=shift();
+  if($chars->[$index]ne"`"){return (undef,$index);}
+  my $value;
+  for($index++;$index<scalar(@{$chars});$index++){
+    if($chars->[$index] eq "`"){if($chars->[$index-1] ne "\\"){last;}}
     $value.=$chars->[$index];
   }
   return (jsonUnescape($value),$index+1);
