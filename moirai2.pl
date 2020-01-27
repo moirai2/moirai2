@@ -29,7 +29,6 @@ $urls->{"daemon/import"}="https://moirai2.github.io/schema/daemon/import";
 $urls->{"daemon/input"}="https://moirai2.github.io/schema/daemon/input";
 $urls->{"daemon/inputs"}="https://moirai2.github.io/schema/daemon/inputs";
 $urls->{"daemon/output"}="https://moirai2.github.io/schema/daemon/output";
-$urls->{"daemon/outputs"}="https://moirai2.github.io/schema/daemon/outputs";
 $urls->{"daemon/return"}="https://moirai2.github.io/schema/daemon/return";
 $urls->{"daemon/bash"}="https://moirai2.github.io/schema/daemon/bash";
 $urls->{"daemon/script"}="https://moirai2.github.io/schema/daemon/script";
@@ -903,10 +902,6 @@ sub loadCommandFromURLSub{
 		}
 		$command->{"input"}=\@array;
 	}
-	if(exists($command->{$urls->{"daemon/outputs"}})){
-		$command->{$urls->{"daemon/outputs"}}=handleArray($command->{$urls->{"daemon/outputs"}},$default);
-		$command->{"outputs"}=$command->{$urls->{"daemon/outputs"}};
-	}
 	if(exists($command->{$urls->{"daemon/return"}})){
 		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}},$default);
 		my $hash=handleHash(@{$command->{$urls->{"daemon/output"}}});
@@ -917,10 +912,6 @@ sub loadCommandFromURLSub{
 		$command->{$urls->{"daemon/output"}}=handleArray($command->{$urls->{"daemon/output"}},$default);
 		my @array=();
 		foreach my $output(@{$command->{$urls->{"daemon/output"}}}){push(@array,$output);}
-		if(exists($command->{$urls->{"daemon/outputs"}})){
-			my $hash=handleHash(@{$command->{$urls->{"daemon/output"}}});
-			foreach my $output(@{$command->{"daemon/outputs"}}){if(!exists($hash->{$output})){push(@array,$output);}}
-		}
 		$command->{"output"}=\@array;
 	}
 	my @array=();
@@ -945,21 +936,6 @@ sub loadCommandFromURLSub{
 	if(!exists($command->{$urls->{"daemon/maxjob"}})){$command->{$urls->{"daemon/maxjob"}}=1;}
 	if(exists($command->{$urls->{"daemon/script"}})){handleScript($command);}
 	if(scalar(keys(%{$default}))>0){$command->{"default"}=$default;}
-}
-############################## handleOutput ##############################
-sub handleOutput{
-	my $command=shift();
-	my @statements=(@{$command->{"insertKeys"}},@{$command->{"deleteKeys"}},@{$command->{"updateKeys"}});
-	foreach my $tokens(@statements){
-		foreach my $token(@{$tokens}){
-			if($token=~/^\$(\w+)$/){
-				my $key=$1;
-				if(existsArray($command->{"input"},$key)){next;}
-				if(existsArray($command->{"output"},$key)){next;}
-				push(@{$command->{"output"}},$key);
-			}
-		}
-	}
 }
 ############################## handleScript ##############################
 sub handleScript{
@@ -1244,53 +1220,49 @@ sub bashCommand{
 	if(exists($command->{$urls->{"daemon/linecount"}})){
 		print OUT "########## linecount ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/linecount"}}}){
-			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl linecount \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	if(exists($command->{$urls->{"daemon/seqcount"}})){
 		print OUT "########## seqcount ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/seqcount"}}}){
-			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl seqcount \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	if(exists($command->{$urls->{"daemon/md5"}})){
 		print OUT "########## md5 ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/md5"}}}){
-			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl md5 \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	if(exists($command->{$urls->{"daemon/filesize"}})){
 		print OUT "########## filesize ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/filesize"}}}){
-			if(existsArray($command->{"input"},$key)){print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"inputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl filesize \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	print OUT "########## database ##########\n";
@@ -1300,7 +1272,6 @@ sub bashCommand{
 			my $found=0;
 			my $line=join("->",@{$insert});
 			foreach my $output(@{$command->{"output"}}){
-				print STDERR "$line\n";
 				if($line=~/\$$output/){push(@{$inserts->{$output}},$insert);$found=1;last;}
 			}
 			if($found==0){push(@{$inserts->{""}},$insert);}
@@ -1333,53 +1304,49 @@ sub bashCommand{
 	if(exists($command->{$urls->{"daemon/linecount"}})){
 		print OUT "########## linecount ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/linecount"}}}){
-			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl linecount \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl linecount \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	if(exists($command->{$urls->{"daemon/seqcount"}})){
 		print OUT "########## seqcount ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/seqcount"}}}){
-			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl seqcount \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl seqcount \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	if(exists($command->{$urls->{"daemon/md5"}})){
 		print OUT "########## md5 ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/md5"}}}){
-			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl md5 \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl md5 \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	if(exists($command->{$urls->{"daemon/filesize"}})){
 		print OUT "########## filesize ##########\n";
 		foreach my $key(@{$command->{$urls->{"daemon/filesize"}}}){
-			if(existsArray($command->{"output"},$key)){print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";}
-			elsif(existsArray($command->{"outputs"},$key)){
-				print OUT "if [ \${#".$key."[\@]} -gt 0 ] ; then\n";
-				print OUT "for e in \${$key"."[\@]} ; do\n";
-				print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";
-				print OUT "done\n";
-				print OUT "fi\n";
-			}
+			print OUT "if [[ \"\$(declare -p $key)\" =~ \"declare -a\" ]]; then\n";
+			print OUT "for out in \${$key"."[\@]} ; do\n";
+			print OUT "perl \$cwd/rdf.pl filesize \$out>>\$tmpdir/\$insertfile\n";
+			print OUT "done\n";
+			print OUT "else\n";
+			print OUT "perl \$cwd/rdf.pl filesize \$$key>>\$tmpdir/\$insertfile\n";
+			print OUT "fi\n";
 		}
 	}
 	if(scalar(@{$command->{"updateKeys"}})>0){
@@ -1638,37 +1605,6 @@ sub writeCompleteFile{
 	print OUT "rmdir $tmpdir/ctrl/ > /dev/null 2>&1\n";
 	print OUT "rmdir $tmpdir/ > /dev/null 2>&1\n";
 	close(OUT);
-}
-############################## handleInsert ##############################
-sub handleInsert{
-	my $command=shift();
-	my $subject=shift();
-	my $predicate=shift();
-	my $object=shift();
-	my $sub=substr($subject,1);
-	my $pre=substr($predicate,1);
-	my $obj=substr($object,1);
-	if(existsArray($command->{"outputs"},$sub)){
-		print OUT "if [ \${#".$sub."[\@]} -gt 0 ] ; then\n";
-		print OUT "for s in \${$sub"."[\@]} ; do\n";
-		print OUT "echo \"\$s\t$predicate\t$object\">>\$tmpdir/\$insertfile\n";
-		print OUT "done\n";
-		print OUT "fi\n";
-	}elsif(existsArray($command->{"outputs"},$pre)){
-		print OUT "if [ \${#".$pre."[\@]} -gt 0 ] ; then\n";
-		print OUT "for p in \${$pre"."[\@]} ; do\n";
-		print OUT "echo \"$subject\t\$p\t$object\">>\$tmpdir/\$insertfile\n";
-		print OUT "done\n";
-		print OUT "fi\n";
-	}elsif(existsArray($command->{"outputs"},$obj)){
-		print OUT "if [ \${#".$obj."[\@]} -gt 0 ] ; then\n";
-		print OUT "for o in \${$obj"."[\@]} ; do\n";
-		print OUT "echo \"$subject\t$predicate\t\$o\">>\$tmpdir/\$insertfile\n";
-		print OUT "done\n";
-		print OUT "fi\n";
-	}else{
-		print OUT "echo \"$subject\t$predicate\t$object\">>\$tmpdir/\$insertfile\n";
-	}
 }
 ############################## handleKeys ##############################
 sub handleKeys{
