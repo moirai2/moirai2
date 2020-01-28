@@ -233,8 +233,10 @@ sub test{
   tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs: []","outputs:","  result1:","    type: File","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in: []","    out: [output1]"]);#114
   tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: env","requirements:","  EnvVarRequirement:","    envDef:","      FIRST: AKIRA","      LAST: HASEGAWA","inputs: []","outputs:","  output1:","    type: stdout","stdout: env.txt"]);#115
   #assign
-  @commands=decoder("output=`echo hello world`");
-  print_table(\@commands);
+  @commands=decoder("output=`echo 'hello world'`");
+  tester2(\@commands,[{"command"=>"_put_","name"=>"output","value"=>{"command"=>"echo","input"=>["hello world"]}}]);#116
+  $files=workflow(\@commands);
+  writeWorkflow($files);
 
   #https://www.commonwl.org/user_guide/13-expressions/index.html
   #https://www.commonwl.org/user_guide/14-runtime/index.html
@@ -893,6 +895,7 @@ sub decodeCommand{
     my $command={"name"=>$value};
     if($chars->[$index]eq"`"){
       ($value,$index)=decodeBackQuote($chars,$index);
+      $value=decoder($value);
       $command->{"command"}="_put_";
     }else{
       ($value,$index)=decodeCommandToken($chars,$index);

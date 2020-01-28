@@ -954,7 +954,7 @@ sub installSoftware{
 		if(exists($hash->{$software})){next;}
 		my $path="$bindir/$software";
 		if(!(-e $path)){$path=`which $software`;chomp($path);}
-		if($path ne ""&&promptYesNo("Do you want to use '$path' software [y/n]? ")){
+		if($path ne ""&&promptYesNo("Do you want to use '$path' software [y/n]? ",1)){
 			if(!(-e $path)){system("ln -s $path $bindir/$software");}
 			dbInsert($database,$software,$urls->{"software/bin"},$path);
 			next;
@@ -965,7 +965,6 @@ sub installSoftware{
 			dbInsert($database,$software,$urls->{"software/bin"},$path);
 			next;
 		}
-		if(!promptYesNo("Do you want to install '$software' [y/n]? ")){next;}
 		push(@installs,$software);
 	}
 	foreach my $install(@installs){
@@ -986,11 +985,13 @@ sub promptInput{
 ############################## promptYesNo ##############################
 sub promptYesNo{
 	my $question=shift();
+	my $default=shift();
 	print STDOUT $question;
 	my $prompt=<STDIN>;
 	chomp($prompt);
-	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){return 0;}
-	else{return 1;}
+	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){return 1;}
+	elsif(defined($default)){return $default;}
+	else{return 0;}
 }
 ############################## exportTable ##############################
 sub exportTable{

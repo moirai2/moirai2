@@ -443,7 +443,7 @@ sub remove_unnecessary_executes{
 	my $insertKeys=shift();
 	my @array=();
 	foreach my $hash(@{$queryResults->{".hashs"}}){
-		my $hit=0;
+		my $hit=1;
 		foreach my $out(@{$insertKeys}){
 			my @tokens=();
 			foreach my $token(@{$out}){
@@ -454,7 +454,7 @@ sub remove_unnecessary_executes{
 			if($tokens[0]=~/\$/){next;}
 			if($tokens[1]=~/\$/){next;}
 			if($tokens[2]=~/\$/){$tokens[2]="%";}
-			if(checkRDFObject($rdfdb,$tokens[0],$tokens[1],$tokens[2])ne""){$hit=1;}
+			if(checkRDFObject($rdfdb,$tokens[0],$tokens[1],$tokens[2])eq""){$hit=0;}
 		}
 		if($hit==0){push(@array,$hash);}
 	}
