@@ -50,6 +50,7 @@ sub help{
 	print "COMMAND: $program_name -d DB update SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB delete SUB PRE OBJ\n";
 	print "COMMAND: $program_name -d DB object SUB PRE OBJ > VARIABLE\n";
+	print "COMMAND: $program_name -d DB network > TSV\n";
 	print "COMMAND: $program_name -d DB import < TSV\n";
 	print "COMMAND: $program_name -d DB dump > TSV\n";
 	print "COMMAND: $program_name -d DB drop\n";
@@ -87,7 +88,8 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2019/10/07  'history' function was added to review commands executed.\n";
+		print "UPDATED: 2020/01/29  'network' function to display RDF triplets without execute triplets.\n";
+		print "         2019/10/07  'history' function was added to review commands executed.\n";
 		print "         2019/08/27  'input', 'prompt', and 'install' added to manipulate database inputs.\n";
 		print "         2019/07/18  'drop' added to remove all data.\n";
 		print "         2019/06/04  Added 'executes' and 'html' to retrieve execute log informations.\n";
@@ -219,6 +221,7 @@ elsif(lc($command) eq "input"){inputDatabase($database,@ARGV);print STDERR "\n";
 elsif(lc($command) eq "rmexec"){rmexecCommand($database);}
 elsif(lc($command) eq "history"){historyCommand($database);}
 elsif(lc($command) eq "rm"){rmCommand($database,@ARGV);}
+elsif(lc($command) eq "network"){networkCommand($database,@ARGV);}
 ############################## linecountCommand ##############################
 sub linecountCommand{
 	my @arguments=@_;
@@ -298,6 +301,25 @@ sub md5Command{
 		md5Files($writer,$opt_r,$opt_g,@files);
 		close($writer);
 	}
+}
+############################## networkCommand ##############################
+sub networkCommand{
+	my $database=shift();
+	my $dbh=openDB($database);
+	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
+	my $where="";
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my $writer=IO::File->new(">&STDOUT");
+	while(my @rows=$sth->fetchrow_array()){
+		my $subject=$rows[0];
+		my $predicate=$rows[1];
+		my $object=$rows[2];
+		if($subject=~/#node/){next;}
+		print $writer "$subject\t$predicate\t$object\n";
+	}
+	close($writer);
+	$dbh->disconnect;
 }
 ############################## selectCommand ##############################
 sub selectCommand{

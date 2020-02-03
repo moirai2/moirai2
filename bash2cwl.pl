@@ -126,8 +126,12 @@ sub test{
   $command=decoder("echo 'Hello World!' > output.txt");
   tester2($command,{"command"=>"echo","input"=>["Hello World!"],"stdout"=>"output.txt"});#53
   ($lines,$inputs)=encoder($command);
-  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","outputs:","  output1:","    type: stdout","stdout: output.txt"]);#54
-  tester2($inputs,{"input1"=>{"type"=>"string","value"=>"Hello World!"}});#55
+  #tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","outputs:","  output1:","    type: stdout","stdout: output.txt"]);#54
+  #tester2($inputs,{"input1"=>{"type"=>"string","value"=>"Hello World!"}});#55
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: string","outputs:","  output1:","    type: stdout","stdout: \$(inputs.input2)"]);#54
+  tester2($inputs,{"input1"=>{"type"=>"string","value"=>"Hello World!"},"input2"=>{"type"=>"string","value"=>"output.txt"}});#55
+  #writeCwl("bash.cwl",$lines);#ok
+  #writeYml("bash.yml",$inputs);#ok
   #https://www.commonwl.org/user_guide/06-params/index.html
   $command=decoder("tar --extract --file hello.tar goodbye.txt");
   push(@{$command->{"output"}},"goodbye.txt");
@@ -143,8 +147,8 @@ sub test{
   tester2($command,{"command"=>"node","input"=>["hello.js"],"stdout"=>"output.txt"});#60
   $command->{"dockerPull"}="node:slim";
   ($lines,$inputs)=encoder($command);
-  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","hints:","  DockerRequirement:","   dockerPull: node:slim","baseCommand: node","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","outputs:","  output1:","    type: stdout","stdout: output.txt"]);#61
-  tester2($inputs,{"input1"=>{"type"=>"File","value"=>"hello.js"}});#62
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","hints:","  DockerRequirement:","   dockerPull: node:slim","baseCommand: node","inputs:","  input1:","    type: File","    inputBinding:","      position: 1","  input2:","    type: string","outputs:","  output1:","    type: stdout","stdout: \$(inputs.input2)"]);#61
+  tester2($inputs,{"input1"=>{"type"=>"File","value"=>"hello.js"},"input2"=>{"type"=>"string","value"=>"output.txt"}});#62
   #https://www.commonwl.org/user_guide/08-arguments/index.html
   $command=decoder("javac Hello.java");
   push(@{$command->{"output"}},"*.class");
@@ -168,30 +172,38 @@ sub test{
   push(@{$command->{"input"}},["seven","eight","nine"]);
   tester2($command,{"command"=>"echo","input"=>["-A=one,two,three","-B","four,five,six",["seven","eight","nine"]],"stdout"=>"out/output.txt"});#72
   ($lines,$inputs)=encoder($command);
-  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string[]","    inputBinding:","      position: 1","      prefix: -A=","      separate: false","      itemSeparator: \",\"","  input2:","    type: string[]","    inputBinding:","      position: 2","      prefix: -B","      itemSeparator: \",\"","  input3:","    type: string[]","    inputBinding:","      position: 3","outputs:","  output1:","    type: stdout","stdout: out/output.txt"]);#73
-  tester2($inputs,{"input1"=>{"type"=>"string[]","value"=>"[one,two,three]"},"input2"=>{"type"=>"string[]","value"=>"[four,five,six]"},"input3"=>{"type"=>"string[]","value"=>"[seven,eight,nine]"}});#74
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  input1:","    type: string[]","    inputBinding:","      position: 1","      prefix: -A=","      separate: false","      itemSeparator: \",\"","  input2:","    type: string[]","    inputBinding:","      position: 2","      prefix: -B","      itemSeparator: \",\"","  input3:","    type: string[]","    inputBinding:","      position: 3","  input4:","    type: string","outputs:","  output1:","    type: stdout","stdout: \$(inputs.input4)"]);#73
+  tester2($inputs,{"input1"=>{"type"=>"string[]","value"=>"[one,two,three]"},"input2"=>{"type"=>"string[]","value"=>"[four,five,six]"},"input3"=>{"type"=>"string[]","value"=>"[seven,eight,nine]"},"input4"=>{"type"=>"string","value"=>"out/output.txt"}});#74
+  #writeCwl("bash.cwl",$lines);
+  #writeYml("bash.yml",$inputs);
   #https://github.com/pitagora-galaxy/cwl/wiki/CWL-Start-Guide-JP
   my @commands=decoder("grep one < mock.txt | wc -l > wcount.txt");
-  tester2(\@commands,[{"command"=>"grep","input"=>["one"],"stdin"=>"mock.txt","stdout"=>"_pipe1_stdout.txt"},{"command"=>"wc","input"=>["-l"],"stdin"=>"_pipe1_stdout.txt","stdout"=>"wcount.txt"}]);#75
+  tester2(\@commands,[{"command"=>"grep","input"=>["one"],"stdin"=>"mock.txt","stdout"=>"\$stdout1"},{"command"=>"wc","input"=>["-l"],"stdin"=>"\$stdout1","stdout"=>"wcount.txt"}]);#75
   ($lines,$inputs)=encoder($commands[0]);
-  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: _pipe1_stdout.txt",]);#76
-  tester2($inputs,{"input1"=>{"type"=>"string","value"=>"one"},"input2"=>{"type"=>"File","value"=>"mock.txt"}});#77
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","  input3:","    type: string","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: \$(inputs.input3)",]);#76
+  tester2($inputs,{"input1"=>{"type"=>"string","value"=>"one"},"input2"=>{"type"=>"File","value"=>"mock.txt"},"input3"=>{"type"=>"string","value"=>"\$stdout1"}});#77
+  #writeCwl("bash.cwl",$lines);
+  #writeYml("bash.yml",$inputs);
   ($lines,$inputs)=encoder($commands[1]);
-  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#78
-  tester2($inputs,{"input1"=>{"type"=>"boolean","value"=>"true"},"input2"=>{"type"=>"File","value"=>"_pipe1_stdout.txt"}});#79
+  tester2($lines,["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","  input3:","    type: string","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: \$(inputs.input3)"]);#78
+  tester2($inputs,{"input1"=>{"type"=>"boolean","value"=>"true"},"input2"=>{"type"=>"File","value"=>"\$stdin1"},"input3"=>{"type"=>"string","value"=>"wcount.txt"}});#79
+  #writeCwl("bash.cwl",$lines);
+  #writeYml("bash.yml",$inputs);
   my $files=workflow(\@commands,"mock.txt","wcount.txt");
-  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: _pipe1_stdout.txt",]);#80
-  tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: wcount.txt"]);#81
-  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#82
-  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#83
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","  input3:","    type: string","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: \$(inputs.input3)",]);#80
+  tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    streamable: true","  input3:","    type: string","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: \$(inputs.input3)"]);#81
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: string","  param4:","    type: boolean","  param5:","    type: string","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","      input3: param3","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param4","      input2: step1/output1","      input3: param5","    out: [output1]"]);#82
+  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"string","value"=>"\$stdout1"},"param4"=>{"type"=>"boolean","value"=>"true"},"param5"=>{"type"=>"string","value"=>"wcount.txt"}});#83
+  writeWorkflow($files);#ok
   # Connecting two command lines with tmp.txt
   @commands=decoder("  grep  one  <  mock.txt  >  tmp.txt  ","   wc   -l   tmp.txt>wcount.txt   ","#{\"options\":\"-l\"}");
   tester2(\@commands,[{"command"=>"grep","input"=>["one"],"stdin"=>"mock.txt","stdout"=>"tmp.txt"},{"command"=>"wc","input"=>["-l","tmp.txt"],"stdout"=>"wcount.txt","options"=>"-l"}]);#84
   my $files=workflow(\@commands,"mock.txt","wcount.txt");
-  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: tmp.txt",]);#85
-  tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    inputBinding:","      position: 2","outputs:","  output1:","    type: stdout","stdout: wcount.txt"]);#86
-  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: boolean","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param3","      input2: step1/output1","    out: [output1]"]);#87
-  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"boolean","value"=>"true"}});#88
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: grep","inputs:","  input1:","    type: string","    inputBinding:","      position: 1","  input2:","    type: File","    streamable: true","  input3:","    type: string","outputs:","  output1:","    type: stdout","stdin: \$(inputs.input2.path)","stdout: \$(inputs.input3)",]);#85
+  tester2($files->{"cwl/step2.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: wc","inputs:","  input1:","    type: boolean","    inputBinding:","      position: 1","      prefix: -l","  input2:","    type: File","    inputBinding:","      position: 2","  input3:","    type: string","outputs:","  output1:","    type: stdout","stdout: \$(inputs.input3)"]);#86
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: File","  param3:","    type: string","  param4:","    type: boolean","  param5:","    type: string","outputs:","  result1:","    type: File","    outputSource: step2/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","      input3: param3","    out: [output1]","  step2:","    run: cwl/step2.cwl","    in:","      input1: param4","      input2: step1/output1","      input3: param5","    out: [output1]"]);#87
+  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"File","value"=>"mock.txt"},"param3"=>{"type"=>"string","value"=>"tmp.txt"},"param4"=>{"type"=>"boolean","value"=>"true"},"param5"=>{"type"=>"string","value"=>"wcount.txt"}});#88
+  #writeWorkflow($files);#ok
   #Testing "joinargs" and "options" specified by comment json
   tester2(decodeJson("[]"),[]);#89
   tester2(decodeJson("{}"),{});#90
@@ -223,21 +235,26 @@ sub test{
   #https://www.commonwl.org/user_guide/11-records/index.html
   @commands=decoder("echo -A one -B -C -D two -E etc > output.txt","#{\"dependent\":[[\"-A\",\"-B\"],[\"-C\",\"-D\"]],\"exclusive\":[[\"-E\",\"-F\"]]}");
   $files=workflow(\@commands);
-  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  inclusive0:","    type:","      - type: record","        fields:","          input1:","            type: string","            inputBinding:","              position: 1","              prefix: -A","          input2:","            type: boolean","            inputBinding:","              position: 2","              prefix: -B","  inclusive1:","    type:","      - type: record","        fields:","          input3:","            type: boolean","            inputBinding:","              position: 3","              prefix: -C","          input4:","            type: string","            inputBinding:","              position: 4","              prefix: -D","  exclusive:","    type:","      type: record","      fields:","        input5:","          type: string","          inputBinding:","            position: 5","            prefix: -E","outputs:","  output1:","    type: stdout","stdout: output.txt"]);#110
-  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: boolean","  param3:","    type: boolean","  param4:","    type: string","  param5:","    type: string","outputs: []","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","      input3: param3","      input4: param4","      input5: param5","    out: [output1]"]);#111
-  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"boolean","value"=>"true"},"param3"=>{"type"=>"boolean","value"=>"true"},"param4"=>{"type"=>"string","value"=>"two"},"param5"=>{"type"=>"string","value"=>"etc"}});#112
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: echo","inputs:","  inclusive0:","    type:","      - type: record","        fields:","          input1:","            type: string","            inputBinding:","              position: 1","              prefix: -A","          input2:","            type: boolean","            inputBinding:","              position: 2","              prefix: -B","  inclusive1:","    type:","      - type: record","        fields:","          input3:","            type: boolean","            inputBinding:","              position: 3","              prefix: -C","          input4:","            type: string","            inputBinding:","              position: 4","              prefix: -D","  exclusive:","    type:","      type: record","      fields:","        input5:","          type: string","          inputBinding:","            position: 5","            prefix: -E","  input6:","    type: string","outputs:","  output1:","    type: stdout","stdout: \$(inputs.input6)"]);#110
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","  param2:","    type: boolean","  param3:","    type: boolean","  param4:","    type: string","  param5:","    type: string","  param6:","    type: string","outputs: []","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","      input2: param2","      input3: param3","      input4: param4","      input5: param5","      input6: param6","    out: [output1]"]);#111
+  tester2($files->{"workflow.yml"},{"param1"=>{"type"=>"string","value"=>"one"},"param2"=>{"type"=>"boolean","value"=>"true"},"param3"=>{"type"=>"boolean","value"=>"true"},"param4"=>{"type"=>"string","value"=>"two"},"param5"=>{"type"=>"string","value"=>"etc"},"param6"=>{"type"=>"string","value"=>"output.txt"}});#112
   #https://www.commonwl.org/user_guide/12-env/index.html
   @commands=decoder("export FIRST=AKIRA","export LAST=HASEGAWA","env>env.txt");
   tester2(\@commands,[{"command"=>"export","input"=>["FIRST=AKIRA"]},{"command"=>"export","input"=>["LAST=HASEGAWA"]},{"command"=>"env","stdout"=>"env.txt"}]);#113
   $files=workflow(\@commands,undef,"env.txt");
-  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs: []","outputs:","  result1:","    type: File","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in: []","    out: [output1]"]);#114
-  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: env","requirements:","  EnvVarRequirement:","    envDef:","      FIRST: AKIRA","      LAST: HASEGAWA","inputs: []","outputs:","  output1:","    type: stdout","stdout: env.txt"]);#115
+  tester2($files->{"workflow.cwl"},["cwlVersion: v1.0","class: Workflow","inputs:","  param1:","    type: string","outputs:","  result1:","    type: File","    outputSource: step1/output1","steps:","  step1:","    run: cwl/step1.cwl","    in:","      input1: param1","    out: [output1]"]);#114
+  tester2($files->{"cwl/step1.cwl"},["cwlVersion: v1.0","class: CommandLineTool","baseCommand: env","requirements:","  EnvVarRequirement:","    envDef:","      FIRST: AKIRA","      LAST: HASEGAWA","inputs:","  input1:","    type: string","outputs:","  output1:","    type: stdout","stdout: \$(inputs.input1)"]);#115
+  #writeWorkflow($files);
   #assign
-  @commands=decoder("output=`echo 'hello world'`");
-  tester2(\@commands,[{"command"=>"_put_","name"=>"output","value"=>{"command"=>"echo","input"=>["hello world"]}}]);#116
+  @commands=decoder("output='Hello World'","echo \$output");
+  tester2(\@commands,[{"command"=>"_assign_","name"=>"output","value"=>"Hello World"},{"command"=>"echo","input"=>["\$output"]}]);#116
   $files=workflow(\@commands);
   writeWorkflow($files);
 
+  #@commands=decoder("output=`echo 'hello world'`","echo \$output");
+  #tester2(\@commands,[{"command"=>"_nested_","name"=>"output","value"=>[{"command"=>"echo","input"=>["hello world"]}]},{"command"=>"echo","input"=>["\$output"]}]);#117
+  #$files=workflow(\@commands);
+  #writeWorkflow($files);
   #https://www.commonwl.org/user_guide/13-expressions/index.html
   #https://www.commonwl.org/user_guide/14-runtime/index.html
   #https://www.commonwl.org/user_guide/15-staging/index.html
@@ -358,10 +375,10 @@ sub workflow{
   my $parameters={};
   my @inputLines=();
   my @outputLines=();
-  my $outins={};
   my $files={};
   my $tmps={};
   my $exports={};
+  my $variables={};
   my $stepindex=1;
   foreach my $command(@{$commands}){
     if($command->{"command"}eq"export"){
@@ -370,23 +387,22 @@ sub workflow{
     }
     my $basename="step$stepindex";
     push(@steps,$basename);
-    my ($lines,$ins,$outs)=encoder($command,$exports);
-    $files->{"cwl/$basename.cwl"}=$lines;
-    while(my($name,$hash)=each(%{$outs})){
-      my $value=$hash->{"value"};
-      if($value!~/^_/){next;}
-      $outins->{$value}="$basename/$name";
+    if($command->{"command"}eq"_nested_"){
+      $stepindex=workflowNested($command,$stepindex);
     }
+    if($command->{"command"}eq"_assign_"){
+      $variables->{"\$".$command->{"name"}}=$command->{"value"};
+    }
+    my ($lines,$ins,$outs)=encoder($command,$exports,$variables,$stepindex);
+    $files->{"cwl/$basename.cwl"}=$lines;
     my @keys=sort{$a cmp $b}keys(%{$ins});
     foreach my $key(@keys){
       my $hash=$ins->{$key};
       my $value=$hash->{"value"};
       my $type=$hash->{"type"};
       if(!exists($inputs->{$basename})){$inputs->{$basename}={};}
-      if($value=~/^_/){
-        if(exists($outins->{$value})){$inputs->{$basename}->{$key}=$outins->{$value};}
-        next;
-      }elsif(($type eq"File"||$type eq"stdin")&&!exists($inputHash->{$value})){
+      if($value=~/^\$/ && exists($variables->{$value})){$inputs->{$basename}->{$key}=$variables->{$value};next;}
+      if(($type eq"File"||$type eq"stdin")&&!exists($inputHash->{$value})){
         if(exists($tmps->{$value})){$inputs->{$basename}->{$key}=$tmps->{$value};}
         next;
       }
@@ -403,16 +419,20 @@ sub workflow{
       my $type=$hash->{"type"};
       my $value=$hash->{"value"};
       if(!exists($outputs->{$basename})){$outputs->{$basename}={};}
+      my $name="result$outputindex";
+      if($value=~/^\$stdout(\d+)/){$variables->{"\$stdin".($1+1)}="$basename/output$outputindex";}
       $outputs->{$basename}->{$key}=$value;
       $tmps->{$value}="$basename/$key";
-      if($value=~/^_/){next;}
-      my $name="result$outputindex";
       if(($type eq"File"||$type eq"stdout")&&!exists($outputHash->{$value})){next;}
       if($type eq "stdout"){$type="File";}
       push(@outputLines,"  $name:");
       push(@outputLines,"    type: $type");
       push(@outputLines,"    outputSource: $basename/$key");
       $outputindex++;
+    }
+    while(my($name,$hash)=each(%{$outs})){
+      my $value=$hash->{"value"};
+      if($value=~/^\$stdout(\d+)/){$variables->{$value}="$basename/$name";}
     }
     $stepindex++;
   }
@@ -445,6 +465,14 @@ sub workflow{
   $files->{"workflow.cwl"}=\@lines;
   $files->{"workflow.yml"}=$parameters;
   return $files;
+}
+############################## workflowNested ##############################
+sub workflowNested{
+  my $command=shift();
+  my $stepindex=shift();
+  my $name=$command->{"name"};
+  my $value=$command->{"value"};
+  return $stepindex;
 }
 ############################## readLines ##############################
 sub readLines{
@@ -481,7 +509,8 @@ sub writeYml{
       if($type eq "File"){
         print OUT "$key:\n";
         print OUT "  class: $type\n";
-        print OUT "  path: $value\n";
+        if($value=~/^\$stdin(\d+)/){print OUT "  path: stdin$1.txt\n";}
+        else{print OUT "  path: $value\n";}
       }elsif($type eq "File[]"){
         #https://www.biostars.org/p/303663/
         print OUT "$key: [\n";
@@ -492,6 +521,8 @@ sub writeYml{
           print OUT "\n";
         }
         print OUT "]\n";
+      }elsif($value=~/^\$stdout(\d+)/){
+        print OUT "$key: stdout$1.txt\n";
       }else{
         print OUT "$key: $value\n";
       }
@@ -539,6 +570,9 @@ sub writeWorkflow{
 sub encoder{
   my $command=shift();
   my $exports=shift();
+  my $variables=shift();
+  my $stepindex=shift();
+  if(!defined($stepindex)){$stepindex=1;}
   my $base=$command->{"command"};
   my @lines=();
   push(@lines,"cwlVersion: v1.0");
@@ -555,7 +589,7 @@ sub encoder{
   if(scalar(keys(%{$exports}))>0){
     push(@requirements,"  EnvVarRequirement:");
     push(@requirements,"    envDef:");
-    foreach my $key(keys(%{$exports})){push(@requirements,"      $key: ".$exports->{$key});}
+    foreach my $key(sort{$a cmp $b}keys(%{$exports})){push(@requirements,"      $key: ".$exports->{$key});}
   }
   if(scalar(@requirements)>0){
     push(@lines,"requirements:");
@@ -574,6 +608,23 @@ sub encoder{
     push(@lines,$line);
   }
   my ($inputLines,$inputs)=encodeInput($command);
+  my $stdoutLine;
+  if(exists($command->{"stdout"})){
+    my $position=scalar(keys(%{$inputs}))+1;
+    my $key="input$position";
+    $inputs->{$key}->{"type"}="string";
+    if($command->{"stdout"}=~/^\$/){
+      $inputs->{$key}->{"value"}="\$stdout$stepindex";
+      $stdoutLine="stdout: \$(inputs.$key)";
+      push(@{$inputLines},"  $key:");
+      push(@{$inputLines},"    type: string");
+    }else{
+      $inputs->{$key}->{"value"}=$command->{"stdout"};
+      $stdoutLine="stdout: \$(inputs.$key)";
+      push(@{$inputLines},"  $key:");
+      push(@{$inputLines},"    type: string");
+    }
+  }
   if(scalar(@{$inputLines})>0){push(@lines,"inputs:");push(@lines,@{$inputLines});}
   else{push(@lines,"inputs: []");}
   my ($outputLines,$outputs)=encodeOutput($command,$inputs);
@@ -583,10 +634,11 @@ sub encoder{
     while(my($key,$val)=each(%{$inputs})){
       if($val->{"type"}ne"File"){next;}
       if($stdin ne $val->{"value"}){next;}
+      if($val->{"value"}=~/^\$/){$inputs->{$key}->{"value"}="\$stdin$stepindex";}
       push(@lines,"stdin: \$(inputs.$key.path)");
     }
   }
-  if(exists($command->{"stdout"})){push(@lines,"stdout: ".$command->{"stdout"});}
+  if(defined($stdoutLine)){push(@lines,$stdoutLine);}
   return (\@lines,$inputs,$outputs);
 }
 ############################## encodeOutput ##############################
@@ -872,7 +924,7 @@ sub decoder{
       }
       if(defined($piped)){$command->{"stdin"}=$piped;}
       if(exists($command->{"stdout"})&&$command->{"stdout"}eq"\|"){
-        $piped="_pipe".(scalar(@commands)+1)."_stdout.txt";
+        $piped="\$stdout".(scalar(@commands)+1);
         $command->{"stdout"}=$piped;
       }else{
         $piped=undef;
@@ -895,8 +947,9 @@ sub decodeCommand{
     my $command={"name"=>$value};
     if($chars->[$index]eq"`"){
       ($value,$index)=decodeBackQuote($chars,$index);
-      $value=decoder($value);
-      $command->{"command"}="_put_";
+      my @commands=decoder($value);
+      $value=\@commands;
+      $command->{"command"}="_nested_";
     }else{
       ($value,$index)=decodeCommandToken($chars,$index);
       $command->{"command"}="_assign_";

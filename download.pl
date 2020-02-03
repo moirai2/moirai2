@@ -8,7 +8,7 @@ $agent->agent('download.pl/1.0');
 $agent->timeout(10);
 $agent->env_proxy;
 my $request=HTTP::Request->new(GET=>$url);
-my $filename="$outdir/".basename($url);
+my $filename="$outdir/".basename(dirname($url));
 my $res=$agent->request($request);
 if($res->is_success){
 open(OUT,">$filename");
