@@ -6,6 +6,8 @@ MOIRAI2 is a scientific workflow system.
 Commands are all web based (https://moirai2.github.io/command).
 Input, output, parameter, time, stdout, stderr are recorded in RDF sqlite3 database.
 
+bash2cwl has moved to https://github.com/moirai2/bash2cwl
+
 ## Install
 
 To install moirai2 to a directory named "project".
