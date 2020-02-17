@@ -51,6 +51,7 @@ $urls->{"daemon/filesize"}="https://moirai2.github.io/schema/daemon/filesize";
 $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
 $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
+$urls->{"daemon/docker"}="https://moirai2.github.io/schema/daemon/docker";
 $urls->{"software"}="https://moirai2.github.io/schema/software";
 $urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
 ############################## HELP ##############################
@@ -187,6 +188,13 @@ my $queryResults={};
 my $insertKeys;
 #just in case jobs are completed while moirai2.pl was not running by termination
 controlProcess($rdfdb,$executes);
+if(getNumberOfJobsRunning()>0){
+	print STDERR "There are jobs remaining in ctrl/bash directory.\n";
+	print STDERR "Do you want to delete these jobs [y/n]? ";
+	my $prompt=<STDIN>;
+	chomp($prompt);
+	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){system("rm $ctrldir/bash/*");}
+}
 if(defined($opt_i)){checkInputOutput($opt_i);}
 if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){$queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);}
@@ -692,7 +700,7 @@ sub mainProcess{
 				$thrown++;
 			}
 		}
-		throwJobs($bashFiles,$use_qsub,$qsubopt,$url,1);
+		throwJobs($bashFiles,$use_qsub,$qsubopt,$url,1,$command->{$urls->{"daemon/docker"}},$rootdir,$tmpdir);
 		if(scalar(@{$executes->{$url}})>0){push(@{$execurls},$url);}
 	}
 	writeDeletes(@deletes);
@@ -729,6 +737,9 @@ sub throwJobs{
 	my $qsubopt=shift();
 	my $url=shift();
 	my $background=shift();
+	my $docker=shift();
+	my $rootdir=shift();
+	my $tmpdir=shift();
 	if(scalar(@{$bashFiles})==0){return;}
 	my ($fh,$path)=mkstemps("$ctrldir/bash/runXXXXXXXXXX",".sh");
 	my $dirname=basename($path,".sh");
@@ -738,14 +749,28 @@ sub throwJobs{
 		print $fh "#\$ -e $error_file\n";
 		print $fh "#\$ -o $log_file\n";
 	}
-	print $fh "PATH=$exportpath\n";
-	print $fh "export PATH\n";
+	if(defined($docker)){print $fh "PATH=/data/bin:\$PATH\n";}
+	else{print $fh "PATH=$exportpath\n";}
 	my @ids=();
 	foreach my $files(@{$bashFiles}){
 		my ($bashFile,$stdoutFile,$stderrFile,$nodeid)=@{$files};
 		if($nodeid=~/(.+)#(.+)/){push(@ids,"#$2");}
 		else{push(@ids,$nodeid);}
-		print $fh "bash $bashFile > $stdoutFile 2> $stderrFile\n";
+		if(defined($docker)){
+			print $fh "docker run \\\n";
+			print $fh "  --rm \\\n";
+			print $fh "  -u \$UID \\\n";
+			print $fh "  -v '$rootdir:/data' \\\n";
+			if($tmpdir ne "$rootdir/tmp"){print $fh "  -v '$tmpdir:/tmp' \\\n";}
+			print $fh "  $docker \\\n";
+			print $fh "  /bin/bash $bashFile \\\n";
+			print $fh "  > $log_file \\\n";
+			print $fh "  2> $error_file\n";
+		}else{
+			print $fh "bash $bashFile \\\n";
+			print $fh "  > $stdoutFile \\\n";
+			print $fh "  2> $stderrFile\n";
+		}
 	}
 	if($use_qsub){
 		print $fh "if [ ! -s $error_file ];then\n";
@@ -1133,14 +1158,21 @@ sub bashCommand{
 	my $deletefile="$workdir/".$vars->{"deletefile"};
 	my $updatefile="$workdir/".$vars->{"updatefile"};
 	my $completedfile="$workdir/".$vars->{"completedfile"};
+	my $use_docker=exists($command->{$urls->{"daemon/docker"}})?1:0;
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
-	#print OUT "set -eu\n";
+	if($use_docker){
+		my $dirname=$vars->{"dirname"};
+		$vars->{"rootdir"}="/data";
+		$vars->{"ctrldir"}="/data/ctrl";
+		$vars->{"workdir"}="/data/tmp/$dirname";
+		$vars->{"tmpdir"}="/tmp/$dirname";
+	}
 	print OUT "########## system ##########\n";
-	my @systemvars=("cmdurl","dirname","rdfdb","nodeid","rootdir","workdir");
+	my @systemvars=("cmdurl","dirname","rdfdb","nodeid","rootdir","workdir","ctrldir");
 	if(defined($vars->{"tmpdir"})){push(@systemvars,"tmpdir");}
+	my @unusedvars=();
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
-	my @unusedvars=("ctrldir");
 	my @outputvars=(@{$command->{"output"}});
 	foreach my $var(@systemvars){print OUT "$var=\"".$vars->{$var}."\"\n";}
 	foreach my $var(@systemfiles){print OUT "$var=\"".$vars->{$var}."\"\n";}
@@ -1170,8 +1202,8 @@ sub bashCommand{
 			print OUT "EOF\n";
 		}
 	}
-	print OUT "########## open tmpdir ##########\n";
 	if(exists($vars->{"tmpdir"})){
+		print OUT "########## open tmpdir ##########\n";
 		my $tmpdir=$vars->{"tmpdir"};
 		print OUT "mv \$workdir \$tmpdir\n";
 		print OUT "ln -s \$tmpdir \$workdir\n";
@@ -1374,8 +1406,8 @@ sub bashCommand{
 		print OUT "########## cleanup ##########\n";
 		foreach my $unzip(@unzips){print OUT "rm $unzip\n";}
 	}
-	print OUT "########## close tmpdir ##########\n";
 	if(exists($vars->{"tmpdir"})){
+		print OUT "########## close tmpdir ##########\n";
 		my $tmpdir=$vars->{"tmpdir"};
 		print OUT "rm \$workdir\n";
 		print OUT "mv \$tmpdir \$workdir\n";
@@ -1384,11 +1416,14 @@ sub bashCommand{
 	my $importcount=0;
 	my $nodename=$nodeid;
 	$nodename=~s/[^A-za-z0-9]/_/g;
-	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$workdir/$importfile $ctrldir/insert/$nodename.import\n";$importcount++;}
-	print OUT "mv \$workdir/\$completedfile $ctrldir/completed/\$dirname.sh\n";
+	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$workdir/$importfile \$ctrldir/insert/$nodename.import\n";$importcount++;}
+	print OUT "mv \$workdir/\$completedfile \$ctrldir/completed/\$dirname.sh\n";
 	close(OUT);
 	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$updatefile,$bashfile,\@scriptfiles,$ctrldir,$workdir);
-	if(exists($vars->{"bashfile"})){push(@{$bashFiles},[$bashfile,$stdoutfile,$stderrfile,$nodeid]);}
+	if(exists($vars->{"bashfile"})){
+		if($use_docker){push(@{$bashFiles},[$vars->{"workdir"}."/".$vars->{"bashfile"},$vars->{"workdir"}."/".$vars->{"stdoutfile"},$vars->{"workdir"}."/".$vars->{"stderrfile"},$nodeid]);}
+		else{push(@{$bashFiles},[$bashfile,$stdoutfile,$stderrfile,$nodeid]);}
+	}
 }
 ############################## existsArray ##############################
 sub existsArray{
