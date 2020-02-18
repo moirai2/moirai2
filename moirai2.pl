@@ -52,8 +52,6 @@ $urls->{"daemon/linecount"}="https://moirai2.github.io/schema/daemon/linecount";
 $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
 $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
 $urls->{"daemon/docker"}="https://moirai2.github.io/schema/daemon/docker";
-$urls->{"software"}="https://moirai2.github.io/schema/software";
-$urls->{"software/bin"}="https://moirai2.github.io/schema/software/bin";
 ############################## HELP ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
@@ -238,7 +236,11 @@ while(true){
 	if($runmode&&getNumberOfJobsRemaining($executes)==0&&$jobs_running==0){controlProcess($rdfdb,$executes);last;}
 	else{sleep($sleeptime);}
 }
-if(defined($cmdurl)&&exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
+if(!defined($cmdurl)){
+	# command URL not defined
+}elsif(defined($opt_o)){
+	# Output are defined, so don't print return
+}elsif(exists($commands->{$cmdurl}->{$urls->{"daemon/return"}})){
 	my $returnvalue=$commands->{$cmdurl}->{$urls->{"daemon/return"}};
 	foreach my $nodeid(sort{$a cmp $b}@nodeids){
 		my $result=`perl $rootdir/rdf.pl -d $rdfdb object $nodeid $cmdurl#$returnvalue`;
@@ -749,8 +751,7 @@ sub throwJobs{
 		print $fh "#\$ -e $error_file\n";
 		print $fh "#\$ -o $log_file\n";
 	}
-	if(defined($docker)){print $fh "PATH=/data/bin:\$PATH\n";}
-	else{print $fh "PATH=$exportpath\n";}
+	print $fh "PATH=$exportpath\n";
 	my @ids=();
 	foreach my $files(@{$bashFiles}){
 		my ($bashFile,$stdoutFile,$stderrFile,$nodeid)=@{$files};
