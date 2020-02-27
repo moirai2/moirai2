@@ -16,8 +16,8 @@ my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
 ############################## OPTIONS ##############################
-use vars qw($opt_b $opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_q $opt_r $opt_s $opt_t);
-getopts('b:c:d:hHi:lm:o:qr:s:t:');
+use vars qw($opt_b $opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_O $opt_q $opt_r $opt_s $opt_t);
+getopts('b:c:d:hHi:lm:o:O:qr:s:t:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -61,14 +61,26 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "Program: Executes MOIRAI2 command(s) using a local RDF SQLITE3 database.\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
-	print "Usage: $program_name -d DB URL [INPUT/OUTPUT ..]\n";
+	print "Usage: $program_name -d DB URL/CMD [ASSIGN ..]\n";
 	print "\n";
 	print "             Executes a MOIRAI2 command with user specified arguments\n";
 	print "\n";
 	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
-	print "        URL  Command URL or path (command URLs from https://moirai2.github.io/).\n";
-	print "      INPUT  inputs of a MOIRAI2 command (varies among commands).\n";
-	print "     OUTPUT  outputs of a MOIRAI2 command (varies among commands).\n";
+	print "        URL  URL or path to command json file (command URLs from https://moirai2.github.io/).\n";
+	print "        CMD  Actual command(s).\n";
+	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
+	print "\n";
+	print "Options: -b  Path to a bin directory (default='WORKDIR/bin').\n";
+	print "         -c  Path to control directory (default='WORKDIR/ctrl').\n";
+	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
+	print "         -i  Input query for select in '\$sub->\$pred->\$obj' format (default='none').\n";
+	print "         -l  Show STDERR and STDOUT logs (default='none').\n";
+	print "         -m  Max number of jobs to throw (default='5').\n";
+	print "         -o  Output query for insert in '\$sub->\$pred->\$obj' format (default='none').\n";
+	print "         -q  Use qsub for throwing jobs(default='bash').\n";
+	print "         -r  Return value (default='none').\n";
+	print "         -s  Loop second (default='no loop').\n";
+	print "         -t  Use temporary directory (default='WORKDIR/tmp').\n";
 	print "\n";
 	print "Usage: $program_name -d DB -s SEC\n";
 	print "\n";
@@ -88,7 +100,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
 	print "         -r  Return value (default='none').\n";
 	print "         -s  Loop second (default='no loop').\n";
-	print "         -t  Temporary directory (default='WORKDIR/tmp').\n";
+	print "         -t  Use temporary directory (default='WORKDIR/tmp').\n";
 	print "\n";
 	print "Usage: $program_name daemon\n";
 	print "\n";
@@ -101,18 +113,9 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "Usage: $program_name script URL\n";
 	print "\n";
-	print "             Retrieves script files from URL and export them to a Desktop (default='current directory').\n";
+	print "             Retrieves script files from URL and export them to a Desktop.\n";
 	print "\n";
-	print "Usage: $program_name prompt -i INPUT -o OUTPUT [DEFAULT ..]\n";
-	print "\n";
-	print "             Prompt necessary information from user when output triplet is not defined.\n";
-	print "\n";
-	print "      INPUT  Input RDF triple with '->' delim.\n";
-	print "     OUTPUT  Output RDF triple with '->' delim.\n";
-	print "    DEFAULT  Default value when empty (default=none).\n";
-	print "\n";
-	print "Options: -i  Input query for select (default='none').\n";
-	print "         -o  Output query for insert (default='none').\n";
+	print "Options: -O  Output directory (default='.').\n";
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	print "\n";
@@ -147,10 +150,9 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 }
 ############################## MAIN ##############################
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
-my $newWorkflowQuery="select distinct n.data from edge as e inner join node as n on e.object=n.id where e.predicate=(select id from node where data=\"".$urls->{"daemon/workflow"}."\")";
 if($ARGV[0] eq "daemon"){autodaemon();exit(0);}
 if($ARGV[0] eq "test"){test();exit(0);}
-if($ARGV[0] eq "script"){script();exit(0);}
+if($ARGV[0] eq "script"){script($opt_o);exit(0);}
 my $rdfdb=(defined($opt_d))?$opt_d:"rdf.sqlite3";
 if($rdfdb!~/^\//){$rdfdb=Cwd::getcwd()."/$rdfdb";}
 my $rootdir=dirname($rdfdb);
@@ -175,16 +177,8 @@ mkdir("$ctrldir/update");chmod(0777,"$ctrldir/update");
 mkdir("$ctrldir/completed");chmod(0777,"$ctrldir/completed");
 mkdir("$ctrldir/stdout");chmod(0777,"$ctrldir/stdout");
 mkdir("$ctrldir/stderr");chmod(0777,"$ctrldir/stderr");
-my $workflows={};
-my $executes={};
-my @execurls=();
-my $cmdurl=(scalar(@ARGV)>0)?shift(@ARGV):undef;
-my @nodeids;
-my $returnvalue;
-my ($arguments,$userdefined)=handleArguments(@ARGV);
-my $queryResults={};
-my $insertKeys;
 #just in case jobs are completed while moirai2.pl was not running by termination
+my $executes={};
 controlProcess($rdfdb,$executes);
 if(getNumberOfJobsRunning()>0){
 	print STDERR "There are jobs remaining in ctrl/bash directory.\n";
@@ -193,6 +187,10 @@ if(getNumberOfJobsRunning()>0){
 	chomp($prompt);
 	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){system("rm $ctrldir/bash/*");}
 }
+##### handle inputs and outputs #####
+my $queryResults={};
+my $userdefined={};
+my $insertKeys;
 if(defined($opt_i)){checkInputOutput($opt_i);}
 if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){$queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);}
@@ -203,25 +201,21 @@ if(defined($opt_o)){
 	if(defined($opt_i)){removeUnnecessaryExecutes($queryResults,$insertKeys);}
 }
 if(defined($opt_l)){printRows($queryResults->{".keys"},$queryResults->{".hashs"});}
+##### handle commmand #####
+my @nodeids;
+my $cmdurl=(scalar(@ARGV)>0)?$ARGV[0]:undef;
 if(defined($cmdurl)){
-	@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
-	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
+	if($cmdurl=~/\.json$/){
+		shift(@ARGV);
+		my ($arguments,$userdefined)=handleArguments(@ARGV);
+		@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
+		if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
+	}else{
+		createCommand($queryResults,$insertKeys,@ARGV);
+	}
 }
-if($showlog){
-	print STDERR "# program path   : $program_path\n";
-	print STDERR "# rdf database   : $rdfdb\n";
-	print STDERR "# ctrl directory : $ctrldir\n";
-	print STDERR "# bin directory  : $bindir\n";
-	print STDERR "# tmp directory  : $tmpdir\n";
-	if($runmode){print STDERR "# run mode       : once\n";}
-	else{print STDERR "# run mode       : normal\n";}
-	print STDERR "# sleeptime      : $sleeptime sec\n";
-	print STDERR "# max job        : $maxjob job".(($maxjob>1)?"s":"")."\n";
-	print STDERR "# export path    : $exportpath\n";
-	if(defined($use_qsub)){print STDERR "# job submission : qsub\n";}
-	else{print STDERR "# job submission : bash\n";}
-	if(defined($cmdurl)){print STDERR "# command URL    : $cmdurl\n";}
-}
+##### process #####
+my @execurls=();
 while(true){
 	controlProcess($rdfdb,$executes);
 	if(getNumberOfJobsRemaining($executes)<$maxjob){
@@ -633,6 +627,20 @@ sub checkQuery{
 	}
 	return $hit;
 }
+############################## selectRDF ##############################
+sub selectRDF{
+	my $database=shift();
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my @results=`perl $prgdir/rdf.pl -d $database select '$subject' '$predicate' '$object'`;
+	foreach my $result(@results){
+		chomp($result);
+		my @tokens=split(/\t/,$result);
+		$result=\@tokens;
+	}
+	return @results;
+}
 ############################## checkRDFObject ##############################
 sub checkRDFObject{
 	my $database=shift();
@@ -797,6 +805,24 @@ sub controlUpdate{
 	$count=~/(\d+)/;
 	$count=$1;
 	return $count;
+}
+############################## createCommand ##############################
+sub createCommand(){
+	my @arguments=@_;
+	my $queryResults=shift(@arguments);
+	my $insertKeys=shift(@arguments);
+	my @keys=sort{$b cmp $a}@{$queryResults->{".keys"}};
+	foreach my $hash(@{$queryResults->{".hashs"}}){
+		foreach my $argument(@arguments){
+			my $line=$argument;
+			foreach my $key(@keys){
+				my $value=$hash->{$key};
+				$line=~s/\$$key/$value/g;
+				$line=~s/\$\{$key\}/$value/g;
+			}
+			print "$line\n";
+		}
+	}
 }
 ############################## existsArray ##############################
 sub existsArray{
@@ -1654,47 +1680,6 @@ sub printRows{
 	}
 	print STDERR "$tableline\n";
 }
-############################## prompt ##############################
-sub prompt{
-	my @defaults=@ARGV;
-	my $command=shift(@defaults);
-	my $query=shift(@defaults);
-	if(!defined($opt_i)){exit(1);}
-	if(!defined($opt_o)){exit(1);}
-	checkInputOutput($opt_i);
-	checkInputOutput($opt_o);
-	my $completed=controlCompleted();
-	my $inserted=controlInsert($rdfdb);
-	my $deleted=controlDelete($rdfdb);
-	my $update=controlUpdate($rdfdb);
-	my ($arguments,$userdefined)=handleArguments(@ARGV);
-	my $queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);
-	$insertKeys=handleKeys($opt_o);
-	if(defined($opt_i)){removeUnnecessaryExecutes($queryResults,$insertKeys);}
-	if(scalar(@{$queryResults->{".hashs"}})==0){return;}
-	sandbox(0,$query);
-	my @lines=();
-	foreach my $hash(@{$queryResults->{".hashs"}}){
-		for(my $i=0;$i<scalar(@{$insertKeys});$i++){
-			my $array=$insertKeys->[$i];
-			my $default=$defaults[$i];
-			my $insert=join("->",@{$array});
-			foreach my $key(@{$queryResults->{".keys"}}){my $val=$hash->{$key};$insert=~s/\$$key/$val/g;}
-			print STDERR "$insert ";
-			if(defined($default)){print STDERR "[$default] "}
-			my $answer=<STDIN>;
-			chomp($answer);
-			if($answer eq ""){$answer=$default;}
-			if($answer eq ""){next;}
-			$insert=~s/\?/$answer/g;
-			push(@lines,$insert);
-		}
-	}
-	print STDERR "\n";
-	foreach my $line(@lines){print STDERR "$line\n";$line=~s/->/\t/g;}
-	writeInserts(@lines);
-	controlInsert($rdfdb);
-}
 ############################## promtCommandInput ##############################
 sub promtCommandInput{
 	my $command=shift();
@@ -1729,23 +1714,32 @@ sub removeDollar{
 	return $value;
 }
 ############################## removeUnnecessaryExecutes ##############################
+# Very slow....
 sub removeUnnecessaryExecutes{
 	my $queryResults=shift();
 	my $insertKeys=shift();
+	my $results={};
+	my $temp={};
+	foreach my $out(@{$insertKeys}){
+		$temp->{$out->[1]}=1;
+	}
+	foreach my $pred(keys(%{$temp})){
+		my @results=selectRDF($rdfdb,"%",$pred,"%");
+		$results->{$pred}=\@results;
+	}
 	my @array=();
 	foreach my $hash(@{$queryResults->{".hashs"}}){
-		my $hit=1;
+		my $hit=0;
 		foreach my $out(@{$insertKeys}){
-			my @tokens=();
-			foreach my $token(@{$out}){
-				my $temp=$token;
-				foreach my $key(keys%{$hash}){my $value=$hash->{$key};$temp=~s/\$$key/$value/g;}
-				push(@tokens,$temp);
-			}
-			if($tokens[0]=~/\$/){next;}
-			if($tokens[1]=~/\$/){next;}
-			if($tokens[2]=~/\$/){$tokens[2]="%";}
-			if(checkRDFObject($rdfdb,$tokens[0],$tokens[1],$tokens[2])eq""){$hit=0;}
+			my $pred=$out->[1];
+			my @array=@{$results->{$pred}};
+			my $val=$out->[0];
+			if($val=~/^\$(.+)$/){$val=$hash->{$1};}
+			foreach my $tokens(@array){if($tokens->[0] eq $val){$hit=1;last;}}
+			if($hit==1){last;}
+			$val=$out->[2];
+			if($val=~/^\$(.+)$/){$val=$hash->{$1};}
+			foreach my $tokens(@array){if($tokens->[2] eq $val){$hit=1;last;}}
 		}
 		if($hit==0){push(@array,$hash);}
 	}
@@ -1779,7 +1773,8 @@ sub sandbox{
 }
 ############################## script ##############################
 sub script{
-	my $outdir=defined($opt_o)?$opt_o:".";
+	my $outdir=shift();
+	if(!defined($outdir)){$outdir=".";}
 	mkdir($outdir);
 	if(scalar(@ARGV)>1){foreach my $out(writeScript($ARGV[1],$outdir,$commands)){print "$out\n";}}
 }
