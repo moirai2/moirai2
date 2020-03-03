@@ -16,8 +16,8 @@ my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
 ############################## OPTIONS ##############################
-use vars qw($opt_b $opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_O $opt_q $opt_r $opt_s $opt_t);
-getopts('b:c:d:hHi:lm:o:O:qr:s:t:');
+use vars qw($opt_b $opt_c $opt_d $opt_D $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_O $opt_q $opt_r $opt_s $opt_w);
+getopts('b:c:d:DhHi:lm:o:O:qr:s:w:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -70,9 +70,10 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "        CMD  Actual command(s).\n";
 	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
 	print "\n";
-	print "Options: -b  Path to a bin directory (default='WORKDIR/bin').\n";
-	print "         -c  Path to control directory (default='WORKDIR/ctrl').\n";
+	print "Options: -b  Path to a bin directory (default='ROOTDIR/bin').\n";
+	print "         -c  Path to control directory (default='ROOTDIR/ctrl').\n";
 	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
+	print "         -D  Use docker (default='bash').\n";
 	print "         -i  Input query for select in '\$sub->\$pred->\$obj' format (default='none').\n";
 	print "         -l  Show STDERR and STDOUT logs (default='none').\n";
 	print "         -m  Max number of jobs to throw (default='5').\n";
@@ -80,7 +81,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
 	print "         -r  Return value (default='none').\n";
 	print "         -s  Loop second (default='no loop').\n";
-	print "         -t  Use temporary directory (default='WORKDIR/tmp').\n";
+	print "         -t  Path to work directory (default='ROOTDIR/work').\n";
 	print "\n";
 	print "Usage: $program_name -d DB -s SEC\n";
 	print "\n";
@@ -88,19 +89,16 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "\n";
 	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
 	print "        SEC  Loop search every specified seconds (default='run only once').\n";
-	print "    WORKDIR  A working directory where RDF database is located.\n";
+	print "    ROOTDIR  A working directory where RDF database is located.\n";
 	print "\n";
-	print "Options: -b  Path to a bin directory (default='WORKDIR/bin').\n";
-	print "         -c  Path to control directory (default='WORKDIR/ctrl').\n";
+	print "Options: -b  Path to a bin directory (default='ROOTDIR/bin').\n";
+	print "         -c  Path to control directory (default='ROOTDIR/ctrl').\n";
 	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
-	print "         -i  Input query for select (default='none').\n";
 	print "         -l  Show STDERR and STDOUT logs (default='none').\n";
 	print "         -m  Max number of jobs to throw (default='5').\n";
-	print "         -o  Output query for insert (default='none').\n";
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
-	print "         -r  Return value (default='none').\n";
 	print "         -s  Loop second (default='no loop').\n";
-	print "         -t  Use temporary directory (default='WORKDIR/tmp').\n";
+	print "         -t  Use temporary directory (default='ROOTDIR/tmp').\n";
 	print "\n";
 	print "Usage: $program_name daemon\n";
 	print "\n";
@@ -159,17 +157,17 @@ my $rootdir=dirname($rdfdb);
 my $sleeptime=defined($opt_s)?$opt_s:10;
 my $bindir=Cwd::abs_path(defined($opt_b)?$opt_b:"$rootdir/bin");
 my $ctrldir=Cwd::abs_path(defined($opt_c)?$opt_c:"$rootdir/ctrl");
-my $tmpdir=Cwd::abs_path(defined($opt_t)?$opt_t:"$rootdir/tmp");
+my $workdir=Cwd::abs_path(defined($opt_w)?$opt_w:"$rootdir/work");
 my $home=`echo \$HOME`;chomp($home);
 my $exportpath="$bindir:$home/bin:\$PATH";
 my $use_qsub=$opt_q;
 my $showlog=$opt_l;
+my $use_docker=(defined($opt_D))?1:0;
 my $runmode=defined($opt_s)?0:1;
 my $maxjob=defined($opt_m)?$opt_m:5;
 mkdir($bindir);chmod(0777,$bindir);
-mkdir($tmpdir);chmod(0777,$tmpdir);
-mkdir("$rootdir/tmp");chmod(0777,"$rootdir/tmp");
-mkdir("$ctrldir");chmod(0777,$ctrldir);
+mkdir($ctrldir);chmod(0777,$ctrldir);
+mkdir($workdir);chmod(0777,$workdir);
 mkdir("$ctrldir/bash");chmod(0777,"$ctrldir/bash");
 mkdir("$ctrldir/insert");chmod(0777,"$ctrldir/insert");
 mkdir("$ctrldir/delete");chmod(0777,"$ctrldir/delete");
@@ -196,7 +194,6 @@ if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){$queryResults=getQueryResults($rdfdb,$userdefined,$opt_i);}
 if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}
 if(defined($opt_o)){
-	#$insertKeys=handleKeys(replaceStringWithHash($userdefined,$opt_o));
 	$insertKeys=handleKeys($opt_o);
 	if(defined($opt_i)){removeUnnecessaryExecutes($queryResults,$insertKeys);}
 }
@@ -318,6 +315,7 @@ sub bashCommand{
 	my $workdir=$vars->{"workdir"};
 	my $prgdir=$vars->{"prgdir"};
 	my $nodeid=$vars->{"nodeid"};
+	my $dirname=$vars->{"dirname"};
 	my $url=$command->{$urls->{"daemon/command"}};
 	my $bashfile="$workdir/".$vars->{"bashfile"};
 	my $stderrfile="$workdir/".$vars->{"stderrfile"};
@@ -326,20 +324,17 @@ sub bashCommand{
 	my $deletefile="$workdir/".$vars->{"deletefile"};
 	my $updatefile="$workdir/".$vars->{"updatefile"};
 	my $completedfile="$workdir/".$vars->{"completedfile"};
-	my $use_docker=exists($command->{$urls->{"daemon/docker"}})?1:0;
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
 	if($use_docker){
-		my $dirname=$vars->{"dirname"};
-		$vars->{"rootdir"}="/data";
-		$vars->{"prgdir"}="/data";
-		$vars->{"ctrldir"}="/data/ctrl";
-		$vars->{"workdir"}="/data/tmp/$dirname";
+		$vars->{"rootdir"}="/root";
+		$vars->{"prgdir"}="/root";
+		$vars->{"ctrldir"}="/root/ctrl";
+		$vars->{"workdir"}="/root/work/$dirname";
 		$vars->{"tmpdir"}="/tmp/$dirname";
 	}
 	print OUT "########## system ##########\n";
-	my @systemvars=("cmdurl","dirname","rdfdb","nodeid","rootdir","prgdir","workdir","ctrldir");
-	if(defined($vars->{"tmpdir"})){push(@systemvars,"tmpdir");}
+	my @systemvars=("cmdurl","dirname","rdfdb","nodeid","ctrldir","prgdir","rootdir","tmpdir","workdir");
 	my @unusedvars=();
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
 	my @outputvars=(@{$command->{"output"}});
@@ -371,12 +366,9 @@ sub bashCommand{
 			print OUT "EOF\n";
 		}
 	}
-	if(exists($vars->{"tmpdir"})){
-		print OUT "########## open tmpdir ##########\n";
-		my $tmpdir=$vars->{"tmpdir"};
-		print OUT "mv \$workdir \$tmpdir\n";
-		print OUT "ln -s \$tmpdir \$workdir\n";
-	}
+	print OUT "########## open tmpdir ##########\n";
+	print OUT "mkdir -p /tmp/\$dirname\n";
+	print OUT "ln -s /tmp/\$dirname \$workdir/tmp\n";
 	print OUT "########## initialize ##########\n";
 	print OUT "cd \$rootdir\n";
 	print OUT "cat<<EOF>>\$workdir/\$insertfile\n";
@@ -575,12 +567,13 @@ sub bashCommand{
 		print OUT "########## cleanup ##########\n";
 		foreach my $unzip(@unzips){print OUT "rm $unzip\n";}
 	}
-	if(exists($vars->{"tmpdir"})){
-		print OUT "########## close tmpdir ##########\n";
-		my $tmpdir=$vars->{"tmpdir"};
-		print OUT "rm \$workdir\n";
-		print OUT "mv \$tmpdir \$workdir\n";
-	}
+	print OUT "########## close tmpdir ##########\n";
+	print OUT "rm \$workdir/tmp\n";
+	print OUT "if [ -z \"\$(ls -A /tmp/\$dirname)\" ]; then\n";
+  print OUT "rmdir /tmp/\$dirname\n";
+	print OUT "else\n";
+	print OUT "mv /tmp/\$dirname \$workdir/tmp\n";
+	print OUT "fi\n";
 	print OUT "########## completed ##########\n";
 	my $importcount=0;
 	my $nodename=$nodeid;
@@ -1141,12 +1134,12 @@ sub initExecute{
 	$vars->{"cmdurl"}=$url;
 	my $basename=basename($url,".json");
 	$vars->{"rdfdb"}=$rdfdb;
-	my $workdir=mkdtemp("$rootdir/tmp/$basename.XXXXXXXXXX");
+	my $workdir=mkdtemp("$rootdir/work/$basename.XXXXXXXXXX");
 	chmod(0777,$workdir);
 	$vars->{"workdir"}=$workdir;
+	$vars->{"tmpdir"}="$workdir/tmp";
 	my $dirname=basename($workdir);
 	$vars->{"dirname"}=$dirname;
-	if($tmpdir ne "$rootdir/tmp"){$vars->{"tmpdir"}="$tmpdir/$dirname";}
 	$vars->{"bashfile"}="$dirname.sh";
 	$vars->{"stderrfile"}="$dirname.stderr";
 	$vars->{"stdoutfile"}="$dirname.stdout";
@@ -1431,7 +1424,7 @@ sub mainProcess{
 				$thrown++;
 			}
 		}
-		throwJobs($bashFiles,$use_qsub,$qsubopt,$url,1,$command->{$urls->{"daemon/docker"}},$rootdir,$tmpdir);
+		throwJobs($bashFiles,$use_qsub,$qsubopt,$url,1,$rootdir,$use_docker,$command->{$urls->{"daemon/docker"}});
 		if(scalar(@{$executes->{$url}})>0){push(@{$execurls},$url);}
 	}
 	writeDeletes(@deletes);
@@ -1799,10 +1792,10 @@ sub test{
 	open(OUT,">test/A.json");
 	print(`pwd`);
 	exit();
-	print OUT "{\"https://moirai2.github.io/schema/daemon/input\":\"\$string\",\"https://moirai2.github.io/schema/daemon/bash\":[\"output=\\\"\$tmpdir/output.txt\\\"\",\"echo \\\"\$string\\\" > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}\n";
+	print OUT "{\"https://moirai2.github.io/schema/daemon/input\":\"\$string\",\"https://moirai2.github.io/schema/daemon/bash\":[\"output=\\\"\$workdir/output.txt\\\"\",\"echo \\\"\$string\\\" > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}\n";
 	close(OUT);
 	open(OUT,">test/B.json");
-	print OUT "{\"https://moirai2.github.io/schema/daemon/input\":\"\$input\",\"https://moirai2.github.io/schema/daemon/bash\":[\"output=\\\"\$tmpdir/output.txt\\\"\",\"sort \$input > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}\n";
+	print OUT "{\"https://moirai2.github.io/schema/daemon/input\":\"\$input\",\"https://moirai2.github.io/schema/daemon/bash\":[\"output=\\\"\$workdir/output.txt\\\"\",\"sort \$input > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}\n";
 	close(OUT);
 	testCommand("perl moirai2.pl -r '\$output' -d test/rdf.sqlite3 test/A.json 'Akira Hasegawa' test/output.txt","test/output.txt");
 	testCommand("cat test/output.txt","Akira Hasegawa");
@@ -1848,9 +1841,9 @@ sub throwJobs{
 	my $qsubopt=shift();
 	my $url=shift();
 	my $background=shift();
-	my $docker=shift();
 	my $rootdir=shift();
-	my $tmpdir=shift();
+	my $use_docker=shift();
+	my $docker_image=shift();
 	if(scalar(@{$bashFiles})==0){return;}
 	my ($fh,$path)=mkstemps("$ctrldir/bash/runXXXXXXXXXX",".sh");
 	my $dirname=basename($path,".sh");
@@ -1866,13 +1859,13 @@ sub throwJobs{
 		my ($bashFile,$stdoutFile,$stderrFile,$nodeid)=@{$files};
 		if($nodeid=~/(.+)#(.+)/){push(@ids,"#$2");}
 		else{push(@ids,$nodeid);}
-		if(defined($docker)){
+		if($use_docker){
+			if(!defined($docker_image)){$docker_image="ubuntu";}
 			print $fh "docker run \\\n";
 			print $fh "  --rm \\\n";
-			print $fh "  -u \$UID \\\n";
-			print $fh "  -v '$rootdir:/data' \\\n";
-			if($tmpdir ne "$rootdir/tmp"){print $fh "  -v '$tmpdir:/tmp' \\\n";}
-			print $fh "  $docker \\\n";
+			print $fh "  --workdir=/root \\\n";
+			print $fh "  -v '$rootdir:/root' \\\n";
+			print $fh "  $docker_image \\\n";
 			print $fh "  /bin/bash $bashFile \\\n";
 			print $fh "  > $log_file \\\n";
 			print $fh "  2> $error_file\n";
@@ -1882,7 +1875,7 @@ sub throwJobs{
 			print $fh "  2> $stderrFile\n";
 		}
 	}
-	if($use_qsub){
+	if($use_qsub||$use_docker){
 		print $fh "if [ ! -s $error_file ];then\n";
 		print $fh "rm -f $error_file\n";
 		print $fh "fi\n";
@@ -2000,14 +1993,14 @@ sub writeScript{
 	push(@outs,$outfile);
 	open(OUT,">$outfile");
 	foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){
-		$line=~s/\$tmpdir\///g;
+		$line=~s/\$workdir\///g;
 		print OUT "$line\n";
 	}
 	close(OUT);
 	if(exists($command->{$urls->{"daemon/script"}})){
 		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
 			my $path="$outdir/".$script->{$urls->{"daemon/script/name"}};
-			$path=~s/\$tmpdir\///g;
+			$path=~s/\$workdir\///g;
 			push(@outs,$path);
 			open(OUT,">$path");
 			foreach my $line(@{$script->{$urls->{"daemon/script/code"}}}){print OUT "$line\n";}
