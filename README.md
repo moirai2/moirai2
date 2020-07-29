@@ -18,7 +18,10 @@ moirai2/
 ├── moirai2.php - Used for MOIRAI2 manipulation through a browser.
 ├── moirai2.pl - Computes MOIRAI2 commands/network.
 ├── rdf.pl - Script to handle Resource Description Framework (RDF) using SQLite3 database.
-└── README.md - This readme file
+├── README.md - This readme file
+├── bin/ - Stores binary executables (automatically made when running moirai2)
+├── ctrl/ - Stores ctrl files (automatically made when running moirai2)
+└── work/ - Work directory to store output files (automatically made when running moirai2)
 ```
 
 ## Install
@@ -33,7 +36,7 @@ $ git clone https://github.com/moirai2/moirai2.git project
 
 * To sort a file using a <a href="https://moirai2.github.io/command/text/sort.json">sort.json</a>.
 * Input will be prompted, so enter a filepath and push return.
-* After computation, sorted file will be output to work/sort.XXXXXXXXX/sort.txt(XXXXXXXXX is random).
+* After computation, sorted file will be output to work/sort.XXXXXXXXX/sort.txt (XXXXXXXXX is random).
 ```shell
 $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json
 #Input: input? input.txt
@@ -41,6 +44,7 @@ $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json
 
 * A command json file used in the previous usage, specifies command lines, input, and output.
 * I have prepared basic command lines at <a href="https://moirai2.github.io/command">https://moirai2.github.io/command</a>.
+* You can create your own command json file and use from a local directory or your website.
 ```shell
 {
 "https://moirai2.github.io/schema/daemon/input":"$input",
@@ -86,8 +90,11 @@ $ perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
          :sort $input > $output
 ```
 
-* To run command lines from data store in the RDF database.
+* Strength of moirai2 is commands can run from data store in the RDF database.
+* Let's say there are information in the database.
+```shell
 
+```
 
 * The command lines don't have to be specified through json.
 ```shell
