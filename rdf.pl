@@ -54,6 +54,9 @@ sub help{
 	print "COMMAND: $program_name -d DB import < TSV\n";
 	print "COMMAND: $program_name -d DB dump > TSV\n";
 	print "COMMAND: $program_name -d DB drop\n";
+	print "COMMAND: $program_name -d DB sync\n";
+	print "COMMAND: $program_name -d DB load\n";
+	print "COMMAND: $program_name -d DB save\n";
 	print "COMMAND: $program_name -d DB -f json dump > JSON\n";
 	print "COMMAND: $program_name -d DB query QUERY > JSON\n";
 	print "COMMAND: $program_name -d DB replace FROM TO\n";
@@ -75,8 +78,6 @@ sub help{
 	print "COMMAND: $program_name -d DB rmexec\n";
 	print "COMMAND: $program_name -d DB input SUB PRE OBJECT OBJECT2 [..]\n";
 	print "COMMAND: $program_name -d DB prompt SUB PRE QUESTION DEFAULT\n";
-	print "COMMAND: $program_name -d DB importtable FILE FILE2 [..]\n";
-	print "COMMAND: $program_name -d DB exporttable FILE FILE2 [..]\n";
 	print "COMMAND: $program_name -d DB executes\n";
 	print "COMMAND: $program_name -d DB html\n";
 	print "COMMAND: $program_name -d DB history\n";
@@ -188,6 +189,9 @@ my $iswebdb=($database=~/^https?:\/\//)?1:0;
 my $command=shift(@ARGV);
 if(defined($opt_h)||defined($opt_H)||!defined($command)){help();}
 elsif(lc($command) eq "test"){test();}
+elsif(lc($command) eq "sync"){syncCommand($database,@ARGV);}
+elsif(lc($command) eq "save"){saveCommand($database,@ARGV);}
+elsif(lc($command) eq "load"){loadCommand($database,@ARGV);}
 elsif(lc($command) eq "linecount"){linecountCommand($database,@ARGV);}
 elsif(lc($command) eq "seqcount"){seqcountCommand($database,@ARGV);}
 elsif(lc($command) eq "filesize"){filesizeCommand($database,@ARGV);}
@@ -211,8 +215,6 @@ elsif(lc($command) eq "download"){downloadCommand($database,@ARGV);}
 elsif(lc($command) eq "executes"){printExecutesInJson(retrieveExecutes($database));}
 elsif(lc($command) eq "html"){printExecutesInHTML(retrieveExecutes($database));}
 elsif(lc($command) eq "ls"){lsCommand($database,$opt_f,$opt_g,$opt_r,@ARGV);}
-elsif(lc($command) eq "importtable"){importTableCommand($database,@ARGV);}
-elsif(lc($command) eq "exporttable"){exportTableCommand($database,@ARGV);}
 elsif(lc($command) eq "drop"){dropCommand($database);}
 elsif(lc($command) eq "prompt"){promptCommand($database,0,@ARGV);}
 elsif(lc($command) eq "newprompt"){promptCommand($database,1,@ARGV);}
@@ -222,6 +224,126 @@ elsif(lc($command) eq "rmexec"){rmexecCommand($database);}
 elsif(lc($command) eq "history"){historyCommand($database);}
 elsif(lc($command) eq "rm"){rmCommand($database,@ARGV);}
 elsif(lc($command) eq "network"){networkCommand($database,@ARGV);}
+############################## fileMtime ##############################
+sub fileMtime{
+	my $path=shift();
+	my @statistics=stat($path);
+	return $statistics[9];
+}
+############################## countEdge ##############################
+sub countEdge{
+	my $database=shift();
+	my $dbh=openDB($database);
+	my $query="select count(*) from edge";
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my @rows=$sth->fetchrow_array();
+	return $rows[0];
+}
+############################## syncCommand ##############################
+sub syncCommand{
+	my $database=shift();
+	my $directory=shift();
+	if(!defined($directory)){$directory="db";}
+	my @files=listFiles(".txt",-1,$directory);
+	my $dbTime=fileMtime($database);
+	my $needUpdate=0;
+	if(countEdge($database)==0){$needUpdate=1;}
+	foreach my $file(@files){
+		my $time=fileMtime($file);
+		if($dbTime<fileMtime($file)){$needUpdate=1;}
+	}
+	if($needUpdate){loadCommand($database,$directory);}
+	else{saveCommand($database,$directory);}
+}
+############################## getPredicates ##############################
+sub getPredicates{
+	my $database=shift();
+	my $dbh=openDB($database);
+	my @predicates=();
+	my $query="select distinct n.data from edge as e join node as n on e.predicate=n.id";
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	while(my @rows=$sth->fetchrow_array()){push(@predicates,$rows[0]);}
+	$sth->finish();
+	$dbh->disconnect;
+	return @predicates;
+}
+############################## mkdirs ##############################
+sub mkdirs{
+	my $path=shift();
+	my @tokens=split(/\//,$path);
+	my $path;
+	foreach my $token(@tokens){
+		if(defined($path)){$path.="/$token";}
+		else{$path=$token;}
+		mkdir($path);
+	}
+}
+############################## saveCommand ##############################
+sub saveCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
+	my $directory=shift(@arguments);
+	if(!defined($directory)){$directory="db";}
+	mkdir($directory);
+	my $inputFiles={};
+	foreach my $file(listFiles(".txt",-1,$directory)){$inputFiles->{$file}=0;}
+	my $paths={};
+	my @predicates=getPredicates($database);
+	foreach my $predicate(@predicates){
+		my $basename=$predicate;
+		my $fragment="";
+		if($basename=~/^https?\:\/\/(.+)$/){$basename=$1;}
+		if($basename=~/^(.+)(#[^#]+)$/){$basename=$1;$fragment=$2;}
+		if($basename=~/^(.+)\.json$/){$basename=$1;}
+		my $path="$directory/$basename$fragment.txt";
+		$paths->{$predicate}=$path;
+		mkdirs(dirname($path));
+		$inputFiles->{$path}=1;
+	}
+	my $linecount=0;
+	my $dbh=openDB($database);
+	foreach my $predicate(@predicates){
+		my ($writer,$file)=tempfile();
+		my $path=$paths->{$predicate};
+		my $query="select n1.data,n2.data from edge as e join node as n1 on e.subject=n1.id join node as n2 on e.object=n2.id where e.predicate=(select id from node where data=\"$predicate\")";
+		my $sth=$dbh->prepare($query);
+		$sth->execute();
+		my @predicates=();
+		while(my @rows=$sth->fetchrow_array()){
+			my $subject=$rows[0];
+			my $object=$rows[1];
+			print $writer "$subject\t$predicate\t$object\n";
+			$linecount++;
+		}
+		$sth->finish();
+		close($writer);
+		system("mv $file $path");
+	}
+	$dbh->disconnect;
+	foreach my $path(keys(%{$paths})){if($paths->{$path}==0){next;}unlink($path);}
+	if(!$opt_q){print "saved $linecount\n";}
+	return $linecount;
+}
+############################## loadCommand ##############################
+sub loadCommand{
+	my @arguments=@_;
+	my $database=shift(@arguments);
+	my $directory=shift(@arguments);
+	dropCommand($database);
+	if(!defined($directory)){$directory="db";}
+	mkdir($directory);
+	my @files=listFiles(".txt",-1,$directory);
+	my $linecount=0;
+	foreach my $file(@files){
+		my $reader=IO::File->new($file);
+		$linecount+=importDB($database,$reader);
+		close($reader);
+	}
+	if(!$opt_q){print "loaded $linecount\n";}
+	return $linecount;
+}
 ############################## linecountCommand ##############################
 sub linecountCommand{
 	my @arguments=@_;
@@ -668,35 +790,15 @@ sub downloadCommand{
 	if(scalar(@files)>1){foreach my $file(@files){print "$file\n";}}
 	else{print $files[0]."\n";}
 }
-############################## importTableCommand ##############################
-sub importTableCommand{
-	my @files=@_;
-	my $database=shift(@files);
-	my ($writer,$tmp)=tempfile(UNLINK=>1);
-	foreach my $file(@files){importTable($file,$writer);}
-	close($writer);
-	my $reader=IO::File->new($tmp);
-	my $linecount=importDB($database,$reader);
-	close($reader);
-	if(!$opt_q){print "imported $linecount\n";}
-}
-############################## exportTableCommand ##############################
-sub exportTableCommand{
-	my @files=@_;
-	my $database=shift(@files);
-	my $dbh=openDB($database);
-	my ($writer,$tmp)=tempfile(UNLINK=>1);
-	dumpDB($database,undef,$writer);
-	close($writer);
-	foreach my $file(@files){exportTable($database,$tmp,$file);}
-}
 ############################## dropCommand ##############################
 sub dropCommand{
 	my $database=shift();
+	my $count=countEdge($database);
 	my $dbh=openDB($database);
 	$dbh->do("drop table node");
 	$dbh->do("drop table edge");
 	$dbh->disconnect;
+	if(!$opt_q){print "dropped $count\n";}
 }
 ############################## rmCommand ##############################
 sub rmCommand{
@@ -2731,17 +2833,17 @@ sub getHttpContent{
 	if($res->is_success){return $res->content;}
 	elsif($res->is_error){print $res;}
 }
-############################## print_table ##############################
-sub print_table{
+############################## printTable ##############################
+sub printTable{
 	my @out=@_;
 	my $return_type=$out[0];
 	if(lc($return_type) eq "print"){$return_type=0;shift(@out);}
 	elsif(lc($return_type) eq "array"){$return_type=1;shift(@out);}
 	elsif(lc($return_type) eq "stderr"){$return_type=2;shift(@out);}
 	else{$return_type= 2;}
-	print_table_sub($return_type,"",@out);
+	printTableSub($return_type,"",@out);
 }
-sub print_table_sub{
+sub printTableSub{
 	my @out=@_;
 	my $return_type=shift(@out);
 	my $string=shift(@out);
@@ -2755,7 +2857,7 @@ sub print_table_sub{
 				elsif($return_type==1){push(@output,$string."[]");}
 				elsif($return_type==2){print STDERR $string."[]\n";}
 			}else{
-				for(my $i=0;$i<$size;$i++){push(@output,print_table_sub($return_type,$string."[$i]=>\t",$array[$i]));}
+				for(my $i=0;$i<$size;$i++){push(@output,printTableSub($return_type,$string."[$i]=>\t",$array[$i]));}
 			}
 		} elsif(ref($_)eq"HASH"){
 			my %hash=%{$_};
@@ -2766,7 +2868,7 @@ sub print_table_sub{
 				elsif($return_type==1){push( @output,$string."{}");}
 				elsif($return_type==2){print STDERR $string."{}\n";}
 			}else{
-				foreach my $key(@keys){push(@output,print_table_sub($return_type,$string."{$key}=>\t",$hash{$key}));}
+				foreach my $key(@keys){push(@output,printTableSub($return_type,$string."{$key}=>\t",$hash{$key}));}
 			}
 		}elsif($return_type==0){print "$string\"$_\"\n";}
 		elsif($return_type==1){push( @output,"$string\"$_\"");}

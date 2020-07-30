@@ -61,14 +61,13 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "Program: Executes MOIRAI2 command(s) using a local RDF SQLITE3 database.\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
-	print "Usage: $program_name -d DB URL/CMD [ASSIGN ..]\n";
+	print "Usage: $program_name [Options] URL [ASSIGN/ARGV ..]\n";
 	print "\n";
 	print "             Executes a MOIRAI2 command with user specified arguments\n";
 	print "\n";
-	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
 	print "        URL  URL or path to command json file (command URLs from https://moirai2.github.io/).\n";
-	print "        CMD  Actual command(s).\n";
 	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
+	print "       ARGV  Arguments for input/output parameters.\n";
 	print "\n";
 	print "Options: -b  Path to a bin directory (default='ROOTDIR/bin').\n";
 	print "         -c  Path to control directory (default='ROOTDIR/ctrl').\n";
@@ -82,6 +81,20 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -r  Return value (default='none').\n";
 	print "         -s  Loop second (default='no loop').\n";
 	print "         -t  Path to work directory (default='ROOTDIR/work').\n";
+	print "\n";
+	print "Usage: $program_name [Options] -i 'A->B->\$input' -o 'A->C->\$result' URL [ASSIGN/ARGV ..]\n";
+	print "\n";
+	print "        URL  URL or path to command json file (command URLs from https://moirai2.github.io/).\n";
+	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
+	print "       ARGV  Arguments for input/output parameters.\n";
+	print "\n";
+	print "Usage: $program_name [Options] -i 'A->B->\$input' -o 'A->C->\$result' exec [ASSIGN ..] << 'EOS'\n";
+	print "result=sort/\${input.basename}.txt\n";
+	print "sort \$input > \$result\n";
+	print "EOS\n";
+	print "\n";
+	print "        URL  URL or path to command json file (command URLs from https://moirai2.github.io/).\n";
+	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
 	print "\n";
 	print "Usage: $program_name -d DB -s SEC\n";
 	print "\n";
@@ -100,7 +113,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -s  Loop second (default='no loop').\n";
 	print "         -t  Use temporary directory (default='ROOTDIR/tmp').\n";
 	print "\n";
-	print "Usage: $program_name daemon\n";
+	print "Usage: $program_name [Options] daemon\n";
 	print "\n";
 	print "             Look for RDF databases and run once if filestamps are updated.\n";
 	print "\n";
@@ -109,7 +122,7 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -r  Recursive search through a directory (default='0').\n";
 	print "         -s  Loop second (default='10 sec').\n";
 	print "\n";
-	print "Usage: $program_name script URL\n";
+	print "Usage: $program_name [Options] script URL\n";
 	print "\n";
 	print "             Retrieves script files from URL and export them to a Desktop.\n";
 	print "\n";
@@ -118,7 +131,8 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print " AUTHOR: Akira Hasegawa\n";
 	print "\n";
 	if(defined($opt_H)){
-		print "Updates: 2020/02/17  Temporary directory can be /tmp to reduce I/O traffic as much as possible.\n";
+		print "Updates: 2020/07/29  Able to run user defined command using 'EOS'.\n";
+		print "         2020/02/17  Temporary directory can be /tmp to reduce I/O traffic as much as possible.\n";
 		print "         2019/07/04  \$opt_i is specified with \$opt_o, it'll check if executing commands are necessary.\n";
 		print "         2019/05/23  \$opt_r was added for return specified value.\n";
 		print "         2019/05/15  \$opt_o was added for post-insert and unused batch routine removed.\n";
@@ -152,12 +166,14 @@ if($ARGV[0] eq "daemon"){autodaemon();exit(0);}
 if($ARGV[0] eq "test"){test();exit(0);}
 if($ARGV[0] eq "script"){script($opt_o);exit(0);}
 my $rdfdb=(defined($opt_d))?$opt_d:"rdf.sqlite3";
-if($rdfdb!~/^\//){$rdfdb=Cwd::getcwd()."/$rdfdb";}
 my $rootdir=dirname($rdfdb);
 my $sleeptime=defined($opt_s)?$opt_s:10;
-my $bindir=Cwd::abs_path(defined($opt_b)?$opt_b:"$rootdir/bin");
-my $ctrldir=Cwd::abs_path(defined($opt_c)?$opt_c:"$rootdir/ctrl");
-my $workdir=Cwd::abs_path(defined($opt_w)?$opt_w:"$rootdir/work");
+my $bindir=defined($opt_b)?$opt_b:"$rootdir/bin";
+if($bindir=~/^\.\/(.+)$/){$bindir=$1;}
+my $ctrldir=defined($opt_c)?$opt_c:"$rootdir/ctrl";
+if($ctrldir=~/^\.\/(.+)$/){$ctrldir=$1;}
+my $workdir=defined($opt_w)?$opt_w:"$rootdir/work";
+if($workdir=~/^\.\/(.+)$/){$workdir=$1;}
 my $home=`echo \$HOME`;chomp($home);
 my $exportpath="$bindir:$home/bin:\$PATH";
 my $use_qsub=$opt_q;
@@ -201,15 +217,17 @@ if(defined($opt_l)){printRows($queryResults->{".keys"},$queryResults->{".hashs"}
 ##### handle commmand #####
 my @nodeids;
 my $cmdurl=(scalar(@ARGV)>0)?$ARGV[0]:undef;
+if($cmdurl eq "exec"){
+	my @commands=();
+	my ($inputs,$outputs)=handleInputOutput($insertKeys,$queryResults);
+	while(<STDIN>){chomp;push(@commands,$_);}
+	$cmdurl=createJson($rootdir,$inputs,$outputs,@commands);
+}
 if(defined($cmdurl)){
-	if($cmdurl=~/\.json$/){
-		shift(@ARGV);
-		my ($arguments,$userdefined)=handleArguments(@ARGV);
-		@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
-		if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
-	}else{
-		createCommand($queryResults,$insertKeys,@ARGV);
-	}
+	shift(@ARGV);
+	my ($arguments,$userdefined)=handleArguments(@ARGV);
+	@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
+	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 ##### process #####
 my @execurls=();
@@ -240,15 +258,11 @@ if(!defined($cmdurl)){
 	}
 }
 ############################## absolutePath ##############################
-# Return absolute path - 2012/04/07
-# This returns absolute path of a file
-# Takes care of symbolic link problem where Cwd::abs_path returns the actual file instead of fullpath
-# $path absolutePath( $path );
 sub absolutePath {
-	my $path      = shift();
-	my $directory = dirname( $path );
-	my $filename  = basename( $path );
-	return Cwd::abs_path( $directory ) . "/" . $filename;
+	my $path=shift();
+	my $directory=dirname($path);
+	my $filename=basename($path);
+	return Cwd::abs_path($directory)."/$filename";
 }
 ############################## assignCommand ##############################
 sub assignCommand{
@@ -305,6 +319,26 @@ sub autodaemon{
 		sleep($sleeptime);
 	}
 }
+############################## basenames ##############################
+sub basenames{
+	my $path=shift();
+	my $directory=dirname($path);
+	my $filename=basename($path);
+	my $basename;
+	my $suffix;
+	my $hash={};
+	if($filename=~/^(.+)\.([^\.]+)$/){$basename=$1;$suffix=$2;}
+	else{$basename=$filename;}
+	$hash->{"directory"}=$directory;
+	$hash->{"filename"}=$filename;
+	$hash->{"basename"}=$basename;
+	if(defined($suffix)){$hash->{"suffix"}=$suffix;}
+	my @dirs=split(/\//,$directory);
+	for(my $i=0;$i<scalar(@dirs);$i++){$hash->{"dir$i"}=$dirs[$i];}
+	my @bases=split(/[\W_]+/,$basename);
+	for(my $i=0;$i<scalar(@bases);$i++){$hash->{"base$i"}=$bases[$i];}
+	return $hash;
+}
 ############################## bashCommand ##############################
 sub bashCommand{
 	my $command=shift();
@@ -356,6 +390,15 @@ sub bashCommand{
 		if(ref($value)eq"ARRAY"){print OUT "$key=(\"".join("\" \"",@{$value})."\")\n";}
 		else{print OUT "$key=\"$value\"\n";}
 	}
+	my $basenames={};
+	foreach my $key(@keys){
+		my $value=$vars->{$key};
+		if(ref($value)eq"ARRAY"){next;}
+		elsif($value=~/[\.\/]/){
+			my $hash=basenames($value);
+			while(my ($k,$v)=each(%{$hash})){$basenames->{"$key.$k"}=$v;}
+		}
+	}
 	my @scriptfiles=();
 	if(exists($command->{"script"})){
 		print OUT "########## script ##########\n";
@@ -405,7 +448,13 @@ sub bashCommand{
 		}
 	}
 	print OUT "########## command ##########\n";
-	foreach my $line(@{$command->{"bashCode"}}){print OUT "$line\n";}
+	foreach my $line(@{$command->{"bashCode"}}){
+		my $temp=$line;
+		if($temp=~/\$\{.+\}/){
+			while(my ($k,$v)=each(%{$basenames})){$temp=~s/\$\{$k\}/$v/g;}
+		}
+		print OUT "$temp\n";
+	}
 	foreach my $output(@{$command->{"output"}}){
 		my $count=0;
 		if(exists($vars->{$output})&&$output ne $vars->{$output}){
@@ -799,8 +848,24 @@ sub controlUpdate{
 	$count=$1;
 	return $count;
 }
-############################## createCommand ##############################
-sub createCommand(){
+############################## createJson ##############################
+sub createJson{
+	my @commands=@_;
+	my $dir=shift(@commands);
+	my $inputs=shift(@commands);
+	my $outputs=shift(@commands);
+	my ($writer,$file)=tempfile(DIR=>$dir,UNLINK=>1,SUFFIX=>".json");
+	print $writer "{";
+	print $writer "\"".$urls->{"daemon/bash"}."\":[\"".join("\",\"",@commands)."\"]";
+	if(scalar(@{$inputs})>0){print $writer ",\"".$urls->{"daemon/input"}."\":[\"".join("\",\"",@{$inputs})."\"]";}
+	if(scalar(@{$outputs})>0){print $writer ",\"".$urls->{"daemon/output"}."\":[\"".join("\",\"",@{$outputs})."\"]";}
+	print $writer "}";
+	close($writer);
+	if($file=~/^\.\/(.+)$/){$file=$1;}
+	return $file;
+}
+############################## printKeyVal ##############################
+sub printKeyVal(){
 	my @arguments=@_;
 	my $queryResults=shift(@arguments);
 	my $insertKeys=shift(@arguments);
@@ -1093,6 +1158,24 @@ sub handleHash{
 	foreach my $input(@array){$hash->{$input}=1;}
 	return $hash;
 }
+############################## handleInputOutput ##############################
+sub handleInputOutput{
+	my $insertKeys=shift();
+	my $queryResults=shift();
+	my $inputs={};
+	my $outputs={};
+	foreach my $token(@{$queryResults->{".keys"}}){$inputs->{"\$$token"}=1;}
+	foreach my $token(@{$insertKeys}){
+		foreach my $t(@{$token}){
+			if($t!~/^\$/){next;}
+			if(exists($inputs->{$t})){next;}
+			$outputs->{$t}=1;
+		}
+	}
+	my @ins=keys(%{$inputs});
+	my @outs=keys(%{$outputs});
+	return (\@ins,\@outs);
+}
 ############################## handleKeys ##############################
 sub handleKeys{
 	my $statement=shift();
@@ -1128,13 +1211,13 @@ sub initExecute{
 	my $vars=shift();
 	if(!defined($vars)){$vars={};}
 	my $url=$command->{$urls->{"daemon/command"}};
-	$vars->{"rootdir"}=$rootdir;
+	$vars->{"rootdir"}=Cwd::abs_path($rootdir);
 	$vars->{"ctrldir"}=$ctrldir;
 	$vars->{"prgdir"}=$prgdir;
 	$vars->{"cmdurl"}=$url;
 	my $basename=basename($url,".json");
 	$vars->{"rdfdb"}=$rdfdb;
-	my $workdir=mkdtemp("$rootdir/work/$basename.XXXXXXXXXX");
+	my $workdir=mkdtemp("$workdir/$basename.XXXXXXXXXX");
 	chmod(0777,$workdir);
 	$vars->{"workdir"}=$workdir;
 	$vars->{"tmpdir"}="$workdir/tmp";

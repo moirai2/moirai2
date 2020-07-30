@@ -71,7 +71,6 @@ if($command=="insert"){
 	$path="$directory/$filename";
 	system("ln -s $url $path");
 	echo $path;
-
 //############################## download.php ##############################
 }else if($command=="download"){
 	try{
@@ -182,6 +181,8 @@ if($command=="insert"){
 	header('Content-Length:'.filesize($zipFilepath));
 	echo file_get_contents($zipFilepath);
 	unlink($zipFilepath);
+//############################## default ##############################
+}else{
 }
 //############################## ls_file ##############################
 function ls_file($path,$depth=1,$grep,$suffix,$getFile=1,$getDir=0,$detail=0,$array){

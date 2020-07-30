@@ -13,27 +13,22 @@
 			var json=JSON.parse(e.detail.text);
 			var inputs=json["https://moirai2.github.io/schema/daemon/input"];
 			var outputs=json["https://moirai2.github.io/schema/daemon/output"];
-			var outputs2=json["https://moirai2.github.io/schema/daemon/outputs"];
 			var bashs=json["https://moirai2.github.io/schema/daemon/bash"];
 			var scripts=json["https://moirai2.github.io/schema/daemon/script"];
 			if(inputs!=null&&!Array.isArray(inputs)){inputs=[inputs];}
 			if(outputs!=null&&!Array.isArray(outputs)){outputs=[outputs];}
-			if(outputs2!=null&&!Array.isArray(outputs2)){outputs2=[outputs2];}
 			if(bashs!=null&&!Array.isArray(bashs)){bashs=[bashs];}
 			if(scripts!=null&&!Array.isArray(scripts)){scripts=[scripts];}
 			if(inputs!=null){
+				var line=inputs.join(" ");
 				$("#main").append($("<b>Input</b>"));
-				$("#main").append($("<input type='textfield'>").val(inputs.join("\n")).attr("size",maxLength(inputs)));
-				$("#main").append("<br>");
-			}
-			if(outputs2!=null){
-				$("#main").append($("<b>Outputs</b>"));
-				$("#main").append($("<input type='textfield'>").val(outputs2.join("\n")).attr("size",maxLength(outputs2)));
+				$("#main").append($("<input type='textfield'>").val(line).attr("size",line.length));
 				$("#main").append("<br>");
 			}
 			if(outputs!=null){
+				var line=outputs.join(" ");
 				$("#main").append($("<b>Output</b>"));
-				$("#main").append($("<input type='textfield'>").val(outputs.join("\n")).attr("size",maxLength(outputs)));
+				$("#main").append($("<input type='textfield'>").val(line).attr("size",line.length));
 				$("#main").append("<br>");
 			}
 			if(bashs!=null){
