@@ -20,7 +20,7 @@ moirai2/
 ├── rdf.pl - Script to handle Resource Description Framework (RDF) using SQLite3 database.
 ├── README.md - This readme file
 ├── bin/ - Stores binary executables (automatically made when running moirai2)
-├── ctrl/ - Stores ctrl files (automatically made when running moirai2)
+├── ctrl/ - Stores ctrl (example, stdout and stderrr) files (automatically made when running moirai2)
 └── work/ - Work directory to store output files (automatically made when running moirai2)
 ```
 
@@ -36,7 +36,8 @@ $ git clone https://github.com/moirai2/moirai2.git project
 
 * To sort a file using a <a href="https://moirai2.github.io/command/text/sort.json">sort.json</a>.
 * Input will be prompted, so enter a filepath and push return.
-* After computation, sorted file will be output to work/sort.XXXXXXXXX/sort.txt (XXXXXXXXX is random).
+* Temporary bash shell, stdout, stderr files will be written to work/sort.XXXXXXXXX/ (XXXXXXXXX is random).
+* After computation, sorted file will be output to work/sort.XXXXXXXXX/sort.txt 
 ```shell
 $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json
 #Input: input? input.txt
@@ -385,8 +386,23 @@ rdf.pl -d DB input SUB PRE OBJECT OBJECT2 [..]
 ```shell
 rdf.pl -d DB prompt SUB PRE QUESTION DEFAULT
 ```
-* Prompt and insert database.
-
+* Prompt and new triplet to RDF database.
+* SUB->PRE->[user defined] will be inserted.
+* When [return] is typed, DEFAULT will be used instead.
+* When user typed value.
+```shell
+> rdf.pl prompt A B "What is object?" C
+What is object? something
+> rdf.pl select 
+A   B   something
+```
+* When user just hit return.
+```shell
+> rdf.pl prompt A B "What is object?" C
+What is object?
+> rdf.pl select 
+A   B   C
+```
 #### executes
 ```shell
 rdf.pl -d DB executes

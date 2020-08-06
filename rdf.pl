@@ -17,8 +17,8 @@ my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 # require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
-use vars qw($opt_b $opt_d $opt_D $opt_e $opt_f $opt_g $opt_h $opt_H $opt_l $opt_n $opt_p $opt_q $opt_r $opt_t $opt_w);
-getopts('b:d:D:e:f:g:hHl:npqr:tw:');
+use vars qw($opt_b $opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_H $opt_q $opt_r $opt_t $opt_w);
+getopts('b:d:D:f:g:G:hHqr:tw:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -78,10 +78,24 @@ sub help{
 	print "COMMAND: $program_name -d DB rmexec\n";
 	print "COMMAND: $program_name -d DB input SUB PRE OBJECT OBJECT2 [..]\n";
 	print "COMMAND: $program_name -d DB prompt SUB PRE QUESTION DEFAULT\n";
+	print "COMMAND: $program_name -d DB prompt SUB PRE QUESTION DEFAULT\n";
 	print "COMMAND: $program_name -d DB executes\n";
 	print "COMMAND: $program_name -d DB html\n";
 	print "COMMAND: $program_name -d DB history\n";
-	#print "COMMAND: $program_name -d DB table\n";
+	print "\n";
+	print "Options:\n";
+	print "     -b  bin directory (default='bin')\n";
+	print "     -d  database directory path (default='db')\n";
+	print "     -D  second database path for copying\n";
+	print "     -f  output format (json,tsv)\n";
+	print "     -g  grep text\n";
+	print "     -G  ungrep text\n";
+	print "     -h  simple help\n";
+	print "     -H  advanced help\n";
+	print "     -q  quiet mode\n";
+	print "     -r  recursive search\n";
+	print "     -t  test mode\n";
+	print "     -w  wait second\n";
 	print "\n";
 	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
 	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
@@ -89,7 +103,8 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2020/01/29  'network' function to display RDF triplets without execute triplets.\n";
+		print "UPDATED: 2020/07/30  'sync', 'load', 'save' functions added.\n";
+		print "         2020/01/29  'network' function to display RDF triplets without execute triplets.\n";
 		print "         2019/10/07  'history' function was added to review commands executed.\n";
 		print "         2019/08/27  'input', 'prompt', and 'install' added to manipulate database inputs.\n";
 		print "         2019/07/18  'drop' added to remove all data.\n";
@@ -167,7 +182,7 @@ sub test{
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 select A C B","A\tC\tB");
 	testCommand("echo C|perl rdf.pl -d test/rdf.sqlite3 insert '-' A B","inserted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 select C A B","C\tA\tB");
-	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","dropped 3");
 	testCommand("ls test/*.sqlite3|perl rdf.pl ls '-'","test/rdf.sqlite3");
 	testCommand("ls test/*.sqlite3|perl rdf.pl -d test/rdf.sqlite3 ls '-'","inserted 1");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 object ".$urls->{"system"}." ".$urls->{"system/file"}." %","test/rdf.sqlite3");
@@ -214,7 +229,7 @@ elsif(lc($command) eq "command"){commandCommand($database);}
 elsif(lc($command) eq "download"){downloadCommand($database,@ARGV);}
 elsif(lc($command) eq "executes"){printExecutesInJson(retrieveExecutes($database));}
 elsif(lc($command) eq "html"){printExecutesInHTML(retrieveExecutes($database));}
-elsif(lc($command) eq "ls"){lsCommand($database,$opt_f,$opt_g,$opt_r,@ARGV);}
+elsif(lc($command) eq "ls"){lsCommand($database,$opt_f,$opt_g,$opt_G,$opt_r,@ARGV);}
 elsif(lc($command) eq "drop"){dropCommand($database);}
 elsif(lc($command) eq "prompt"){promptCommand($database,0,@ARGV);}
 elsif(lc($command) eq "newprompt"){promptCommand($database,1,@ARGV);}
@@ -245,7 +260,7 @@ sub syncCommand{
 	my $database=shift();
 	my $directory=shift();
 	if(!defined($directory)){$directory="db";}
-	my @files=listFiles(".txt",-1,$directory);
+	my @files=listFiles(".txt",undef,-1,$directory);
 	my $dbTime=fileMtime($database);
 	my $needUpdate=0;
 	if(countEdge($database)==0){$needUpdate=1;}
@@ -288,7 +303,7 @@ sub saveCommand{
 	if(!defined($directory)){$directory="db";}
 	mkdir($directory);
 	my $inputFiles={};
-	foreach my $file(listFiles(".txt",-1,$directory)){$inputFiles->{$file}=0;}
+	foreach my $file(listFiles(".txt",undef,-1,$directory)){$inputFiles->{$file}=0;}
 	my $paths={};
 	my @predicates=getPredicates($database);
 	foreach my $predicate(@predicates){
@@ -334,7 +349,7 @@ sub loadCommand{
 	dropCommand($database);
 	if(!defined($directory)){$directory="db";}
 	mkdir($directory);
-	my @files=listFiles(".txt",-1,$directory);
+	my @files=listFiles(".txt",undef,-1,$directory);
 	my $linecount=0;
 	foreach my $file(@files){
 		my $reader=IO::File->new($file);
@@ -353,14 +368,14 @@ sub linecountCommand{
 	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
-		countLines($writer,$opt_r,$opt_g,@files);
+		countLines($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
 		my $linecount=importDB($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
-		countLines($writer,$opt_r,$opt_g,@files);
+		countLines($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 	}
 }
@@ -373,14 +388,14 @@ sub seqcountCommand{
 	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
-		countSequences($writer,$opt_r,$opt_g,@files);
+		countSequences($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
 		my $linecount=importDB($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
-		countSequences($writer,$opt_r,$opt_g,@files);
+		countSequences($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 	}
 }
@@ -393,14 +408,14 @@ sub filesizeCommand{
 	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
-		sizeFiles($writer,$opt_r,$opt_g,@files);
+		sizeFiles($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
 		my $linecount=importDB($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
-		sizeFiles($writer,$opt_r,$opt_g,@files);
+		sizeFiles($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 	}
 }
@@ -413,14 +428,14 @@ sub md5Command{
 	else{@files=@arguments;}
 	if(defined($opt_d)){
 		my ($writer,$file)=tempfile(UNLINK=>1);
-		md5Files($writer,$opt_r,$opt_g,@files);
+		md5Files($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
 		my $linecount=importDB($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
-		md5Files($writer,$opt_r,$opt_g,@files);
+		md5Files($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 	}
 }
@@ -497,11 +512,11 @@ sub insertCommand{
 		if($subject eq "?"){$subject=undef;}
 		if($predicate eq "?"){$predicate=undef;}
 		if($object eq "?"){$object=undef;}
-		if(!defined($subject)){if(!defined($opt_q)){print STDERR "ERROR: Please specify subject.\n";}exit(1);}
+		if(!defined($subject)){if(!$opt_q){print STDERR "ERROR: Please specify subject.\n";}exit(1);}
 		elsif($subject eq "-"){$subject="";while(<STDIN>){$subject.=$_;}chomp($subject);}
-		if(!defined($predicate)){if(!defined($opt_q)){print STDERR "ERROR: Please specify predicate.\n";}exit(1);}
+		if(!defined($predicate)){if(!$opt_q){print STDERR "ERROR: Please specify predicate.\n";}exit(1);}
 		elsif($predicate eq "-"){$predicate="";while(<STDIN>){$predicate.=$_;}chomp($predicate);}
-		if(!defined($object)){if(!defined($opt_q)){print STDERR "ERROR: Please specify object.\n";}exit(1);}
+		if(!defined($object)){if(!$opt_q){print STDERR "ERROR: Please specify object.\n";}exit(1);}
 		elsif($object eq "-"){$object="";while(<STDIN>){$object.=$_;}chomp($object);}
 		my $json={$subject=>{$predicate=>$object}};
 		my $linecount=($iswebdb)?webInsert($database,$json):dbInsert($database,$subject,$predicate,$object);
@@ -779,7 +794,7 @@ sub promptCommand{
 	my $database=shift(@arguments);
 	my $newprompt=shift(@arguments);
 	my $answer=promptInsert($database,$newprompt,@arguments);
-	if(defined($opt_p)){print "$answer\n";}
+	if($opt_q){print "$answer\n";}
 }
 ############################## downloadCommand ##############################
 sub downloadCommand{
@@ -1117,59 +1132,6 @@ sub promptYesNo{
 	elsif(defined($default)){return $default;}
 	else{return 0;}
 }
-############################## exportTable ##############################
-sub exportTable{
-	my $database=shift();
-	my $tmp=shift();
-	my $file=shift();
-	my $rows={};
-	my $columns={};
-	my $reader=IO::File->new($tmp);
-	while(<$reader>){
-		chomp;
-		if($_=~/\t$file#row(\d+)\t(.+)$/){$rows->{$2}=$1;}
-		elsif($_=~/\t$file#column(\d+)\t(.+)$/){$columns->{$2}=$1;}
-	}
-	close($reader);
-	my $labels={};
-	my $reader=IO::File->new($tmp);
-	my $hash={};
-	while(<$reader>){
-		chomp;
-		my ($subject,$predicate,$object)=split(/\t/);
-		if(!exists($labels->{$predicate})){$labels->{$predicate}=scalar(keys(%{$labels}));}
-		my $index=$labels->{$predicate};
-		if(!exists($hash->{$subject})){$hash->{$subject}=[];}
-		$hash->{$subject}->[$index]=$object;
-	}
-	close($reader);
-	my @columns=sort{$labels->{$a}<=>$labels->{$b}}keys(%{$labels});
-	foreach my $column(@columns){if($column=~/^$file#(.+)$/){$column=$1;}}
-	print join("\t",@columns)."\n";
-}
-############################## importTable ##############################
-sub importTable{
-	my $file=shift();
-	my $writer=shift();
-	my $reader=IO::File->new($file);
-	print $writer $urls->{"system"}."\t".$urls->{"system/file"}."\t$file\n";
-	my $line=<$reader>;
-	chomp($line);
-	my @labels=split(/\t/,$line);
-	for(my $i=0;$i<scalar(@labels);$i++){print $writer "$file\t$file#column$i\t".$labels[$i]."\n";}
-	for(my $index=0;<$reader>;$index++){
-		chomp;
-		my @tokens=split(/\t/);
-		my $key=$tokens[0];
-		print $writer "$file\t$file#row$index\t$key\n";
-		for(my $i=0;$i<scalar(@tokens);$i++){
-			my $label=$labels[$i];
-			my $token=$tokens[$i];
-			print $writer "$key\t$label\t$token\n";
-		}
-	}
-	close($reader);
-}
 ############################## basenames ##############################
 sub basenames{
 	my $file=$_[0];
@@ -1199,11 +1161,12 @@ sub lsCommand{
 	my $database=shift(@args);
 	my $format=shift(@args);
 	my $filegrep=shift(@args);
+	my $fileungrep=shift(@args);
 	my $recursive=shift(@args);
 	my @files=();
 	if(scalar(@args)==0){push(@args,".");}
 	if(scalar(@args)==1&&$args[0]eq"-"){while(<STDIN>){chomp;push(@files,$_);}}
-	else{@files=listFiles($filegrep,$recursive,@args);}
+	else{@files=listFiles($filegrep,$fileungrep,$recursive,@args);}
 	my @lines=();
 	if(defined($format)){
 		foreach my $file(@files){
@@ -1489,7 +1452,7 @@ sub dbDelete{
 	if($subject ne "" && $subject ne "%"){push(@wheres,createWhere("subject",$subject));}
 	if($predicate ne "" && $predicate ne "%"){push(@wheres,createWhere("predicate",$predicate));}
 	if($object ne "" && $object ne "%"){push(@wheres,createWhere("object",$object));}
-	if(scalar(@wheres)==0){if(!defined($opt_q)){print STDERR "ERROR: Please specify SUB PRE OBJ\n";}exit(1);}
+	if(scalar(@wheres)==0){if(!$opt_q){print STDERR "ERROR: Please specify SUB PRE OBJ\n";}exit(1);}
 	$query.=" where".join(" and ",@wheres);
 	my $dbh=openDB($database);
 	$dbh->begin_work;
@@ -2911,6 +2874,7 @@ sub getTime{
 sub listFiles{
 	my @inputdirectories=@_;
 	my $filegrep=shift(@inputdirectories);
+	my $fileungrep=shift(@inputdirectories);
 	my $recursivesearch=shift(@inputdirectories);
 	my @inputfiles=();
 	foreach my $inputdirectory (@inputdirectories){
@@ -2922,12 +2886,14 @@ sub listFiles{
 			if($file eq ".."){next;}
 			if($file eq ""){next;}
 			if($file=~/^\./){next;}
-			$file=($inputdirectory eq ".")?$file:"$inputdirectory/$file";
-			if(-d $file){
-				if($recursivesearch!=0){push(@inputfiles,listFiles($filegrep,$recursivesearch-1,$file));}
+			my $path=($inputdirectory eq ".")?$file:"$inputdirectory/$file";
+			if(-d $path){
+				if($recursivesearch!=0){push(@inputfiles,listFiles($filegrep,$fileungrep,$recursivesearch-1,$path));}
 				next;
-			}elsif($file!~/$filegrep/){next;}
-			push(@inputfiles,$file);
+			}
+			if(defined($filegrep)&&$file!~/$filegrep/){next;}
+			if(defined($fileungrep)&&$file=~/$fileungrep/){next;}
+			push(@inputfiles,$path);
 		}
 		closedir(DIR);
 	}
@@ -2938,9 +2904,9 @@ sub countLines{
 	my @files=@_;
 	my $writer=shift(@files);
 	my $filegrep=shift(@files);
+	my $fileungrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
+	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
 		my $count=0;
 		if($file=~/\.bam$/){$count=`samtools view $file|wc -l`;}
 		elsif($file=~/\.sam$/){$count=`samtools view $file|wc -l`;}
@@ -2956,9 +2922,9 @@ sub sizeFiles{
 	my @files=@_;
 	my $writer=shift(@files);
 	my $filegrep=shift(@files);
+	my $fileungrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
+	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
 		my $size=-s $file;
 		print $writer "$file\t".$urls->{"file/filesize"}."\t$size\n";
 	}
@@ -2968,9 +2934,9 @@ sub md5Files{
 	my @files=@_;
 	my $writer=shift(@files);
 	my $filegrep=shift(@files);
+	my $fileungrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
+	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
 		my $md5=`which md5`;
 		my $md5sum=`which md5sum`;
 		if(defined($md5)){
@@ -2993,9 +2959,9 @@ sub countSequences{
 	my @files=@_;
 	my $writer=shift(@files);
 	my $filegrep=shift(@files);
+	my $fileungrep=shift(@files);
 	my $recursivesearch=shift(@files);
-	if(!defined($recursivesearch)){$recursivesearch=-1;}
-	foreach my $file(listFiles($filegrep,$recursivesearch,@files)){
+	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
 		my $count=0;
 		if($file=~/\.bam$/){
 			my $paired=`samtools view $file|head -n 1|perl -ne 'if(\$_&2){print \"0\";}else{print \"1\";}'`;
