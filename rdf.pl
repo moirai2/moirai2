@@ -65,7 +65,6 @@ sub help{
 	print "COMMAND: $program_name -d DB newnode > NODE\n";
 	print "COMMAND: $program_name -d DB reindex\n";
 	print "COMMAND: $program_name -d DB download URL\n";
-	print "COMMAND: $program_name -d DB -f json command < JSON\n";
 	print "COMMAND: $program_name -d DB merge DB2 DB3\n";
 	print "COMMAND: $program_name linecount DIR/FILE > TSV\n";
 	print "COMMAND: $program_name seqcount DIR/FILE > TSV\n";
@@ -82,6 +81,8 @@ sub help{
 	print "COMMAND: $program_name -d DB executes\n";
 	print "COMMAND: $program_name -d DB html\n";
 	print "COMMAND: $program_name -d DB history\n";
+	print "COMMAND: $program_name -d DB submit < TSV\n";
+	print "COMMAND: $program_name -d DB -f JSON submit < JSON\n";
 	print "\n";
 	print "Options:\n";
 	print "     -b  bin directory (default='bin')\n";
@@ -103,7 +104,8 @@ sub help{
 	print "\n";
 	print " AUTHOR: Akira Hasegawa\n";
 	if(defined($opt_H)){
-		print "UPDATED: 2020/07/30  'sync', 'load', 'save' functions added.\n";
+		print "UPDATED: 2020/10/02  'submit' function added.\n";
+		print "         2020/07/30  'sync', 'load', 'save' functions added.\n";
 		print "         2020/01/29  'network' function to display RDF triplets without execute triplets.\n";
 		print "         2019/10/07  'history' function was added to review commands executed.\n";
 		print "         2019/08/27  'input', 'prompt', and 'install' added to manipulate database inputs.\n";
@@ -190,10 +192,18 @@ sub test{
 	testCommand("echo \"D\tE\tF\"|perl rdf.pl -d test/B.sqlite3 insert","inserted 1");
 	testCommand("perl rdf.pl -d test/C.sqlite3 merge test/A.sqlite3 test/B.sqlite3","inserted 2");
 	testCommand("perl rdf.pl -d test/C.sqlite3 select","A\tB\tC\nD\tE\tF");
-	unlink("test/rdf.sqlite3");
 	unlink("test/A.sqlite3");
 	unlink("test/B.sqlite3");
 	unlink("test/C.sqlite3");
+	testCommand("echo \"".$urls->{"daemon/command"}."\thttps://moirai2.github.io/command/text/grep.json\npattern\tA\ninput\tinput.txt\"|perl rdf.pl -d test/rdf.sqlite3 submit","inserted 4");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","dropped 5");
+	open(OUT,">test/submit.json");
+	print OUT "{\"".$urls->{"daemon/command"}."\":\"https://moirai2.github.io/command/text/grep.json\",\"pattern\":\"A\",\"input\":\"input.txt\"}";
+	close(OUT);
+	testCommand("cat test/submit.json|perl rdf.pl -d test/rdf.sqlite3 -f json submit","inserted 4");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","dropped 4");
+	unlink("test/submit.json");
+	unlink("test/rdf.sqlite3");
 	rmdir("test");
 }
 ############################## MAIN ##############################
@@ -204,6 +214,7 @@ my $iswebdb=($database=~/^https?:\/\//)?1:0;
 my $command=shift(@ARGV);
 if(defined($opt_h)||defined($opt_H)||!defined($command)){help();}
 elsif(lc($command) eq "test"){test();}
+elsif(lc($command) eq "submit"){submitCommand($database,@ARGV);}
 elsif(lc($command) eq "sync"){syncCommand($database,@ARGV);}
 elsif(lc($command) eq "save"){saveCommand($database,@ARGV);}
 elsif(lc($command) eq "load"){loadCommand($database,@ARGV);}
@@ -225,7 +236,6 @@ elsif(lc($command) eq "mv"){mvCommand($database,@ARGV);}
 elsif(lc($command) eq "merge"){mergeCommand($database,@ARGV);}
 elsif(lc($command) eq "copy"){copyCommand($database,@ARGV);}
 elsif(lc($command) eq "newnode"){print newNode($database)."\n";}
-elsif(lc($command) eq "command"){commandCommand($database);}
 elsif(lc($command) eq "download"){downloadCommand($database,@ARGV);}
 elsif(lc($command) eq "executes"){printExecutesInJson(retrieveExecutes($database));}
 elsif(lc($command) eq "html"){printExecutesInHTML(retrieveExecutes($database));}
@@ -337,7 +347,7 @@ sub saveCommand{
 		system("mv $file $path");
 	}
 	$dbh->disconnect;
-	foreach my $path(keys(%{$paths})){if($paths->{$path}==0){next;}unlink($path);}
+	foreach my $path(keys(%{$inputFiles})){if($inputFiles->{$path}==1){next;}unlink($path);}
 	if(!$opt_q){print "saved $linecount\n";}
 	return $linecount;
 }
@@ -523,7 +533,7 @@ sub insertCommand{
 		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif($opt_f eq "tsv"){
 		my $reader=IO::File->new("-");
-		my $linecount=($iswebdb)?webInsert($database,readJson($reader)):importDB($database,$reader);
+		my $linecount=($iswebdb)?webInsert($database,tsvToJson($reader)):importDB($database,$reader);
 		close($reader);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif($opt_f eq "json"){
@@ -658,8 +668,9 @@ sub deleteCommand{
 	}elsif($opt_f eq "tsv"){
 		if($iswebdb){
 			my $reader=IO::File->new("-");
-			webDelete($database,readJson($reader));
+			my $json=readJson($reader);
 			close($reader);
+			webDelete($database,$json);
 		}else{
 			my $dbh=openDB($database);
 			my $reader=IO::File->new("-");
@@ -780,13 +791,16 @@ sub copyCommand{
 	close($reader);
 	if(!$opt_q){print "copied $linecount\n";}
 }
-############################## commandCommand ##############################
-sub commandCommand{
+############################## submitCommand ##############################
+sub submitCommand{
 	my $database=shift();
 	my $reader=IO::File->new("-");
-	my $json=readJson($reader);
-	close($reader);
-	print executeComand($database,$json)."\n";
+	my $json=($opt_f eq "json")?readJson($reader):readHash($reader);
+	if($iswebdb){webExecute($database,$json);}
+	else{
+		my $linecount=submitExecute($database,$json);
+		if(!$opt_q){print "inserted $linecount\n";}
+	}
 }
 ############################## promptCommand ##############################
 sub promptCommand{
@@ -897,7 +911,7 @@ sub getJson{
 	my $directory=dirname($url);
 	$content=~s/\$this/$url/g;
 	$content=~s/\$\{this:directory\}/$directory/g;
-	return json_decode($content);
+	return jsonDecode($content);
 }
 ############################## getFileContent ##############################
 sub getFileContent{
@@ -920,8 +934,8 @@ sub getHttpContent{
 	if($res->is_success){return $res->content;}
 	elsif($res->is_error){print $res;}
 }
-############################## json_decode ##############################
-sub json_decode{
+############################## jsonDecode ##############################
+sub jsonDecode{
 	my $text=shift();
 	my @temp=split(//,$text);
 	my $chars=\@temp;
@@ -1109,7 +1123,7 @@ sub installSoftware{
 	foreach my $install(@installs){
 		my $node=newNode($database);
 		my $url="https://moirai2.github.io/software/install/$install.json";
-		my $command="perl moirai2.pl -d $database	-o '$install->".$urls->{"software/bin"}."->\$path' $url $bindir";
+		my $command="perl moirai2.pl -d $database　-o '$install->".$urls->{"software/bin"}."->\$path' $url $bindir";
 		system($command);
 	}
 }
@@ -1293,24 +1307,27 @@ sub retrieveExecutes{
 	}
 	return $hashtable
 }
-############################## executeComand ##############################
-sub executeComand{
+############################## submitExecute ##############################
+sub submitExecute{
 	my $database=shift();
 	my $json=shift();
+	if(!exists($urls->{"daemon/command"})){
+		print STDERR $urls->{"daemon/command"}." not found in input\n";
+		return 0;
+	}
+	my $url=$json->{$urls->{"daemon/command"}};
+	delete($json->{$urls->{"daemon/command"}});
 	my $nodeid=newNode($database);
 	my $rdf={};
-	my $url=$json->{"url"};
 	$rdf->{$urls->{"daemon"}}={};
 	$rdf->{$urls->{"daemon"}}->{$urls->{"daemon/execute"}}=$nodeid;
 	$rdf->{$nodeid}={};
 	$rdf->{$nodeid}->{$urls->{"daemon/command"}}=$url;
 	foreach my $key(keys(%{$json})){
-		if($key eq "url"){next;}
 		my $value=$json->{$key};
 		$rdf->{$nodeid}->{"$url#$key"}=$value;
 	}
-	jsonInsert($database,$rdf);
-	return $nodeid;
+	return jsonInsert($database,$rdf);
 }
 ############################## mkdirDownload ##############################
 sub mkdirDownload{my $path="download/".time();mkdir("download");mkdir($path);return $path}
@@ -1651,6 +1668,7 @@ sub assembleJson{
 	my $reader=shift();
 	my $template=shift();
 	my $json=readJson($reader);
+	close($reader);
 	my ($writer,$file)=tempfile(UNLINK=>1);
 	assembleJsonResults($json,$template,$writer);
 	close($writer);
@@ -1767,6 +1785,18 @@ sub mergeDB{
 	}
 	return $linecount;
 }
+############################## readHash ##############################
+sub readHash{
+	my $reader=shift();
+	my $hash={};
+	while(<$reader>){
+		chomp;
+		s/\r//g;
+		my ($key,$value)=split(/\t/);
+		$hash->{$key}=$value;
+	}
+	return $hash;
+}
 ############################## tsvToJson ##############################
 sub tsvToJson{
 	my $reader=shift();
@@ -1792,6 +1822,18 @@ sub readText{
 	while(<IN>){s/\r//g;$text.=$_;}
 	close(IN);
 	return $text;
+}
+############################## readTSV ##############################
+sub readTSV{
+	my $reader=shift();
+	my $array=[];
+	while(<$reader>){
+		chomp;
+		s/\r//g;
+		my @tokens=split(/\t/);
+		push(@{$array},\@tokens)
+	}
+	return $array;
 }
 ############################## readJson ##############################
 sub readJson{
@@ -2784,7 +2826,7 @@ sub newNode{
 	$dbh->disconnect;
 	return $name;
 }
-############################## HTTP ##############################
+############################## getHttpContent ##############################
 sub getHttpContent{
 	my $url=shift();
 	my $username=shift();

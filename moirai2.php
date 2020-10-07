@@ -1,57 +1,71 @@
 <?php
 $command=$_GET["command"];
-//############################## insert.php ##############################
-if($command=="insert"){
-	$db=filterDatabasePath($_POST["db"]);
-	$json=tmpjson($_POST["data"]);
+//############################## submit.php ##############################
+if($command=="submit"){
+	foreach($_POST as $key=>$value){$params[$key]=$value;}
+	$db=filterDatabasePath($params["rdfdb"]);
 	if($db==null)exit(1);
+	unset($params["rdfdb"]);
+	$ctrldir=basename($db);
+	if(preg_match("/^([^\.]+)\./",$ctrldir,$matches)){$ctrldir=$matches[1];}
+	$tsv=tmpData($params);
+	chmod($tsv,0777);
+	if($tsv==null)exit(1);
+	if(!file_exists($ctrldir)){mkdir($ctrldir);chmod($ctrldir,0777);}
+	if(!file_exists("$ctrldir/submit")){mkdir("$ctrldir/submit");chmod("$ctrldir/submit",0777);}
+	rename($tsv,"$ctrldir/submit/".basename($tsv).".txt");
+//############################## insert.php ##############################
+}else if($command=="insert"){
+	$db=filterDatabasePath($_POST["rdfdb"]);
+	if($db==null)exit(1);
+	$json=tmpData($_POST["data"]);
 	if($json==null)exit(1);
 	system("perl rdf.pl -d $db -f json insert < $json");
 	unlink($json);
 //############################## delete.php ##############################
 }else if($command=="delete"){
-	$db=filterDatabasePath($_POST["db"]);
+	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
-	$json=tmpjson($_POST["data"]);
+	$json=tmpData($_POST["data"]);
 	if($json==null)exit(1);
 	system("perl rdf.pl -d $db -f json delete < $json");
 	unlink($json);
 	//############################## update.php ##############################
 }else if($command=="update"){
-	$db=filterDatabasePath($_POST["db"]);
+	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
-	$json=tmpjson($_POST["data"]);
+	$json=tmpData($_POST["data"]);
 	if($json==null)exit(1);
 	system("perl rdf.pl -d $db -f json update < $json");
 	unlink($json);
 //############################## newnode.php ##############################
 }else if($command=="newnode"){
-	$db=filterDatabasePath($_POST["db"]);
+	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
 	$id=trim(`perl rdf.pl -d $db newnode`);
 	echo $id;
 //############################## command.php ##############################
 }else if($command=="command"){
-	$db=filterDatabasePath($_POST["db"]);
-	$json=tmpjson($_POST["data"]);
+	$db=filterDatabasePath($_POST["rdfdb"]);
+	$json=tmpData($_POST["data"]);
 	if($db==null)exit(1);
 	$id=trim(`perl rdf.pl -d $db -f json command < $json`);
 	unlink($json);
 	echo $id;
 //############################## select.php ##############################
 }else if($command=="select"){
-	$db=filterDatabasePath($_POST["db"]);
+	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
-	$json=tmpjson($_POST["query"]);
+	$json=tmpData($_POST["query"]);
 	if($json==null)exit(1);
 	exec("perl rdf.pl -d $db select < $json",$array);
 	unlink($json);
 	foreach($array as $line){echo "$line\n";}
 //############################## query.php ##############################
 }else if($command=="query"){
-	$db=filterDatabasePath($_POST["db"]);
+	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
-	$json=tmpjson($_POST["query"]);
+	$json=tmpData($_POST["query"]);
 	if($json==null)exit(1);
 	exec("perl rdf.pl -d $db query < $json",$array);
 	unlink($json);
@@ -243,14 +257,19 @@ function list_file($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
 }
 //############################## filterDatabasePath ##############################
 function filterDatabasePath($db){return preg_replace("/[^a-zA-Z0-9\.\_]+/","",$db);}
-//############################## tmpjson ##############################
-function tmpjson($data){
+//############################## tmpData ##############################
+function tmpData($data){
 	if($data==null)return;
 	if(!file_exists("tmp")){mkdir("tmp");chmod("tmp",0777);}
 	$filepath=tempnam("tmp","tmp");
-	#$filepath=tempnam(sys_get_temp_dir(),"");
 	$writer=fopen($filepath,"w");
-	fwrite($writer,$data);
+	if(is_array($data)){
+		foreach($data as $key=>$value){
+			fwrite($writer,"$key\t$value\n");
+		}
+	}else{
+		fwrite($writer,$data);
+	}
 	fclose($writer);
 	return $filepath;
 }

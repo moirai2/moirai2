@@ -19,9 +19,11 @@ moirai2/
 ├── moirai2.pl - Computes MOIRAI2 commands/network.
 ├── rdf.pl - Script to handle Resource Description Framework (RDF) using SQLite3 database.
 ├── README.md - This readme file
-├── bin/ - Stores binary executables (automatically made when running moirai2)
-├── ctrl/ - Stores ctrl (example, stdout and stderrr) files (automatically made when running moirai2)
-└── work/ - Work directory to store output files (automatically made when running moirai2)
+├── bin/ - Stores binary executables (automatically made when running moirai2.pl)
+├── ctrl/ - Stores ctrl (example, stdout and stderrr) files (automatically made when running moirai2.pl)
+├── db/ - directory to load/save/sync rdf triplet (automatically made when running moirai2.pl)
+├── rdf.sqlite3 - default RDF sqlite3 database (automatically made when running moirai2.pl)
+└── work/ - Work directory to store output files (automatically made when running moirai2.pl)
 ```
 
 ## Install
@@ -115,6 +117,38 @@ https://moirai2.github.io/command
 
 ### rdf.pl
 
+#### sync
+```shell
+rdf.pl -d DB sync
+```
+* Convert db directory/files <=> RDF sqlite3 DB.
+* This command checks timestamp of sqlite3 database file and text triplet files under db directory.
+* If timestamp of sqlite3 database is latest, it'll proceed "save" command.
+* If time stamp of triplet files under db directory are the latest, it'll proceed "load" command.
+
+#### save
+```shell
+rdf.pl -d DB save
+```
+* Convert RDF sqlite3 DB => db directory/files.
+* All the triplets stored in sqlite3 database will be written to triplet files.
+* Triplet files are grouped by predicate.
+* For example:
+  * Triplet "A->B->C" will be stored under db/B.txt file.
+  * Triplet "A->http://moirai2.gsc.riken.jp/akira/B->C" will be stored under db/moirai2.gsc.rien.jp/akira/B.txt file.
+  * Triplet "A->B#C->D" will be stored under db/B.txt file.
+* Unused triplet files will be removed.
+
+#### load
+```shell
+rdf.pl -d DB load
+```
+* Convert db directory/files => RDF sqlite3 DB.
+* All the files under db directory will be loaded.
+* The triplet files doesn't have to be grouped by the predicate.
+* Filename can be anything.
+* Sqlite3 database will be reset and reloaded with triplet under db directory files.
+
 #### select
 ```shell
 rdf.pl -d DB select SUB PRE OBJ
@@ -186,7 +220,7 @@ C D
 ```shell
 rdf.pl -d DB network > TSV
 ```
-* Print all RDF other than system RDF.
+* Print all triplets excluding moirai2 system.
 ```shell
 A->B->C
 A->B->D
