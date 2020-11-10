@@ -81,6 +81,8 @@ sub help{
 	print "COMMAND: $program_name -d DB executes\n";
 	print "COMMAND: $program_name -d DB html\n";
 	print "COMMAND: $program_name -d DB history\n";
+	print "COMMAND: $program_name -d DB exec < TSV\n";
+	print "COMMAND: $program_name -d DB -f JSON exec < JSON\n";
 	print "COMMAND: $program_name -d DB submit < TSV\n";
 	print "COMMAND: $program_name -d DB -f JSON submit < JSON\n";
 	print "\n";
@@ -195,26 +197,31 @@ sub test{
 	unlink("test/A.sqlite3");
 	unlink("test/B.sqlite3");
 	unlink("test/C.sqlite3");
-	testCommand("echo \"".$urls->{"daemon/command"}."\thttps://moirai2.github.io/command/text/grep.json\npattern\tA\ninput\tinput.txt\"|perl rdf.pl -d test/rdf.sqlite3 submit","inserted 4");
+	testCommand("echo \"".$urls->{"daemon/command"}."\thttps://moirai2.github.io/command/text/grep.json\npattern\tA\ninput\tinput.txt\"|perl rdf.pl -d test/rdf.sqlite3 exec","inserted 4");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","dropped 5");
-	open(OUT,">test/submit.json");
+	open(OUT,">test/exec.json");
 	print OUT "{\"".$urls->{"daemon/command"}."\":\"https://moirai2.github.io/command/text/grep.json\",\"pattern\":\"A\",\"input\":\"input.txt\"}";
 	close(OUT);
-	testCommand("cat test/submit.json|perl rdf.pl -d test/rdf.sqlite3 -f json submit","inserted 4");
+	testCommand("cat test/exec.json|perl rdf.pl -d test/rdf.sqlite3 -f json exec","inserted 4");
 	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","dropped 4");
-	unlink("test/submit.json");
+	testCommand("echo \"A\tB\nC\tD\n\"|perl rdf.pl -d test/rdf.sqlite3 submit","inserted 2");
+	testCommand("echo \"{'E':'F','G':'H'}\n\"|perl rdf.pl -d test/rdf.sqlite3 -f json submit","inserted 2");
+	testCommand("perl rdf.pl -d test/rdf.sqlite3 drop","dropped 4");
+	unlink("test/exec.json");
 	unlink("test/rdf.sqlite3");
 	rmdir("test");
 }
 ############################## MAIN ##############################
 my $database=$opt_d;
 if(!defined($database)){$database="rdf.sqlite3";}
+my $basename=getBasename($database);
 my $bindir=defined($opt_b)?$opt_b:Cwd::getcwd()."/bin";
 my $iswebdb=($database=~/^https?:\/\//)?1:0;
 my $command=shift(@ARGV);
 if(defined($opt_h)||defined($opt_H)||!defined($command)){help();}
 elsif(lc($command) eq "test"){test();}
 elsif(lc($command) eq "submit"){submitCommand($database,@ARGV);}
+elsif(lc($command) eq "exec"){execCommand($database,@ARGV);}
 elsif(lc($command) eq "sync"){syncCommand($database,@ARGV);}
 elsif(lc($command) eq "save"){saveCommand($database,@ARGV);}
 elsif(lc($command) eq "load"){loadCommand($database,@ARGV);}
@@ -280,6 +287,13 @@ sub syncCommand{
 	}
 	if($needUpdate){loadCommand($database,$directory);}
 	else{saveCommand($database,$directory);}
+}
+############################## getBasename ##############################
+sub getBasename{
+	my $path=shift();
+	my $basename=basename($path);
+	if($basename=~/^([^\.]+)\./){$basename=$1;}
+	return $basename;
 }
 ############################## getPredicates ##############################
 sub getPredicates{
@@ -796,11 +810,38 @@ sub submitCommand{
 	my $database=shift();
 	my $reader=IO::File->new("-");
 	my $json=($opt_f eq "json")?readJson($reader):readHash($reader);
-	if($iswebdb){webExecute($database,$json);}
-	else{
-		my $linecount=submitExecute($database,$json);
-		if(!$opt_q){print "inserted $linecount\n";}
+	if($iswebdb){return;}
+	my $rdf={};
+	my $nodeid=newJob($database);
+	$rdf->{$nodeid}={};
+	foreach my $key(keys(%{$json})){$rdf->{$nodeid}->{$key}=$json->{$key};}
+	my $linecount=jsonInsert($database,$rdf);
+	if(!$opt_q){print "inserted $linecount\n";}
+}
+############################## execCommand ##############################
+sub execCommand{
+	my $database=shift();
+	my $reader=IO::File->new("-");
+	my $json=($opt_f eq "json")?readJson($reader):readHash($reader);
+	if($iswebdb){return;}
+	if(!exists($urls->{"daemon/command"})){
+		print STDERR $urls->{"daemon/command"}." not found in input\n";
+		return;
 	}
+	my $url=$json->{$urls->{"daemon/command"}};
+	delete($json->{$urls->{"daemon/command"}});
+	my $nodeid=newNode($database);
+	my $rdf={};
+	$rdf->{$urls->{"daemon"}}={};
+	$rdf->{$urls->{"daemon"}}->{$urls->{"daemon/execute"}}=$nodeid;
+	$rdf->{$nodeid}={};
+	$rdf->{$nodeid}->{$urls->{"daemon/command"}}=$url;
+	foreach my $key(keys(%{$json})){
+		my $value=$json->{$key};
+		$rdf->{$nodeid}->{"$url#$key"}=$value;
+	}
+	my $linecount=jsonInsert($database,$rdf);
+	if(!$opt_q){print "inserted $linecount\n";}
 }
 ############################## promptCommand ##############################
 sub promptCommand{
@@ -1307,28 +1348,6 @@ sub retrieveExecutes{
 	}
 	return $hashtable
 }
-############################## submitExecute ##############################
-sub submitExecute{
-	my $database=shift();
-	my $json=shift();
-	if(!exists($urls->{"daemon/command"})){
-		print STDERR $urls->{"daemon/command"}." not found in input\n";
-		return 0;
-	}
-	my $url=$json->{$urls->{"daemon/command"}};
-	delete($json->{$urls->{"daemon/command"}});
-	my $nodeid=newNode($database);
-	my $rdf={};
-	$rdf->{$urls->{"daemon"}}={};
-	$rdf->{$urls->{"daemon"}}->{$urls->{"daemon/execute"}}=$nodeid;
-	$rdf->{$nodeid}={};
-	$rdf->{$nodeid}->{$urls->{"daemon/command"}}=$url;
-	foreach my $key(keys(%{$json})){
-		my $value=$json->{$key};
-		$rdf->{$nodeid}->{"$url#$key"}=$value;
-	}
-	return jsonInsert($database,$rdf);
-}
 ############################## mkdirDownload ##############################
 sub mkdirDownload{my $path="download/".time();mkdir("download");mkdir($path);return $path}
 ############################## getObject ##############################
@@ -1793,7 +1812,7 @@ sub readHash{
 		chomp;
 		s/\r//g;
 		my ($key,$value)=split(/\t/);
-		$hash->{$key}=$value;
+		if($key ne ""){$hash->{$key}=$value;}
 	}
 	return $hash;
 }
@@ -2816,11 +2835,28 @@ sub getEdges{
 	while(my @rows=$sth->fetchrow_array()){push(@{$array},\@rows);}
 	return $array;
 }
+############################## newNode ##############################
 sub newNode{
 	my $database=shift();
 	my $dbh=openDB($database);
 	my $id=nodeMax($dbh)+1;
 	my $name="$database#node$id";
+	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
+	$sth->execute($id,$name);
+	$dbh->disconnect;
+	return $name;
+}
+############################## newJob ##############################
+sub newJob{
+	my $database=shift();
+	my $dbh=openDB($database);
+	my $name="$basename".getDatetime();
+	my $id=data2id($dbh,$name);
+	while(defined($id)){
+		$name="$basename".getDatetime();
+		$id=data2id($dbh,$name);
+		sleep(1);
+	}
 	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
 	$sth->execute($id,$name);
 	$dbh->disconnect;

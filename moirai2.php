@@ -12,16 +12,17 @@ if($command=="submit"){
 	chmod($tsv,0777);
 	if($tsv==null)exit(1);
 	if(!file_exists($ctrldir)){mkdir($ctrldir);chmod($ctrldir,0777);}
-	if(!file_exists("$ctrldir/submit")){mkdir("$ctrldir/submit");chmod("$ctrldir/submit",0777);}
-	rename($tsv,"$ctrldir/submit/".basename($tsv).".txt");
+	if(!file_exists("$ctrldir/ctrl")){mkdir("$ctrldir/ctrl");chmod("$ctrldir/ctrl",0777);}
+	if(!file_exists("$ctrldir/ctrl/submit")){mkdir("$ctrldir/ctrl/submit");chmod("$ctrldir/ctrl/submit",0777);}
+	rename($tsv,"$ctrldir/ctrl/submit/".basename($tsv).".txt");
 //############################## insert.php ##############################
 }else if($command=="insert"){
 	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
-	$json=tmpData($_POST["data"]);
-	if($json==null)exit(1);
-	system("perl rdf.pl -d $db -f json insert < $json");
-	unlink($json);
+	$file=tmpData($_POST["data"]);
+	if($file==null)exit(1);
+	system("perl rdf.pl -q -d $db -f json insert < $file");
+	unlink($file);
 //############################## delete.php ##############################
 }else if($command=="delete"){
 	$db=filterDatabasePath($_POST["rdfdb"]);

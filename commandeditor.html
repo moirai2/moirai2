@@ -4,8 +4,7 @@
 	<meta http-equiv="content-type" content="text/html;charset=UTF-8"/>
 	<style type="text/css">h1{text-align:center}table{text-align:center;border-collapse:collapse;}th{border: 1px solid black}td{border: 1px solid black}</style>
 	<script src="js/jquery/jquery-3.4.1.min.js"></script>
-	<script src="js/ah3q/DnDController.js"></script>
-	<script src="js/ah3q/Utility.js"></script>
+	<script src="js/ah3q/moirai2.js"></script>
 	<script>
 	var sysvars=["cmdurl","rdfdb","execid","cwd","tmpdir","filebsnm","bashfile","stdoutfile","stderrfile","deletefile","insertfile","completedfile","localdb"];
 	var variables=[];
@@ -15,7 +14,7 @@
 	var flagInput;
 	var scripts=[];
 	var inputEdit=true;
-	var controller=new DnDController("main").whenFileIsDroppedRead().whenUrlIsDroppedRead();
+	var controller=new moirai2().initialize("main").whenFileIsDroppedRead().whenUrlIsDroppedRead();
 	function convert(){
 		$("#input").on("click",function(){inputEdit=true;});
 		var code=$("#input").val().trim();

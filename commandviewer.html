@@ -4,10 +4,9 @@
 	<meta http-equiv="content-type" content="text/html;charset=UTF-8"/>
 	<style type="text/css">h1{text-align:center}table{text-align:center;border-collapse:collapse;}th{border: 1px solid black}td{border: 1px solid black}</style>
 	<script src="js/jquery/jquery-3.4.1.min.js"></script>
-	<script src="js/ah3q/DnDController.js"></script>
-	<script src="js/ah3q/Utility.js"></script>
+	<script src="js/ah3q/moirai2.js"></script>
 	<script>
-	var controller=new DnDController("main").whenFileIsDroppedRead().whenUrlIsDroppedRead();
+	var controller=new moirai2().initialize("main").whenFileIsDroppedRead().whenUrlIsDroppedRead();
 	$(document).ready(function(){
 		controller.addEventListener("textWasRead",function(e){
 			var json=JSON.parse(e.detail.text);

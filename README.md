@@ -20,13 +20,18 @@ moirai2/
 ├── rdf.pl - Script to handle Resource Description Framework (RDF) using SQLite3 database.
 ├── README.md - This readme file
 ├── bin/ - Stores binary executables (automatically made when running moirai2.pl)
-├── ctrl/ - Stores ctrl (example, stdout and stderrr) files (automatically made when running moirai2.pl)
-├── db/ - directory to load/save/sync rdf triplet (automatically made when running moirai2.pl)
-├── rdf.sqlite3 - default RDF sqlite3 database (automatically made when running moirai2.pl)
-└── work/ - Work directory to store output files (automatically made when running moirai2.pl)
 ```
 
 ## Install
+
+Use git command to clone project to your computer.
+git is preinstalled in MacOS.
+For Linux, you can install through 'apt-get'?
+You can check the git by checking its version.
+
+```
+git --version
+```
 
 To install moirai2 to a directory named "project".
 

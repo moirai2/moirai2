@@ -16,8 +16,8 @@ my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
 ############################## OPTIONS ##############################
-use vars qw($opt_c $opt_d $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_O $opt_p $opt_q $opt_r $opt_s);
-getopts('c:d:hHi:lm:o:O:p:qr:s:');
+use vars qw($opt_c $opt_d $opt_g $opt_G $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_p $opt_q $opt_r $opt_s);
+getopts('c:d:g:G:hHi:lm:o:pqr:s:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -53,54 +53,135 @@ $urls->{"daemon/seqcount"}="https://moirai2.github.io/schema/daemon/seqcount";
 $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
 $urls->{"daemon/docker"}="https://moirai2.github.io/schema/daemon/docker";
 ############################## HELP ##############################
-my $commands={};
-if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
-if(scalar(@ARGV)==0&&$ARGV[0]eq"test"){test();exit(0);}
-if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
+sub help{
 	print "\n";
-	print "Program: Executes MOIRAI2 command(s) using a local RDF SQLITE3 database.\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Program: Handles MOIRAI2 command with SQLITE3 database.\n";
+	print "Version: 2020/11/05\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
-	print "Usage: $program_name [Options] URL [ASSIGN/ARGV ..]\n";
+	print "Usage: perl $program_name [Options] COMMAND\n";
 	print "\n";
-	print "             Executes a MOIRAI2 command with user specified arguments\n";
+	print "Commands: daemon   Run daemon\n";
+	print "          file     Checks file information\n";
+	print "          ls       list directories/files\n";
+	print "          command  Execute from user specified command instead of a command json\n";
+	print "          loop     Loop check and execution indefinitely \n";
+	print "          script   Retrieve scripts and bash files from a command json\n";
+	print "          test     For development purpose\n";
 	print "\n";
-	print "        URL  URL or path to command json file (command URLs from https://moirai2.github.io/).\n";
+	print "############################## Default Usage ##############################\n";
+	print "\n";
+	print "Program: Executes MOIRAI2 command of a spcified URL json.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] JSON [ASSIGN/ARGV ..]\n";
+	print "\n";
+	print "       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).\n";
 	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
 	print "       ARGV  Arguments for input/output parameters.\n";
 	print "\n";
 	print "Options: -c  Use container for execution [docker,udocker].\n";
 	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
+	print "         -h  Show help message.\n";
+	print "         -H  Show update history.\n";
 	print "         -i  Input query for select in '\$sub->\$pred->\$obj' format.\n";
 	print "         -l  Show STDERR and STDOUT logs.\n";
 	print "         -m  Max number of jobs to throw (default='5').\n";
 	print "         -o  Output query for insert in '\$sub->\$pred->\$obj' format.\n";
-	print "         -p  Print return value.\n";
+	print "         -p  Prompt input parameter(s) to user.\n";
 	print "         -q  Use qsub for throwing jobs.\n";
-	print "         -r  Repeat mode.\n";
+	print "         -r  Print return value.\n";
 	print "         -s  Loop second (default='10').\n";
 	print "\n";
-	print "Usage: $program_name [Options] -i 'A->B->\$input' -o 'A->C->\$result' URL [ASSIGN/ARGV ..]\n";
+	print "############################## Examples ##############################\n";
 	print "\n";
-	print "        URL  URL or path to command json file (command URLs from https://moirai2.github.io/).\n";
-	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
-	print "       ARGV  Arguments for input/output parameters.\n";
+	print "1) perl $program_name https://moirai2.github.io/command/text/sort.json\n";
+	print " - Executes a sort command with user prompt for input.\n";
 	print "\n";
-	print "Usage: $program_name [Options] -i 'A->B->\$input' -o 'A->C->\$result' exec [ASSIGN ..] << 'EOS'\n";
-	print "result=sort/\${input.basename}.txt\n";
-	print "sort \$input > \$result\n";
-	print "EOS\n";
+	print "2) perl $program_name -h https://moirai2.github.io/command/text/sort.json\n";
+	print " - Shows information of a command.\n";
 	print "\n";
-	print "        URL  URL or path to command json file (command URLs from https://moirai2.github.io/).\n";
-	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
+	print "3) perl $program_name https://moirai2.github.io/command/text/sort.json input.txt\n";
+	print " - Executes a sort command by specifying input with arguments.\n";
+	print " - Output will be sotred in rdf/work.XXXXXXXXX/ directory.\n";
 	print "\n";
-	print "Usage: $program_name -d DB -r -s SEC\n";
+	print "4) perl $program_name https://moirai2.github.io/command/text/sort.json input.txt output.txt\n";
+	print " - Executes a sort command by specifying input and output with arguments.\n";
+	print " - By specifying output path in argument, output will be saved at specified path.\n";
 	print "\n";
-	print "             Check for Moirai2 commands every X seconds and execute.\n";
+	print "5) perl $program_name https://moirai2.github.io/command/text/sort.json '\$input=input.txt' '\$output=output.txt'\n";
+	print " - Executes a sort command by specifying input and output with variables.\n";
+	print " - Input and output variables can be assigned with '='.\n";
 	print "\n";
-	print "         DB  SQLite3 database in RDF format (default='./rdf.sqlite3').\n";
-	print "        SEC  Loop search every specified seconds (default='run only once').\n";
-	print "    ROOTDIR  A working directory where RDF database is located.\n";
+	print "6) perl $program_name -i 'A->#input->\$input' -o 'A->#output->\$output' https://moirai2.github.io/command/text/sort.json\n";
+	print " - Executes a sort command with a RDF database and updates.\n";
+	print "\n";
+	if(defined($opt_H)){
+		print "############################## Updates ##############################\n";
+		print "\n";
+		print "2020/11/06  Updated help and daemon functionality.\n";
+		print "2020/11/05  Added 'ls' function.\n";
+		print "2020/10/09  Repeat functionality removed.\n";
+		print "2020/07/29  Able to run user defined command using 'EOS'.\n";
+		print "2020/02/17  Temporary directory can be /tmp to reduce I/O traffic as much as possible.\n";
+		print "2019/07/04  \$opt_i is specified with \$opt_o, it'll check if executing commands are necessary.\n";
+		print "2019/05/23  \$opt_r was added for return specified value.\n";
+		print "2019/05/15  \$opt_o was added for post-insert and unused batch routine removed.\n";
+		print "2019/05/05  Set up 'output' for a command mode.\n";
+		print "2019/04/08  'inputs' to pass inputs as variable array.\n";
+		print "2019/04/04  Changed name of this program from 'daemon.pl' to 'moirai2.pl'.\n";
+		print "2019/04/03  Array output functionality and command line functionality added.\n";
+		print "2019/03/04  Stores run options in the SQLite database.\n";
+		print "2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
+		print "2019/01/21  'mv' functionality added to move temporary files to designated locations.\n";
+		print "2019/01/18  'process' functionality added to execute command from a control json.\n";
+		print "2019/01/17  Subdivide RDF database, revised execute flag to have instance in between.\n";
+		print "2018/12/12  'singlethread' added for NCBI/BLAST query.\n";
+		print "2018/12/10  Remove unnecessary files when completed.\n";
+		print "2018/12/04  Added 'maxjob' and 'nolog' to speed up processed.\n";
+		print "2018/11/27  Separating loading, selection, and execution and added 'maxjob'.\n";
+		print "2018/11/19  Improving database updates by speed.\n";
+		print "2018/11/17  Making daemon faster by collecting individual database accesses.\n";
+		print "2018/11/16  Making updating/importing database faster by using improved rdf.pl.\n";
+		print "2018/11/09  Added import function where user udpate databse through specified file(s).\n";
+		print "2018/09/14  Changed to a ticket system.\n";
+		print "2018/02/06  Added qsub functionality.\n";
+		print "2018/02/01  Created to throw jobs registered in RDF SQLite3 database.\n";
+		print "\n";
+	}
+	exit(0);
+}
+sub help_file{
+	print "\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Program: Check and store file information to the database.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] file\n";
+	print "\n";
+	print "Options: -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
+	print "         -i  Input query for select in '\$sub->\$pred->\$obj' format.\n";
+	print "         -o  Output query for insert in '\$sub->\$pred->\$obj' format.\n";
+	print "\n";
+	print "Variables:\n";
+	print "  \$linecount   Print line count of a file (Can take care of gzip and bzip2).\n";
+	print "  \$seqcount    Print sequence count of a FASTA/FASTQ files.\n";
+	print "  \$filesize    Print size of a file.\n";
+	print "  \$md5         Print MD5 of a file.\n";
+	print "  \$timestamp   Print time stamp of a file.\n";
+	print "  \$owner       Print owner of a file.\n";
+	print "  \$group       Print group of a file.\n";
+	print "  \$permission  Print permission of a file.\n";
+	print "\n";
+}
+sub help_loop{
+	print "\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Program: Check for Moirai2 commands every X seconds and execute.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] loop\n";
 	print "\n";
 	print "Options: -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
 	print "         -l  Show STDERR and STDOUT logs.\n";
@@ -108,74 +189,117 @@ if(defined($opt_h)||defined($opt_H)||(scalar(@ARGV)==0&&!defined($opt_d ))){
 	print "         -q  Use qsub for throwing jobs(default='bash').\n";
 	print "         -s  Loop second (default='no loop').\n";
 	print "\n";
-	print "Usage: $program_name [Options] daemon\n";
+}
+sub help_command{
 	print "\n";
-	print "             Look for RDF databases and run once if filestamps are updated.\n";
+	print "############################## HELP ##############################\n";
 	print "\n";
-	print "Options: -d  Directory to search for (default='.').\n";
-	print "         -l  Log directory (default='./log').\n";
+	print "Usage: perl $program_name [Options] command [ASSIGN ..] << EOS\n";
+	print "COMMAND ..\n";
+	print "COMMAND2 ..\n";
+	print "EOS\n";
+	print "\n";
+	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
+	print "    COMMAND  Bash command lines to execute.\n";
+	print "        EOS  Assign command lines with Unix's heredoc.\n";
+	print "\n";
+	print "Options: -c  Use container for execution [docker,udocker].\n";
+	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
+	print "         -i  Input query for select in '\$sub->\$pred->\$obj' format.\n";
+	print "         -l  Show STDERR and STDOUT logs.\n";
+	print "         -m  Max number of jobs to throw (default='5').\n";
+	print "         -o  Output query for insert in '\$sub->\$pred->\$obj' format.\n";
+	print "         -q  Use qsub for throwing jobs.\n";
+	print "         -r  Print return value.\n";
+	print "         -s  Loop second (default='10').\n";	print "\n";
+	print "\n";
+	print "############################## Examples ##############################\n";
+	print "\n";
+	print "1) perl $program_name -i 'A->#input->\$input' -o 'A->#output->\$output' command << EOS\n";
+	print "output=sort/\${input.basename}.txt\n";
+	print "sort \$input > \$output\n";
+	print "EOS\n";
+	print " - Creates directory and store information to database.\n";
+	print "\n";
+}
+sub help_script{
+	print "\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Program: Retrieves script and bash files from URL and save them to a directory.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] script JSON\n";
+	print "\n";
+	print "       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).\n";
+	print "\n";
+	print "Options: -o  Output directory (default='.').\n";
+	print "\n";
+}
+sub help_daemon{
+	print "\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Program: Look for Other moirai2 databases under directory and run database once if it is updated.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] daemon DIR\n";
+	print "\n";
+	print "       DIR  Directories to look for.  Default is current directory.\n";
+	print "\n";
+	print "Options: -o  Log output directory (default='log').\n";
 	print "         -r  Recursive search through a directory (default='0').\n";
 	print "         -s  Loop second (default='10 sec').\n";
 	print "\n";
-	print "Usage: $program_name [Options] script URL\n";
+}
+sub help_ls{
 	print "\n";
-	print "             Retrieves script files from URL and export them to a Desktop.\n";
+	print "############################## HELP ##############################\n";
 	print "\n";
-	print "Options: -O  Output directory (default='.').\n";
+	print "Program: List files/directories and store path information to DB.\n";
 	print "\n";
-	print " AUTHOR: Akira Hasegawa\n";
+	print "Usage: perl $program_name [Options] ls DIR DIR2 ..\n";
 	print "\n";
-	if(defined($opt_H)){
-		print "Updates: 2020/07/29  Able to run user defined command using 'EOS'.\n";
-		print "         2020/02/17  Temporary directory can be /tmp to reduce I/O traffic as much as possible.\n";
-		print "         2019/07/04  \$opt_i is specified with \$opt_o, it'll check if executing commands are necessary.\n";
-		print "         2019/05/23  \$opt_p was added for return specified value.\n";
-		print "         2019/05/15  \$opt_o was added for post-insert and unused batch routine removed.\n";
-		print "         2019/05/05  Set up 'output' for a command mode.\n";
-		print "         2019/04/08  'inputs' to pass inputs as variable array.\n";
-		print "         2019/04/04  Changed name of this program from 'daemon.pl' to 'moirai2.pl'.\n";
-		print "         2019/04/03  Array output functionality and command line functionality added.\n";
-		print "         2019/03/04  Stores run options in the SQLite database.\n";
-		print "         2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
-		print "         2019/01/21  'mv' functionality added to move temporary files to designated locations.\n";
-		print "         2019/01/18  'process' functionality added to execute command from a control json.\n";
-		print "         2019/01/17  Subdivide RDF database, revised execute flag to have instance in between.\n";
-		print "         2018/12/12  'singlethread' added for NCBI/BLAST query.\n";
-		print "         2018/12/10  Remove unnecessary files when completed.\n";
-		print "         2018/12/04  Added 'maxjob' and 'nolog' to speed up processed.\n";
-		print "         2018/11/27  Separating loading, selection, and execution and added 'maxjob'.\n";
-		print "         2018/11/19  Improving database updates by speed.\n";
-		print "         2018/11/17  Making daemon faster by collecting individual database accesses.\n";
-		print "         2018/11/16  Making updating/importing database faster by using improved rdf.pl.\n";
-		print "         2018/11/09  Added import function where user udpate databse through specified file(s).\n";
-		print "         2018/09/14  Changed to a ticket system.\n";
-		print "         2018/02/06  Added qsub functionality.\n";
-		print "         2018/02/01  Created to throw jobs registered in RDF SQLite3 database.\n";
-		print "\n";
-	}
-	exit(0);
+	print "        DIR  Directory to search for (if not specified, DIR='.').\n";
+	print "\n";
+	print "Options: -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
+	print "         -g  grep specific string\n";
+	print "         -G  ungrep specific string\n";
+	print "         -o  Output query for insert in '\$sub->\$pred->\$obj' format.\n";
+	print "         -r  Recursive search (default=0)\n";
+	print "\n";
+	print "Variables: \$path, \$directory, \$filename, \$basename, \$suffix, \$dirX (X=0~9), \$baseX (X=0~9)\n";	
+	print "\n";
+	print "Example: perl $program_name -d DB -r 0 -g GREP -G UNREP -o '\$basename->#id->\$path' ls DIR DIR2 ..\n";
+	print "\n";
 }
 ############################## MAIN ##############################
+my $commands={};
+if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
+if(scalar(@ARGV)>0&&$ARGV[0]eq"daemon"&&defined($opt_h)){help_daemon();exit(0);}
+if(scalar(@ARGV)>0&&$ARGV[0]eq"ls"&&defined($opt_h)){help_ls();exit(0);}
+if(scalar(@ARGV)>0&&$ARGV[0]eq"script"&&defined($opt_h)){help_script();exit(0);}
+if(scalar(@ARGV)>0&&$ARGV[0]eq"command"&&defined($opt_h)){help_command();exit(0);}
+if(scalar(@ARGV)>0&&$ARGV[0]eq"loop"&&defined($opt_h)){help_loop();exit(0);}
+if(scalar(@ARGV)>0&&$ARGV[0]eq"file"&&defined($opt_h)){help_file();exit(0);}
+if(defined($opt_h)||defined($opt_H)||scalar(@ARGV)==0){help();}
 my $newExecuteQuery="select distinct n.data from edge as e1 inner join edge as e2 on e1.object=e2.subject inner join node as n on e2.object=n.id where e1.predicate=(select id from node where data=\"".$urls->{"daemon/execute"}."\") and e2.predicate=(select id from node where data=\"".$urls->{"daemon/command"}."\")";
-if($ARGV[0] eq "daemon"){autodaemon();exit(0);}
-if($ARGV[0] eq "test"){test();exit(0);}
-if($ARGV[0] eq "script"){script($opt_o);exit(0);}
 my $rdfdb=(defined($opt_d))?$opt_d:"rdf.sqlite3";
 my $rootdir=absolutePath(dirname($rdfdb));
-my $basename=getBasename($rdfdb);
-my $sleeptime=defined($opt_s)?$opt_s:10;
+my $basename=basename($rdfdb,".sqlite3");
 my $bindir="$rootdir/bin";
-my $ctrldir="$rootdir/$basename";
-my $workdir="$rootdir/work";
+my $workdir="$rootdir/$basename";
+my $ctrldir="$rootdir/$basename/ctrl";
 my $home=`echo \$HOME`;chomp($home);
 my $exportpath="$bindir:$home/bin:\$PATH";
-my $use_qsub=$opt_q;
-my $showlog=$opt_l;
-my $use_container=$opt_c;
+my $sleeptime=defined($opt_s)?$opt_s:10;
 my $maxjob=defined($opt_m)?$opt_m:5;
+my $loopMode=(scalar(@ARGV)>0&&$ARGV[0]eq"loop")?1:0;
+if($ARGV[0] eq "daemon"){shift(@ARGV);daemon(@ARGV);exit(0);}
+if($ARGV[0] eq "test"){shift(@ARGV);test();exit(0);}
+if($ARGV[0] eq "ls"){shift(@ARGV);ls(@ARGV);exit(0);}
+if($ARGV[0] eq "script"){shift(@ARGV);script(@ARGV);exit(0);}
 mkdir($bindir);chmod(0777,$bindir);
-mkdir($ctrldir);chmod(0777,$ctrldir);
 mkdir($workdir);chmod(0777,$workdir);
+mkdir($ctrldir);chmod(0777,$ctrldir);
 mkdir("$ctrldir/bash");chmod(0777,"$ctrldir/bash");
 mkdir("$ctrldir/insert");chmod(0777,"$ctrldir/insert");
 mkdir("$ctrldir/delete");chmod(0777,"$ctrldir/delete");
@@ -194,6 +318,7 @@ if(getNumberOfJobsRunning()>0){
 	chomp($prompt);
 	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){system("rm $ctrldir/bash/*");}
 }
+if($ARGV[0] eq "automate"){automate($rdfdb);exit(0);}
 ##### handle inputs and outputs #####
 my $queryResults={};
 my $userdefined={};
@@ -210,7 +335,7 @@ if(defined($opt_l)){printRows($queryResults->{".keys"},$queryResults->{".hashs"}
 ##### handle commmand #####
 my @nodeids;
 my $cmdurl=(scalar(@ARGV)>0)?$ARGV[0]:undef;
-if($cmdurl eq "exec"){
+if($cmdurl eq "command"){
 	my @commands=();
 	my ($inputs,$outputs)=handleInputOutput($insertKeys,$queryResults);
 	while(<STDIN>){chomp;push(@commands,$_);}
@@ -220,7 +345,7 @@ if(defined($cmdurl)){
 	shift(@ARGV);
 	my ($arguments,$userdefined)=handleArguments(@ARGV);
 	@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
-	if(defined($opt_p)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_p);}
+	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 }
 ##### process #####
 my @execurls=();
@@ -235,11 +360,13 @@ while(true){
 	my $jobs_running=getNumberOfJobsRunning();
 	if($jobs_running<$maxjob){mainProcess(\@execurls,$commands,$executes,$maxjob-$jobs_running);}
 	$jobs_running=getNumberOfJobsRunning();
-	if($opt_r){sleep($sleeptime);}
+	if($loopMode){sleep($sleeptime);}
 	elsif(getNumberOfJobsRemaining($executes)==0&&$jobs_running==0){controlProcess($rdfdb,$executes);last;}
 	else{sleep($sleeptime);}
 }
-if(!defined($cmdurl)){
+if($loopMode){
+	# loop mode
+}elsif(!defined($cmdurl)){
 	# command URL not defined
 }elsif(defined($opt_o)){
 	# Output are defined, so don't print return
@@ -250,13 +377,6 @@ if(!defined($cmdurl)){
 		chomp($result);
 		print "$result\n";
 	}
-}
-############################## getBasename ##############################
-sub getBasename{
-	my $path=shift();
-	my $basename=basename($path);
-	if($basename=~/^([^\.]+)\./){$basename=$1;}
-	return $basename;
 }
 ############################## absolutePath ##############################
 sub absolutePath {
@@ -280,20 +400,27 @@ sub assignCommand{
 	foreach my $input(@inputs){
 		if(exists($userdefined->{$input})){next;}
 		if(exists($keys->{$input})){$userdefined->{$input}="\$$input";next;}
-		promtCommandInput($command,$userdefined,$input);
+		if(!defined($opt_p)&&exists($command->{"default"}->{$input})){$userdefined->{$input}=$command->{"default"}->{$input};}
+		else{promtCommandInput($command,$userdefined,$input);}
 	}
 }
-############################## autodaemon ##############################
-sub autodaemon{
+############################## daemon ##############################
+sub daemon{
+	my @directories=@_;
+	if(scalar(@directories)==0){push(@directories,".");}
 	my $sleeptime=defined($opt_s)?$opt_s:10;
-	my $logdir=defined($opt_l)?$opt_l:"log";
+	my $logdir=defined($opt_o)?$opt_o:"log";
 	my $databases={};
+	my $stderrs={};
+	my $stdouts={};
+	my $logs={};
 	my $directory=defined($opt_d)?$opt_d:".";
 	my $md5cmd=(`which md5`)?"md5":"md5sum";
 	while(1){
-		foreach my $file(listFiles("sqlite3",$directory)){if(!exists($databases->{$file})){$databases->{$file}=0;}}
+		foreach my $file(listFiles("sqlite3",@directories)){if(!exists($databases->{$file})){$databases->{$file}=0;}}
 		while(my($database,$timestamp)=each(%{$databases})){
-			my $basename=basename($database);
+			my $dirname=dirname($database);
+			my $basename=basename($database,".sqlite3");
 			if(!(-e "$logdir/$basename")){mkdirs("$logdir/$basename");}
 			my @stats=stat($database);
 			my $modtime=$stats[9];
@@ -305,22 +432,56 @@ sub autodaemon{
 				if($md4 ne $md5){$timestamp=0;}
 				else{$databases->{$database}=$modtime;next;}
 			}
-			if($modtime>$timestamp){
-				if(-e "$logdir/$basename.lock"){next;}
-				my $command="perl moirai2.pl -d $database";
-				if(defined($opt_q)){$command.=" -q"}
-				if(defined($opt_m)){$command.=" -m $opt_m"}
-				my $time=time();
-				my $datetime=getDate("",$time).getTime("",$time);
-				mkdirs("$logdir/$basename");
-				$command.=">$logdir/$basename/$datetime.stdout";
-				$command.=" 2>$logdir/$basename/$datetime.stderr";
-				$command="$md5cmd<$database>$logdir/$basename.lock;$command;$md5cmd<$database>$logdir/$basename.unlock";
-				system($command);
-				$databases->{$database}=$modtime;
-			}
+			if(-e "$logdir/$basename.lock"){next;}
+			elsif(scalar(listFiles(".txt","$dirname/$basename/ctrl/completed"))>0){}
+			elsif(scalar(listFiles(".txt","$dirname/$basename/ctrl/delete"))>0){}
+			elsif(scalar(listFiles(".txt","$dirname/$basename/ctrl/insert"))>0){}
+			elsif(scalar(listFiles(".txt","$dirname/$basename/ctrl/submit"))>0){}
+			elsif(scalar(listFiles(".txt","$dirname/$basename/ctrl/update"))>0){}
+			elsif($modtime<=$timestamp){next;}
+			my $command="perl moirai2.pl -d $database";
+			if(defined($opt_q)){$command.=" -q"}
+			if(defined($opt_m)){$command.=" -m $opt_m"}
+			$command.=" automate";
+			my $time=time();
+			my $datetime=getDate("",$time).getTime("",$time);
+			mkdirs("$logdir/$basename");
+			if(!exists($stdouts->{$database})){$stdouts->{$database}="$logdir/$basename/$datetime.stdout";}
+			my $stdout=$stdouts->{$database};
+			if(!exists($stderrs->{$database})){$stderrs->{$database}="$logdir/$basename/$datetime.stderr";}
+			my $stderr=$stderrs->{$database};
+			$command.=">>$stdout 2>>$stderr";
+			my $shell="$logdir/$basename/daemon.sh";
+			open(OUT,">$shell");
+			print OUT "$md5cmd<$database>$logdir/$basename.lock\n";
+			print OUT "sleep 10\n";
+			print OUT "touch $database\n";
+			print OUT "$md5cmd<$database>$logdir/$basename.unlock\n";
+			close(OUT);
+			$command="bash $shell &";
+			system($command);
+			$databases->{$database}=$modtime;
 		}
 		sleep($sleeptime);
+	}
+}
+############################## ls ##############################
+sub ls{
+	my @directories=@_;
+	if(scalar(@directories)==0){push(@directories,".");}
+	my @files=listFilesRecursively($opt_g,$opt_G,$opt_r,@directories);
+	if(!defined($opt_o)){$opt_o="\$path";}
+	foreach my $file(@files){
+		my $line=$opt_o;
+		my $hash=basenames($file);
+		$hash=fileStats($file,$line,$hash);
+		$line=~s/\\t/\t/g;
+		$line=~s/\\n/\n/g;
+		while(my($key,$val)=each(%{$hash})){
+			$line=~s/\$\{$key\}/$val/g;
+			$line=~s/\$$key/$val/g;
+		}
+		print "$line\n";
 	}
 }
 ############################## basenames ##############################
@@ -333,11 +494,13 @@ sub basenames{
 	my $hash={};
 	if($filename=~/^(.+)\.([^\.]+)$/){$basename=$1;$suffix=$2;}
 	else{$basename=$filename;}
+	$hash->{"path"}="$directory/$filename";
 	$hash->{"directory"}=$directory;
 	$hash->{"filename"}=$filename;
 	$hash->{"basename"}=$basename;
 	if(defined($suffix)){$hash->{"suffix"}=$suffix;}
 	my @dirs=split(/\//,$directory);
+	if($dirs[0] eq ""){shift(@dirs);}
 	for(my $i=0;$i<scalar(@dirs);$i++){$hash->{"dir$i"}=$dirs[$i];}
 	my @bases=split(/[\W_]+/,$basename);
 	for(my $i=0;$i<scalar(@bases);$i++){$hash->{"base$i"}=$bases[$i];}
@@ -349,7 +512,7 @@ sub bashCommand{
 	my $vars=shift();
 	my $bashFiles=shift();
 	my $nodeid=$vars->{"nodeid"};
-	my $dirname=$vars->{"dirname"};
+	my $prjname=$vars->{"prjname"};
 	my $url=$command->{$urls->{"daemon/command"}};
 	my $workdir="$rootdir/".$vars->{"workdir"};
 	my $bashfile="$workdir/".$vars->{"bashfile"};
@@ -359,15 +522,15 @@ sub bashCommand{
 	my $deletefile="$workdir/".$vars->{"deletefile"};
 	my $updatefile="$workdir/".$vars->{"updatefile"};
 	my $completedfile="$workdir/".$vars->{"completedfile"};
-	if(defined($use_container)){
+	if(defined($opt_c)){
 		$vars->{"rootdir"}="/root";
 		$vars->{"prgdir"}="/root";
-		$vars->{"ctrldir"}="/root/$basename";
+		$vars->{"ctrldir"}="/root/$basename/ctrl";
 	}
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
 	print OUT "########## system ##########\n";
-	my @systemvars=("cmdurl","dirname","rdfdb","nodeid","ctrldir","prgdir","rootdir","tmpdir","workdir");
+	my @systemvars=("cmdurl","prjname","rdfdb","nodeid","ctrldir","prgdir","rootdir","tmpdir","workdir");
 	my @unusedvars=();
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
 	my @outputvars=(@{$command->{"output"}});
@@ -383,6 +546,7 @@ sub bashCommand{
 		if($break){next;}
 		push(@keys,$key);
 	}
+	print OUT "cd \$rootdir\n";
 	if(scalar(@keys)>0){print OUT "########## variables ##########\n";}
 	foreach my $key(@keys){
 		my $value=$vars->{$key};
@@ -409,10 +573,9 @@ sub bashCommand{
 		}
 	}
 	print OUT "########## open tmpdir ##########\n";
-	print OUT "mkdir -p /tmp/\$dirname\n";
-	print OUT "ln -s /tmp/\$dirname \$rootdir/\$workdir/tmp\n";
+	print OUT "mkdir -p /tmp/\$prjname\n";
+	print OUT "ln -s /tmp/\$prjname \$rootdir/\$workdir/tmp\n";
 	print OUT "########## initialize ##########\n";
-	print OUT "cd \$rootdir\n";
 	print OUT "cat<<EOF>>\$workdir/\$insertfile\n";
 	my $inputs=$command->{"inputs"};
 	print OUT "\$nodeid\t".$urls->{"daemon/command"}."\t\$cmdurl\n";
@@ -617,21 +780,21 @@ sub bashCommand{
 	}
 	print OUT "########## close tmpdir ##########\n";
 	print OUT "rm \$workdir/tmp\n";
-	print OUT "if [ -z \"\$(ls -A /tmp/\$dirname)\" ]; then\n";
-  	print OUT "rmdir /tmp/\$dirname\n";
+	print OUT "if [ -z \"\$(ls -A /tmp/\$prjname)\" ]; then\n";
+  	print OUT "rmdir /tmp/\$prjname\n";
 	print OUT "else\n";
-	print OUT "mv /tmp/\$dirname \$workdir/tmp\n";
+	print OUT "mv /tmp/\$prjname \$workdir/tmp\n";
 	print OUT "fi\n";
 	print OUT "########## completed ##########\n";
 	my $importcount=0;
 	my $nodename=$nodeid;
 	$nodename=~s/[^A-za-z0-9]/_/g;
 	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$workdir/$importfile \$ctrldir/insert/$nodename.import\n";$importcount++;}
-	print OUT "mv \$workdir/\$completedfile \$ctrldir/completed/\$dirname.sh\n";
+	print OUT "mv \$workdir/\$completedfile \$ctrldir/completed/\$prjname.sh\n";
 	close(OUT);
 	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$updatefile,$bashfile,\@scriptfiles,$ctrldir,$workdir);
 	if(exists($vars->{"bashfile"})){
-		if(defined($use_container)){push(@{$bashFiles},[$vars->{"workdir"}."/".$vars->{"bashfile"},$vars->{"workdir"}."/".$vars->{"stdoutfile"},$vars->{"workdir"}."/".$vars->{"stderrfile"},$nodeid]);}
+		if(defined($opt_c)){push(@{$bashFiles},[$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"bashfile"},$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"stdoutfile"},$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"stderrfile"},$nodeid]);}
 		else{push(@{$bashFiles},[$bashfile,$stdoutfile,$stderrfile,$nodeid]);}
 	}
 }
@@ -648,6 +811,72 @@ sub checkInputOutput{
 			exit(1);
 		}
 	}
+}
+############################## fileStats ##############################
+sub fileStats{
+	my $path=shift();
+	my $line=shift();
+	my $hash=shift();
+	if(!defined($hash)){$hash={};}
+	my @variables=("linecount","seqcount","filesize","filecount","md5","timestamp","owner","group","permission","check");
+	my $matches={};
+	foreach my $v(@variables){if($line=~/\$\{$v\}/||$line=~/\$$v/){$matches->{$v}=1;}}
+	foreach my $key(keys(%{$matches})){
+		my @stats=stat($path);
+		if($key eq "filesize"){$hash->{$key}=$stats[7];}
+		elsif($key eq "md5"){my $md5cmd=(`which md5`)?"md5":"md5sum";my $md5=`$md5cmd<$path`;chomp($md5);$hash->{$key}=$md5;}
+		elsif($key eq "timestamp"){$hash->{$key}=$stats[9];}
+		elsif($key eq "owner"){$hash->{$key}=getpwuid($stats[4]);}
+		elsif($key eq "group"){$hash->{$key}=getgrgid($stats[5]);}
+		elsif($key eq "permission"){$hash->{$key}=$stats[2]&07777;}
+		elsif($key eq "filecount"){if(!(-f $path)){$hash->{$key}=0;}else{my $count=`ls $path|wc -l`;chomp($count);$hash->{$key}=$count;}}
+		elsif($key eq "linecount"){$hash->{$key}=linecount($path);}
+		elsif($key eq "seqcount"){$hash->{$key}=seqcount($path);}
+		elsif($key eq "check"){$hash->{$key}=check($path);}
+	}
+	return $hash;
+}
+############################## filecheck ##############################
+sub filecheck{
+	my $path=shift();
+	if($path=~/\.te?xt$/){
+	}if($path=~/\.gz(ip)?$/){
+	}elsif($path=~/\.bz(ip)?2$/){
+	}
+}
+############################## linecount ##############################
+sub linecount{
+	my $path=shift();
+	if(!(-f $path)){return 0;}
+	elsif($path=~/\.gz(ip)?$/){my $count=`gzip -cd $path|wc -l`;chomp($count);return $count;}
+	elsif($path=~/\.bz(ip)?2$/){my $count=`bzip2 -cd $path|wc -l`;chomp($count);return $count;}
+	elsif($path=~/\.bam$/){my $count=`samtools view $path|wc -l`;chomp($count);return $count;}
+	else{my $count=`cat $path|wc -l`;chomp($count);return $count;}
+}
+############################## seqcount ##############################
+sub seqcount{
+	my $path=shift();
+	if($path=~/\.f(ast)?a((\.gz(ip)?)|(\.bz(ip)?2))?$/){
+		my $reader=openFile($path);
+		my $count=0;
+		while(<$reader>){if(/^\>/){$count++;}}
+		close($reader);
+		return $count;
+	}elsif($path=~/\.f(ast)?q((\.gz(ip)?)|(\.bz(ip)?2))?$/){
+		my $reader=openFile($path);
+		my $count=0;
+		while(<$reader>){$count++;<$reader>;<$reader>;<$reader>;}
+		close($reader);
+		return $count;
+	}else{return 0;}
+}
+############################## openFile ##############################
+sub openFile{
+	my $path=shift();
+	if($path=~/\.gz(ip)?$/){return IO::File->new("gzip -cd $path|");}
+	elsif($path=~/\.bz(ip)?2$/){return IO::File->new("bzip2 -cd $path|");}
+	elsif($path=~/\.bam$/){return IO::File->new("samtools view $path|");}
+	else{return IO::File->new($path);}
 }
 ############################## checkQuery ##############################
 sub checkQuery{
@@ -705,7 +934,7 @@ sub commandProcess{
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
 	if(defined($insertKeys)){push(@{$command->{"insertKeys"}},@{$insertKeys});}
-	if($showlog){
+	if(defined($opt_l)){
 		my $cmdline="#Command: ".basename($command->{$urls->{"daemon/command"}});
 		if(scalar(@inputs)>0){$cmdline.=" \$".join(" \$",@inputs);}
 		if(scalar(@outputs)>0){$cmdline.=" \$".join(" \$",@outputs);}
@@ -732,7 +961,7 @@ sub commandProcess{
 		push(@nodeids,$nodeid);
 		push(@inserts,@array);
 	}
-	if(defined($showlog)){
+	if(defined($opt_l)){
 		print STDERR "Proceed running ".scalar(@nodeids)." jobs [y/n]? ";
 		my $prompt=<STDIN>;
 		chomp($prompt);
@@ -780,6 +1009,17 @@ sub commandProcessVars{
 	while(my($key,$val)=each(%{$hash})){if(!exists($vars->{$key})){$vars->{$key}=$val;}}
 	return $vars;
 }
+############################## automate ##############################
+sub automate{
+	my @files=getFiles("$ctrldir/automate");
+	if(scalar(@files)==0){return 0;}
+	my $total=0;
+	foreach my $file(@files){
+		system("bash $file");
+		if(defined($opt_l)){print STDERR "bsh $file\n";}
+	}
+	return $total;
+}
 ############################## controlCompleted ##############################
 sub controlCompleted{
 	my @files=getFiles("$ctrldir/completed");
@@ -820,7 +1060,7 @@ sub controlProcess{
 	my $inserted=controlInsert($rdfdb);
 	my $deleted=controlDelete($rdfdb);
 	my $updated=controlUpdate($rdfdb);
-	my $inserted+=controlSubmit($rdfdb);
+	$inserted+=controlSubmit($rdfdb);
 	if(!defined($opt_l)){return;}
 	my $date=getDate("/");
 	my $time=getTime(":");
@@ -843,10 +1083,8 @@ sub controlSubmit{
 	if(scalar(@files)==0){return 0;}
 	my $total=0;
 	foreach my $file(@files){
-		my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -d $rdfdb -f tsv submit";
-		my $count=`$command`;
-		$count=~/(\d+)/;
-		$total+=$1;
+		my $command="perl $prgdir/rdf.pl -d $rdfdb -f tsv submit<$file";
+		$total+=`$command`;
 		unlink($file);
 	}
 	return $total;
@@ -1231,19 +1469,19 @@ sub initExecute{
 	$vars->{"ctrldir"}=$ctrldir;
 	$vars->{"cmdurl"}=$url;
 	$vars->{"rdfdb"}=$rdfdb;
-	my $basedir=mkdtemp("$workdir/$basename.XXXXXXXXXX");
+	my $basedir=mkdtemp("$workdir/work.XXXXXXXXXX");
 	chmod(0777,$basedir);
-	my $dirname=basename($basedir);
-	$vars->{"workdir"}="work/$dirname";
-	$vars->{"tmpdir"}="work/$dirname/tmp";
-	$vars->{"dirname"}=$dirname;
-	$vars->{"bashfile"}="$dirname.sh";
-	$vars->{"stderrfile"}="$dirname.stderr";
-	$vars->{"stdoutfile"}="$dirname.stdout";
-	$vars->{"insertfile"}="$dirname.insert";
-	$vars->{"deletefile"}="$dirname.delete";
-	$vars->{"updatefile"}="$dirname.update";
-	$vars->{"completedfile"}="$dirname.completed";
+	my $prjname=basename($basedir);
+	$vars->{"workdir"}="$basename/$prjname";
+	$vars->{"tmpdir"}="$basename/$prjname/tmp";
+	$vars->{"prjname"}=$prjname;
+	$vars->{"bashfile"}="$prjname.sh";
+	$vars->{"stderrfile"}="$prjname.stderr";
+	$vars->{"stdoutfile"}="$prjname.stdout";
+	$vars->{"insertfile"}="$prjname.insert";
+	$vars->{"deletefile"}="$prjname.delete";
+	$vars->{"updatefile"}="$prjname.update";
+	$vars->{"completedfile"}="$prjname.completed";
 	return $vars;
 }
 ############################## jsonDecode ##############################
@@ -1379,6 +1617,36 @@ sub json_escape{
 	$text=~s/\"/\\"/g;
 	return $text;
 }
+############################## listFilesRecursively ##############################
+sub listFilesRecursively{
+	my @directories=@_;
+	my $filegrep=shift(@directories);
+	my $fileungrep=shift(@directories);
+	my $recursivesearch=shift(@directories);
+	my @inputfiles=();
+	foreach my $directory (@directories){
+		$directory=Cwd::abs_path($directory);
+		if(-f $directory){push(@inputfiles,$directory);next;}
+		elsif(-l $directory){push(@inputfiles,$directory);next;}
+		opendir(DIR,$directory);
+		foreach my $file(readdir(DIR)){
+			if($file eq "."){next;}
+			if($file eq ".."){next;}
+			if($file eq ""){next;}
+			if($file=~/^\./){next;}
+			my $path="$directory/$file";
+			if(-d $path){
+				if($recursivesearch!=0){push(@inputfiles,listFilesRecursively($filegrep,$fileungrep,$recursivesearch-1,$path));}
+				next;
+			}
+			if(defined($filegrep)&&$file!~/$filegrep/){next;}
+			if(defined($fileungrep)&&$file=~/$fileungrep/){next;}
+			push(@inputfiles,$path);
+		}
+		closedir(DIR);
+	}
+	return sort{$a cmp $b}@inputfiles;
+}
 ############################## listFiles ##############################
 # list files under a directory - 2018/02/01
 # Fixed recursion problem - 2018/02/01
@@ -1403,19 +1671,19 @@ sub listFiles{
 		}
 		closedir(DIR);
 	}
-	return @input_files;
+	return sort{$a cmp $b}@input_files;
 }
 ############################## loadCommandFromURL ##############################
 sub loadCommandFromURL{
 	my $url=shift();
 	my $commands=shift();
 	if(exists($commands->{$url})){return $commands->{$url};}
-	if($showlog){print STDERR "#Loading $url:\t";}
+	if(defined($opt_l)){print STDERR "#Loading $url:\t";}
 	my $command=getJson($url);
 	if(scalar(keys(%{$command}))==0){print "ERROR: Couldn't load $url\n";exit(1);}
 	loadCommandFromURLSub($command,$url);
 	$command->{$urls->{"daemon/command"}}=$url;
-	if($showlog){print STDERR "OK\n";}
+	if(defined($opt_l)){print STDERR "OK\n";}
 	$commands->{$url}=$command;
 	return $command;
 }
@@ -1521,7 +1789,7 @@ sub mainProcess{
 				$thrown++;
 			}
 		}
-		throwJobs($bashFiles,$use_qsub,$qsubopt,$url,1,$rootdir,$use_container,$command->{$urls->{"daemon/docker"}});
+		throwJobs($bashFiles,$opt_q,$qsubopt,$url,1,$rootdir,$opt_c,$command->{$urls->{"daemon/docker"}});
 		if(scalar(@{$executes->{$url}})>0){push(@{$execurls},$url);}
 	}
 	writeDeletes(@deletes);
@@ -1804,18 +2072,19 @@ sub removeDollar{
 	return $value;
 }
 ############################## removeUnnecessaryExecutes ##############################
-# Very slow....
 sub removeUnnecessaryExecutes{
 	my $queryResults=shift();
 	my $insertKeys=shift();
 	my $results={};
 	my $temp={};
 	foreach my $out(@{$insertKeys}){
-		$temp->{$out->[1]}=1;
-	}
-	foreach my $pred(keys(%{$temp})){
-		my @results=selectRDF($rdfdb,"%",$pred,"%");
-		$results->{$pred}=\@results;
+		my $subject=$out->[0];
+		my $predicate=$out->[1];
+		my $object=$out->[2];
+		if($subject=~/^\$/){$subject="%";}
+		if($object=~/^\$/){$object="%";}
+		my @results=selectRDF($rdfdb,$subject,$predicate,$object);
+		$results->{$predicate}=\@results;
 	}
 	my @array=();
 	foreach my $hash(@{$queryResults->{".hashs"}}){
@@ -1823,13 +2092,20 @@ sub removeUnnecessaryExecutes{
 		foreach my $out(@{$insertKeys}){
 			my $pred=$out->[1];
 			my @array=@{$results->{$pred}};
-			my $val=$out->[0];
-			if($val=~/^\$(.+)$/){$val=$hash->{$1};}
-			foreach my $tokens(@array){if($tokens->[0] eq $val){$hit=1;last;}}
-			if($hit==1){last;}
-			$val=$out->[2];
-			if($val=~/^\$(.+)$/){$val=$hash->{$1};}
-			foreach my $tokens(@array){if($tokens->[2] eq $val){$hit=1;last;}}
+			if($out->[0]=~/^\$(.+)$/){
+				my $key=$1;
+				my $val=$out->[0];
+				if($hash->{$key}){$val=$hash->{$key};}
+				foreach my $t(@array){if($t->[0] eq $val){$hit=1;last;}}
+				if($hit==1){last;}
+			}
+			if($out->[2]=~/^\$(.+)$/){
+				my $key=$1;
+				my $val=$out->[2];
+				if($hash->{$key}){$val=$hash->{$key};}
+				foreach my $t(@array){if($t->[2] eq $val){$hit=1;last;}}
+				if($hit==1){last;}
+			}
 		}
 		if($hit==0){push(@array,$hash);}
 	}
@@ -1863,10 +2139,13 @@ sub sandbox{
 }
 ############################## script ##############################
 sub script{
-	my $outdir=shift();
+	my @urls=@_;
+	my $outdir=$opt_o;
 	if(!defined($outdir)){$outdir=".";}
 	mkdir($outdir);
-	if(scalar(@ARGV)>1){foreach my $out(writeScript($ARGV[1],$outdir,$commands)){print "$out\n";}}
+	foreach my $url(@urls){
+		foreach my $out(writeScript($url,$outdir,$commands)){print "$out\n";}
+	}
 }
 ############################## scriptCodeForBash ##############################
 sub scriptCodeForBash{
@@ -1895,7 +2174,7 @@ sub test{
 	open(OUT,">test/C.json");
 	print OUT "{\"https://moirai2.github.io/schema/daemon/docker\":\"ubuntu\",\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}\n";
 	close(OUT);
-	testCommand("perl moirai2.pl -d test/rdf.sqlite3 -s 1 -p '\$output' test/A.json 'Akira Hasegawa' output.txt","output.txt");
+	testCommand("perl moirai2.pl -d test/rdf.sqlite3 -s 1 -r '\$output' test/A.json 'Akira Hasegawa' output.txt","output.txt");
 	testCommand("cat test/output.txt","Akira Hasegawa");
 	testCommand("perl $prgdir/rdf.pl -d test/rdf.sqlite3 insert case1 '#string' 'Akira Hasegawa'","inserted 1");
 	testCommand("perl moirai2.pl -d test/rdf.sqlite3 -s 1 -i '\$id->#string->\$string' -o '\$id->#text->\$output' test/A.json '\$string' '\$id.txt'","");
@@ -1909,10 +2188,10 @@ sub test{
 	testCommand("perl moirai2.pl -d test/rdf.sqlite3 -s 1 -i '\$id->#text->\$input' -o '\$input->#sorted->\$output' test/B.json 'output=\$id.sort.txt'","");
 	testCommand("cat test/case2.sort.txt","Akira\nChiyo\nHasegawa\nHasegawa");
 	my $name=`uname -s`;chomp($name);
-	testCommand2("perl moirai2.pl -d test/rdf.sqlite3 -p unamea test/C.json","^$name");
-	testCommand2("perl moirai2.pl -q -d test/rdf.sqlite3 -p unamea test/C.json","^$name");
-	testCommand2("perl moirai2.pl -d test/rdf.sqlite3 -p unamea -c docker test/C.json","^Linux");
-	testCommand2("perl moirai2.pl -q -d test/rdf.sqlite3 -p unamea -c docker test/C.json","^Linux");
+	testCommand2("perl moirai2.pl -d test/rdf.sqlite3 -r unamea test/C.json","^$name");
+	testCommand2("perl moirai2.pl -q -d test/rdf.sqlite3 -r unamea test/C.json","^$name");
+	testCommand2("perl moirai2.pl -d test/rdf.sqlite3 -r unamea -c docker test/C.json","^Linux");
+	testCommand2("perl moirai2.pl -q -d test/rdf.sqlite3 -r unamea -c docker test/C.json","^Linux");
 	unlink("test/output.txt");
 	unlink("test/case1.txt");
 	unlink("test/case2.txt");
@@ -1920,11 +2199,20 @@ sub test{
 	unlink("test/case2.sort.txt");
 	unlink("test/A.json");
 	unlink("test/B.json");
-	#unlink("test/C.json");
+	unlink("test/C.json");
+	open(OUT,">test/rdf/ctrl/insert/A.txt");
+	print OUT "A\t#name\tAkira\n";
+	close(OUT);
+	system("echo 'mkdir -p rdf/\$dirname'|perl moirai2.pl -d test/rdf.sqlite3 -i '\$id->#name->\$dirname' -o '\$id->#mkdir->done' command");
+	if(!-e "test/rdf/Akira"){print STDERR "test/rdf/Akira directory not created";}
+	open(OUT,">test/rdf/ctrl/insert/B.txt");
+	print OUT "B\t#name\tBen\n";
+	close(OUT);
+	system("echo 'mkdir -p rdf/\$dirname'|perl moirai2.pl -d test/rdf.sqlite3 -i '\$id->#name->\$dirname' -o '\$id->#mkdir->done' command");
+	if(!-e "test/rdf/Ben"){print STDERR "test/rdf/Ben directory not created";}
 	system("rm -r test/rdf");
 	unlink("test/rdf.sqlite3");
 	rmdir("test/bin");
-	rmdir("test/work");
 	rmdir("test");
 }
 ############################## testCommand ##############################
@@ -1967,9 +2255,9 @@ sub throwJobs{
 	my $docker_image=shift();
 	if(scalar(@{$bashFiles})==0){return;}
 	my ($fh,$path)=mkstemps("$ctrldir/bash/runXXXXXXXXXX",".sh");
-	my $dirname=basename($path,".sh");
-	my $error_file="$ctrldir/stderr/$dirname.stderr";
-	my $log_file="$ctrldir/stdout/$dirname.stdout";
+	my $prjname=basename($path,".sh");
+	my $error_file="$ctrldir/stderr/$prjname.stderr";
+	my $log_file="$ctrldir/stdout/$prjname.stdout";
 	if($use_qsub){
 		print $fh "#\$ -e $error_file\n";
 		print $fh "#\$ -o $log_file\n";
@@ -2023,18 +2311,18 @@ sub throwJobs{
 	my $date=getDate("/");
 	my $time=getTime(":");
 	if($use_qsub){
-		if($showlog){print STDERR "$date $time Submitting job ".join(",",@ids).":\t";}
+		if(defined($opt_l)){print STDERR "$date $time Submitting job ".join(",",@ids).":\t";}
 		my $command="qsub";
 		if(defined($qsubopt)){$command.=" $qsubopt";}
 		$command.=" $path";
-		if(system($command)==0){if($showlog){print STDERR "OK\n";}}
+		if(system($command)==0){if(defined($opt_l)){print STDERR "OK\n";}}
 		else{print "ERROR: Failed to $command\n";exit(1);}
 	}else{
-		if($showlog){print STDERR "$date $time Executing jobs ".join(",",@ids).":\t";}
+		if(defined($opt_l)){print STDERR "$date $time Executing jobs ".join(",",@ids).":\t";}
 		my $command="bash $path";
 		if(defined($background)){$command.=" &";}
-		if(system($command)==0){if($showlog){print STDERR "OK\n";}}
-		else{if($showlog){print STDERR "ERROR: Failed to $command\n";}exit(1);}
+		if(system($command)==0){if(defined($opt_l)){print STDERR "OK\n";}}
+		else{if(defined($opt_l)){print STDERR "ERROR: Failed to $command\n";}exit(1);}
 	}
 }
 ############################## writeCompleteFile ##############################
@@ -2086,14 +2374,6 @@ sub writeCompleteFile{
 	print OUT "rm -f $bashfile\n";
 	foreach my $scriptfile(@{$scriptfiles}){print OUT "rm -f $scriptfile\n";}
 	print OUT "fi\n";
-	print OUT "rmdir $workdir/ctrl/bash > /dev/null 2>&1\n";
-	print OUT "rmdir $workdir/ctrl/completed > /dev/null 2>&1\n";
-	print OUT "rmdir $workdir/ctrl/delete > /dev/null 2>&1\n";
-	print OUT "rmdir $workdir/ctrl/insert > /dev/null 2>&1\n";
-	print OUT "rmdir $workdir/ctrl/update > /dev/null 2>&1\n";
-	print OUT "rmdir $workdir/ctrl/stderr > /dev/null 2>&1\n";
-	print OUT "rmdir $workdir/ctrl/stdout > /dev/null 2>&1\n";
-	print OUT "rmdir $workdir/ctrl/ > /dev/null 2>&1\n";
 	print OUT "rmdir $workdir/ > /dev/null 2>&1\n";
 	close(OUT);
 }
