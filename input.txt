@@ -50,10 +50,11 @@ $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json
 $ ls rdf/nXXXXXXXXXXXXXX
 sort.txt
 ```
+
 * This is an example of a sort command using a json file I prepared: <a href="https://moirai2.github.io/command/text/sort.json">sort.json</a>.
-* Path to input file (to be sorted) will be prompted, so enter a filepath and push return.
+* Path to input file will be prompted, so enter a filepath and push return.
 * Temporary bash shell, stdout, stderr files will be written to rdf/nXXXXXXXXXXXXXX/ (XXXXXXXXXXXXXX is datetime).
-* Computation will finish in few seconds.  All (empty) temporary files will be removed.
+* Computation will finish in few seconds.  All temporary files will be removed.
 * After computation, sorted file will be output to rdf/nXXXXXXXXXXXXXX/sort.txt 
 
 ### Example2
@@ -62,6 +63,7 @@ $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input.txt
 $ ls rdf/nXXXXXXXXXXXXXX
 sort.txt
 ```
+
 * You can specify input path in argument and can avoid prompt message.
 
 ### Example3
@@ -70,11 +72,11 @@ $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input.txt out
 $ ls output.txt
 output.txt
 ```
+
 * It's possible to specify both input and output paths.
 * Order of arguments do matter and differ by commands.
 
 ### Example4
-* Order of input and output in arguments can be checked with a help option.
 ```shell
 perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
 
@@ -85,7 +87,8 @@ perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
 #Bash    :output="$workdir/sort.txt"
          :sort $input > $output
 ```
-* In sort.json case, first argument is 'input' and second argument is 'output'.
+
+* Order of input and output in arguments can be checked with a help option.
 
 ### Example5
 ```shell
@@ -93,106 +96,92 @@ $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input=input.t
 $ ls output.txt
 output.txt
 ```
-* You can specify input and output by variable format "key=value".
-* Order doesn't matter if variable format is used.
-* Notation can be either input=input.txt or '$input=input.txt' (be sure to use single quote in this case).
-* To know the valid input and output variable names use a help command explained in Example4
+* You can specify input and output by variables.
+* Order doesn't matter in this case.
+* Check the input and output variable names with a help command.
 
 ### Example6
 ```shell
-$ cat sort.json
-{"https://moirai2.github.io/schema/daemon/input":"$input",
-"https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/sort.txt\"","sort $input > $output"],
-"https://moirai2.github.io/schema/daemon/output":"$output"}
 $ perl moirai2.pl sort.json
 #Input: input? input.txt
 $ ls output.txt
 output.txt
 ```
-* You can run a command from a json file in your local directory.  Json file doesn't have to be on the web.
-* A command json file used in the previous usage, specifies command lines, input, and output.
-* I have prepared basic commands at <a href="https://moirai2.github.io/command">https://moirai2.github.io/command</a>.
-* You can create your own command json file and use them.
+* You can run a command using a json file in your local directory.
 
 ### Example7
-* Information of an execution is stored in the Resource Description Framework (RDF) database (https://en.wikipedia.org/wiki/Resource_Description_Framework).
-* Data are store din RDF triples (subject, predicate, object).
-* You can view the RDF database by rdf.pl script with select (% is wildcard):
 ```shell
-$ perl rdf.pl select
-n20201119134907	https://moirai2.github.io/command/text/sort.json#input	input.txt
-n20201119134907	https://moirai2.github.io/command/text/sort.json#output	rdf/n20201119134907/sort.txt
-n20201119134907	https://moirai2.github.io/schema/daemon/command	https://moirai2.github.io/command/text/sort.json
-n20201119134907	https://moirai2.github.io/schema/daemon/timeended	1605761347
-n20201119134907	https://moirai2.github.io/schema/daemon/timestarted	1605761347
-n20201119134907	https://moirai2.github.io/schema/daemon/timethrown	1605761347
-$ perl rdf.pl select % https://moirai2.github.io/schema/daemon/command
-n20201119134907	https://moirai2.github.io/schema/daemon/command	https://moirai2.github.io/command/text/sort.json
-$ perl rdf.pl select % % input.txt
-n20201119134907	https://moirai2.github.io/command/text/sort.json#input	input.txt
+$ perl moirai2.pl command << EOF
+#Input: input? input.txt
+$ ls output.txt
+output.txt
+EOF
 ```
 
-### Example8
-* Following are examples using database for controlling executions.
-* You can store the results/filepaths of computation in RDF database with -o option.
+* A command json file used in the previous usage, specifies command lines, input, and output.
+* I have prepared basic command lines at <a href="https://moirai2.github.io/command">https://moirai2.github.io/command</a>.
+* You can create your own command json file and use from a local directory or your website.
 ```shell
-$perl moirai2.pl -o '$input->sorted->$output' https://moirai2.github.io/command/text/sort.json input=input.txt output=sorted.txt
-$ perl rdf.pl select
-input.txt	sorted	sorted.txt
-n20201119135641	https://moirai2.github.io/command/text/sort.json#input	input.txt
-n20201119135641	https://moirai2.github.io/command/text/sort.json#output	sorted.txt
-n20201119135641	https://moirai2.github.io/schema/daemon/command	https://moirai2.github.io/command/text/sort.json
-n20201119135641	https://moirai2.github.io/schema/daemon/timeended	1605761801
-n20201119135641	https://moirai2.github.io/schema/daemon/timestarted	1605761801
-n20201119135641	https://moirai2.github.io/schema/daemon/timethrown	1605761801
-```
-* Output option format is 'subject->predicate->object'.
-* Variables ($input and $output) need to be matched with variables specified in sort.json notation.
-* Be sure to use single quote (') instead of double quote (") when specifying output format.  Otherwise $input and $output will be treated as bash variables (bash tries to assign values to $input and $output resulting in empty values).
-
-### Example9
-* With -i option, input values can be referenced from database.
-* Using result from previous example:
-$ perl rdf.pl select
-```shell
-$ perl rdf.pl select % sorted
-input.txt	sorted	sorted.txt
-$perl moirai2.pl -i '$original->sorted->$input' -o '$input->resorted->$output' https://moirai2.github.io/command/text/sort.json output=resorted.txt
-$ perl rdf.pl select % %sorted
-input.txt	sorted	sorted.txt
-sorted.txt	resorted	resorted.txt
+{
+"https://moirai2.github.io/schema/daemon/input":"$input",
+"https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/sort.txt\"","sort $input > $output"],
+"https://moirai2.github.io/schema/daemon/output":"$output"
+}
 ```
 
-### Example10
+* Path to input file can be assigned through argument, so you can skip prompt part.
+```shell
+$ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input.txt
+```
+
+* By assigning output path, result will not be output to temporary file, but instead location can be specified.
+```shell
+$ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input.txt output.txt
+```
+
+* In any cases, executed information will be stored in the Resource Description Framework (RDF) database.
+* You can view the database by rdf.pl.
+* Default database path is ./rdf.sqlite3.
+* All information are store din RDF triplet (subject, predicate, object).
+```shell
+$ perl rdf.pl select
+rdf.sqlite3#node1	https://moirai2.github.io/schema/daemon/command	https://moirai2.github.io/command/text/sort.json
+rdf.sqlite3#node1	https://moirai2.github.io/command/text/sort.json#output	ouput.txt
+rdf.sqlite3#node1	https://moirai2.github.io/command/text/sort.json#input	input/sn/sn_RNA_1.fa
+rdf.sqlite3#node1	https://moirai2.github.io/schema/daemon/timethrown	1595992099
+rdf.sqlite3#node1	https://moirai2.github.io/schema/daemon/timestarted	1595992099
+rdf.sqlite3#node1	https://moirai2.github.io/schema/daemon/timeended	1595992099
+```
+
+* To see the information about the command JSON, use help option.
+* Order of input/output are specified in '#Command' line.
+```shell
+$ perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
+
+#URL     :https://moirai2.github.io/command/text/sort.json
+#Command :sort.json [input] [output]
+#Input   :input
+#Output  :output
+#Bash    :output="$workdir/sort.txt"
+         :sort $input > $output
+```
+
+* Strength of moirai2 is commands can run from data store in the RDF database.
+* Let's say there are information in the database.
+```shell
+
+```
+
 * The command lines don't have to be specified through json.
 ```shell
-$ perl moirai2.pl -i '$original->resorted->$file' -o '$file->wc-l->$result' command << 'EOS'
-result=$workdir/${file.basename}.txt
+$ perl moirai2.pl -i 'A->B->$file' -o '$file->C->$result' exec << 'EOS'
+result=wc/${file.basename}.txt
 wc -l < $file > $result
 EOS
 ```
-* Command lines are specified using here document (https://en.wikipedia.org/wiki/Here_document).
-* Don't forget to quote EOS with single quote (').  'EOS' make sure $file will be treated as $file instead of actual variable by BASH script.
-* Variables can be either $XXXX or ${XXXX} (same as bash notation)
-* system variables:
-  * cmdurl - "https://moirai2.github.io/command/text/sort.json"
-  * rdfdb - "rdf.sqlite3"
-  * nodeid - "nXXXXXXXXXXXXXX"
-  * ctrldir - Full path to "rdf/ctrl"
-  * prgdir - Full path to where moirai2.pl and rdf.pl are located
-  * rootdir - Full path to where rdf.sqlite3 is located
-  * tmpdir - "rdf/nXXXXXXXXXXXXXX/tmp"
-  * workdir - "rdf/nXXXXXXXXXXXXXX"
-* file exentions (These will be replaced by moirai2.pl):
-  * .path - "/A/B/C/D_E_F.fa"
-  * .directory - "/A/B/C"
-  * .filename - "D_E_F.fa"
-  * .basename - "D_E_F"
-  * .suffix - "fa"
-  * .baseX (X=int) - separated by non alphabet/number.  base0="D", base1="E", base2="F"
-  * .dirX (X=int) - separated by '/'.  dir0="A", dir1="B", dir2="C"
 
 ### moirai2.pl
+
 ```shell
 $ perl moirai2.pl CMDURL ARGV [ARGV ..]
 ```

@@ -15,7 +15,6 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-# require "$program_directory/Utility.pl";
 ############################## OPTIONS ##############################
 use vars qw($opt_b $opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_H $opt_q $opt_r $opt_t $opt_w);
 getopts('b:d:D:f:g:G:hHqr:tw:');
@@ -257,21 +256,7 @@ elsif(lc($command) eq "history"){historyCommand($database);}
 elsif(lc($command) eq "rm"){rmCommand($database,@ARGV);}
 elsif(lc($command) eq "network"){networkCommand($database,@ARGV);}
 ############################## fileMtime ##############################
-sub fileMtime{
-	my $path=shift();
-	my @statistics=stat($path);
-	return $statistics[9];
-}
-############################## countEdge ##############################
-sub countEdge{
-	my $database=shift();
-	my $dbh=openDB($database);
-	my $query="select count(*) from edge";
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	my @rows=$sth->fetchrow_array();
-	return $rows[0];
-}
+sub fileMtime{my $path=shift();my @statistics=stat($path);return $statistics[9];}
 ############################## syncCommand ##############################
 sub syncCommand{
 	my $database=shift();
@@ -377,7 +362,7 @@ sub loadCommand{
 	my $linecount=0;
 	foreach my $file(@files){
 		my $reader=IO::File->new($file);
-		$linecount+=importDB($database,$reader);
+		$linecount+=dbImport($database,$reader);
 		close($reader);
 	}
 	if(!$opt_q){print "loaded $linecount\n";}
@@ -395,7 +380,7 @@ sub linecountCommand{
 		countLines($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
-		my $linecount=importDB($database,$reader);
+		my $linecount=dbImport($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
@@ -415,7 +400,7 @@ sub seqcountCommand{
 		countSequences($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
-		my $linecount=importDB($database,$reader);
+		my $linecount=dbImport($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
@@ -435,7 +420,7 @@ sub filesizeCommand{
 		sizeFiles($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
-		my $linecount=importDB($database,$reader);
+		my $linecount=dbImport($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
@@ -455,7 +440,7 @@ sub md5Command{
 		md5Files($writer,$opt_g,$opt_G,$opt_r,@files);
 		close($writer);
 		my $reader=IO::File->new($file);
-		my $linecount=importDB($database,$reader);
+		my $linecount=dbImport($database,$reader);
 		close($reader);
 	}else{
 		my $writer=IO::File->new(">&STDOUT");
@@ -466,6 +451,7 @@ sub md5Command{
 ############################## networkCommand ##############################
 sub networkCommand{
 	my $database=shift();
+	my $hash=dbSelect($database,undef,$urls->{"daemon/command"},undef);
 	my $dbh=openDB($database);
 	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
 	my $where="";
@@ -474,9 +460,9 @@ sub networkCommand{
 	my $writer=IO::File->new(">&STDOUT");
 	while(my @rows=$sth->fetchrow_array()){
 		my $subject=$rows[0];
+		if(exists($hash->{$subject})){next;}
 		my $predicate=$rows[1];
 		my $object=$rows[2];
-		if($subject=~/#node/){next;}
 		print $writer "$subject\t$predicate\t$object\n";
 	}
 	close($writer);
@@ -547,14 +533,14 @@ sub insertCommand{
 		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif($opt_f eq "tsv"){
 		my $reader=IO::File->new("-");
-		my $linecount=($iswebdb)?webInsert($database,tsvToJson($reader)):importDB($database,$reader);
+		my $linecount=($iswebdb)?webInsert($database,tsvToJson($reader)):dbImport($database,$reader);
 		close($reader);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif($opt_f eq "json"){
 		my $reader=IO::File->new("-");
 		my $json=readJson($reader);
 		close($reader);
-		my $linecount=($iswebdb)?webInsert($database,$json):jsonInsert($database,$json);
+		my $linecount=($iswebdb)?webInsert($database,$json):dbJsonInsert($database,$json);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}else{
 		my $reader=IO::File->new("-");
@@ -562,7 +548,7 @@ sub insertCommand{
 		close($reader);
 		$reader=IO::File->new($file);
 		if(defined($opt_t)){while(<$reader>){print;};exit(0);}
-		my $linecount=importDB($database,$reader);
+		my $linecount=dbImport($database,$reader);
 		close($reader);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}
@@ -571,7 +557,7 @@ sub insertCommand{
 sub importCommand{
 	my $database=shift();
 	my $reader=IO::File->new("-");
-	my $linecount=importDB($database,$reader);
+	my $linecount=dbImport($database,$reader);
 	close($reader);
 	if(!$opt_q){print "imported $linecount\n";}
 }
@@ -583,7 +569,7 @@ sub queryCommand{
 	my $results=[];
 	while(1){
 		if($iswebdb){$results=webQuery($database,{"query"=>join(",",@queries)});}
-		else{my $dbh=openDB($database);$results=getResults($dbh,parseQuery(join(",",@queries)));$dbh->disconnect;}
+		else{$results=getResults($database,parseQuery(join(",",@queries)));}
 		if(!defined($opt_w)){last;}
 		elsif(scalar(@{$results})>0){last;}
 		else{sleep($opt_w);}
@@ -606,18 +592,18 @@ sub queryCommand{
 sub dumpCommand{
 	my $database=shift();
 	my $writer=IO::File->new(">&STDOUT");
-	dumpDB($database,$opt_f,$writer);
+	dbDump($database,$opt_f,$writer);
 	close($writer);
 }
 ############################## reindexCommand ##############################
 sub reindexCommand{
 	my $database=shift();
 	my ($fh,$filename)=tempfile;
-	dumpDB($database,"tsv",$fh);
+	dbDump($database,"tsv",$fh);
 	close($fh);
 	my $newdatabase="$database.tmp";
 	my $reader=IO::File->new($filename);
-	my $linecount=importDB($newdatabase,$reader);
+	my $linecount=dbImport($newdatabase,$reader);
 	close($reader);
 	unlink($filename);
 	rename("$database.tmp",$database);
@@ -641,14 +627,14 @@ sub updateCommand{
 		my ($json,$linecount)=tsvToJson($reader);
 		close($reader);
 		if($iswebdb){webUpdate($database,$json);}
-		else{jsonUpdate($database,$json);}
+		else{dbJsonUpdate($database,$json);}
 		if(!$opt_q){print "updated $linecount\n";}
 	}elsif($opt_f eq "json"){
 		my $reader=IO::File->new("-");
 		my $json=readJson($reader);
 		close($reader);
 		if($iswebdb){webUpdate($database,$json);}
-		else{jsonUpdate($database,$json);}
+		else{dbJsonUpdate($database,$json);}
 	}else{
 		my $reader=IO::File->new("-");
 		my $file=($opt_f=~/\-\>/)?assembleJson($reader,$opt_f):assembleFile($reader,$opt_f);
@@ -662,7 +648,7 @@ sub updateCommand{
 			my ($json,$linecount)=tsvToJson($reader);
 			close($reader);
 			if($iswebdb){webUpdate($database,$json);}
-			else{jsonUpdate($database,$json);}
+			else{dbJsonUpdate($database,$json);}
 		}
 	}
 }
@@ -781,10 +767,10 @@ sub mergeCommand{
 	my @arguments=@_;
 	my $database=shift(@arguments);
 	my ($writer,$file)=tempfile();#UNLINK=>1
-	foreach my $database(@arguments){dumpDB($database,undef,$writer);}
+	foreach my $database(@arguments){dbDump($database,undef,$writer);}
 	close($writer);
 	my $reader=IO::File->new($file);
-	my $linecount=importDB($database,$reader);
+	my $linecount=dbImport($database,$reader);
 	close($reader);
 	if(!$opt_q){print "inserted $linecount\n";}
 }
@@ -792,16 +778,14 @@ sub mergeCommand{
 sub copyCommand{
 	my @arguments=@_;
 	my $database=shift(@arguments);
-	my $dbh=openDB($database);
 	my ($writer,$file)=tempfile(UNLINK=>1);
 	my @queries=();
 	foreach my $query(@arguments){push(@queries,split(/,/,$query));}
-	queryTotsv($writer,\@queries,getResults($dbh,parseQuery(\@queries)));
+	queryTotsv($writer,\@queries,getResults($database,parseQuery(\@queries)));
 	close($writer);
-	$dbh->disconnect;
 	$database=$opt_D;
 	my $reader=IO::File->new($file);
-	my $linecount=importDB($database,$reader);
+	my $linecount=dbImport($database,$reader);
 	close($reader);
 	if(!$opt_q){print "copied $linecount\n";}
 }
@@ -812,10 +796,10 @@ sub submitCommand{
 	my $json=($opt_f eq "json")?readJson($reader):readHash($reader);
 	if($iswebdb){return;}
 	my $rdf={};
-	my $nodeid=newJob($database);
+	my $nodeid=newNode($database);
 	$rdf->{$nodeid}={};
 	foreach my $key(keys(%{$json})){$rdf->{$nodeid}->{$key}=$json->{$key};}
-	my $linecount=jsonInsert($database,$rdf);
+	my $linecount=dbJsonInsert($database,$rdf);
 	if(!$opt_q){print "inserted $linecount\n";}
 }
 ############################## execCommand ##############################
@@ -840,7 +824,7 @@ sub execCommand{
 		my $value=$json->{$key};
 		$rdf->{$nodeid}->{"$url#$key"}=$value;
 	}
-	my $linecount=jsonInsert($database,$rdf);
+	my $linecount=dbJsonInsert($database,$rdf);
 	if(!$opt_q){print "inserted $linecount\n";}
 }
 ############################## promptCommand ##############################
@@ -1240,7 +1224,7 @@ sub lsCommand{
 		foreach my $line(@lines){print $writer "$line\n";}
 		close($writer);
 		my $reader=IO::File->new($file);
-		my $linecount=importDB($database,$reader);
+		my $linecount=dbImport($database,$reader);
 		close($reader);
 		if(!$opt_q){print "inserted $linecount\n";}
 	}elsif(defined($opt_f)){foreach my $line(@lines){print "$line\n";}}
@@ -1544,6 +1528,39 @@ sub createWhere{
 	else{$where.=" $label=(select id from node where data='$object')";}
 	return $where;
 }
+############################## dbDump ##############################
+sub dbDump{
+	my $database=shift();
+	my $format=shift();
+	my $writer=shift();
+	my $dbh=openDB($database);
+	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
+	my $where="";
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my $hash={};
+	if($format eq "json"){
+		my $rdf={};
+		while(my @rows=$sth->fetchrow_array()){
+			my $subject=$rows[0];
+			my $predicate=$rows[1];
+			my $object=$rows[2];
+			if(!exists($rdf->{$subject})){$rdf->{$subject}={};}
+			if(!exists($rdf->{$subject}->{$predicate})){$rdf->{$subject}->{$predicate}=$object;}
+			elsif(ref($rdf->{$subject}->{$predicate}) eq "ARRAY"){push(@{$rdf->{$subject}->{$predicate}},$object);}
+			else{$rdf->{$subject}->{$predicate}=[$rdf->{$subject}->{$predicate},$object];}
+		}
+		outputInJsonFormat($rdf,$writer);
+	}else{
+		while(my @rows=$sth->fetchrow_array()){
+			my $subject=$rows[0];
+			my $predicate=$rows[1];
+			my $object=$rows[2];
+			print $writer "$subject\t$predicate\t$object\n";
+		}
+	}
+	$dbh->disconnect;
+}
 ############################## dbSelect ##############################
 sub dbSelect{
 	my $database=shift();
@@ -1585,130 +1602,8 @@ sub dbUpdate{
 	$dbh->commit;
 	$dbh->disconnect;
 }
-############################## jsonInsert ##############################
-sub jsonInsert{
-	my $database=shift();
-	my $json=shift();
-	my $dbh=openDB($database);
-	$dbh->begin_work;
-	my $linecount=insertRDF($dbh,$json);
-	$dbh->commit;
-	$dbh->disconnect;
-	return $linecount;
-}
-############################## jsonUpdate ##############################
-sub jsonUpdate{
-	my $database=shift();
-	my $json=shift();
-	my $dbh=openDB($database);
-	$dbh->begin_work;
-	updateRDF($dbh,$json);
-	$dbh->commit;
-	$dbh->disconnect;
-}
-############################## webDelete ##############################
-sub webDelete{
-	my $database=shift();
-	my $json=shift();
-	my $url=dirname($database)."/moirai.php?command=delete";
-	my $dbname=basename($database);
-	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
-	my $request=POST($url,$data);
-	my $agent=LWP::UserAgent->new;
-	my $content=$agent->request($request)->content;
-	print "$content\n";
-}
-############################## webInsert ##############################
-sub webInsert{
-	my $database=shift();
-	my $json=shift();
-	my $url=dirname($database)."/moirai.php?command=insert";
-	my $dbname=basename($database);
-	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
-	my $request=POST($url,$data);
-	my $agent=LWP::UserAgent->new;
-	my $content=$agent->request($request)->content;
-	print "$content\n";
-}
-############################## webQuery ##############################
-sub webQuery{
-	my $database=shift();
-	my $data=shift();
-	my $url=dirname($database)."/moirai.php?command=query";
-	my $dbname=basename($database);
-	$data->{"db"}=basename($database);
-	my $request=POST($url,$data);
-	my $agent=LWP::UserAgent->new;
-	my $content=$agent->request($request)->content;
-	my $json=jsonDecode($content);
-	return $json;
-}
-############################## webSelect ##############################
-sub webSelect{
-	my $database=shift();
-	my $json=shift();
-	my $url=dirname($database)."/moirai.php?command=select";
-	my $dbname=basename($database);
-	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
-	my $request=POST($url,$data);
-	my $agent=LWP::UserAgent->new;
-	my $content=$agent->request($request)->content;
-	my $json=jsonDecode($content);
-	delete($json->{"rdfquery"});
-	return $json;
-}
-############################## webUpdate ##############################
-sub webUpdate{
-	my $database=shift();
-	my $json=shift();
-	my $url=dirname($database)."/moirai.php?command=update";
-	my $dbname=basename($database);
-	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
-	my $request=POST($url,$data);
-	my $agent=LWP::UserAgent->new;
-	my $content=$agent->request($request)->content;
-	print "$content\n";
-}
-############################## queryTotsv ##############################
-sub queryTotsv{
-	my $writer=shift();
-	my $queries=shift();
-	my $results=shift();
-	foreach my $result(@{$results}){
-		foreach my $query(@{$queries}){
-			my @tokens=split(/->/,$query);
-			foreach my $token(@tokens){if($token=~/^\$(.+)$/){if(exists($result->{$1})){$token=$result->{$1}}}}
-			print $writer join("\t",@tokens)."\n";
-		}
-	}
-}
-############################## assembleJson ##############################
-sub assembleJson{
-	my $reader=shift();
-	my $template=shift();
-	my $json=readJson($reader);
-	close($reader);
-	my ($writer,$file)=tempfile(UNLINK=>1);
-	assembleJsonResults($json,$template,$writer);
-	close($writer);
-	return $file;
-}
-############################## assembleFile ##############################
-sub assembleFile{
-	my $reader=shift();
-	my $template=shift();
-	my ($writer,$file)=tempfile(UNLINK=>1);
-	my $expression=expressionCreate($template);
-	while(<$reader>){
-		chomp;s/\r//g;
-		my @tokens=expressionExtract($expression,$_);
-		print $writer join("\t",@tokens)."\n";
-	}
-	close($writer);
-	return $file;
-}
-############################## importDB ##############################
-sub importDB{
+############################## dbImport ##############################
+sub dbImport{
 	my $dbname=shift();
 	my $reader=shift();
 	my $delim="\t";
@@ -1749,8 +1644,29 @@ sub importDB{
 	}
 	return $linecount;
 }
-############################## mergeDB ##############################
-sub mergeDB{
+############################## dbJsonInsert ##############################
+sub dbJsonInsert{
+	my $database=shift();
+	my $json=shift();
+	my $dbh=openDB($database);
+	$dbh->begin_work;
+	my $linecount=insertRDF($dbh,$json);
+	$dbh->commit;
+	$dbh->disconnect;
+	return $linecount;
+}
+############################## dbJsonUpdate ##############################
+sub dbJsonUpdate{
+	my $database=shift();
+	my $json=shift();
+	my $dbh=openDB($database);
+	$dbh->begin_work;
+	updateRDF($dbh,$json);
+	$dbh->commit;
+	$dbh->disconnect;
+}
+############################## dbMerge ##############################
+sub dbMerge{
 	my $dbname=shift();
 	my $reader=shift();
 	my $delim="\t";
@@ -1803,6 +1719,107 @@ sub mergeDB{
 		system($command);
 	}
 	return $linecount;
+}
+############################## webDelete ##############################
+sub webDelete{
+	my $database=shift();
+	my $json=shift();
+	my $url=dirname($database)."/rdf.php?command=delete";
+	my $dbname=basename($database);
+	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
+	my $request=POST($url,$data);
+	my $agent=LWP::UserAgent->new;
+	my $content=$agent->request($request)->content;
+	if($opt_q){print "$content\n";}
+}
+############################## webInsert ##############################
+sub webInsert{
+	my $database=shift();
+	my $json=shift();
+	my $url=dirname($database)."/rdf.php?command=insert";
+	my $dbname=basename($database);
+	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
+	my $request=POST($url,$data);
+	my $agent=LWP::UserAgent->new;
+	my $content=$agent->request($request)->content;
+	if($opt_q){print "$content\n";}
+}
+############################## webQuery ##############################
+sub webQuery{
+	my $database=shift();
+	my $data=shift();
+	my $url=dirname($database)."/rdf.php?command=query";
+	my $dbname=basename($database);
+	$data->{"db"}=basename($database);
+	my $request=POST($url,$data);
+	my $agent=LWP::UserAgent->new;
+	my $content=$agent->request($request)->content;
+	my $json=jsonDecode($content);
+	return $json;
+}
+############################## webSelect ##############################
+sub webSelect{
+	my $database=shift();
+	my $json=shift();
+	my $url=dirname($database)."/rdf.php?command=select";
+	my $dbname=basename($database);
+	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
+	my $request=POST($url,$data);
+	my $agent=LWP::UserAgent->new;
+	my $content=$agent->request($request)->content;
+	my $json=jsonDecode($content);
+	delete($json->{"rdfquery"});
+	if($opt_q){return $json;}
+}
+############################## webUpdate ##############################
+sub webUpdate{
+	my $database=shift();
+	my $json=shift();
+	my $url=dirname($database)."/rdf.php?command=update";
+	my $dbname=basename($database);
+	my $data={'db'=>basename($database),'data'=>jsonEncode($json)};
+	my $request=POST($url,$data);
+	my $agent=LWP::UserAgent->new;
+	my $content=$agent->request($request)->content;
+	if($opt_q){print "$content\n";}
+}
+############################## queryTotsv ##############################
+sub queryTotsv{
+	my $writer=shift();
+	my $queries=shift();
+	my $results=shift();
+	foreach my $result(@{$results}){
+		foreach my $query(@{$queries}){
+			my @tokens=split(/->/,$query);
+			foreach my $token(@tokens){if($token=~/^\$(.+)$/){if(exists($result->{$1})){$token=$result->{$1}}}}
+			print $writer join("\t",@tokens)."\n";
+		}
+	}
+}
+############################## assembleJson ##############################
+sub assembleJson{
+	my $reader=shift();
+	my $template=shift();
+	my $json=readJson($reader);
+	close($reader);
+	my ($writer,$file)=tempfile(UNLINK=>1);
+	assembleJsonResults($json,$template,$writer);
+	close($writer);
+	return $file;
+}
+############################## assembleFile ##############################
+sub assembleFile{
+	my $reader=shift();
+	my $template=shift();
+	my ($writer,$file)=tempfile(UNLINK=>1);
+	my $expression=expressionCreate($template);
+	while(<$reader>){
+		chomp;s/\r//g;
+		my @tokens=expressionExtract($expression,$_);
+		print $writer join("\t",@tokens)."\n";
+	}
+	close($writer);
+	return $file;
 }
 ############################## readHash ##############################
 sub readHash{
@@ -2026,9 +2043,10 @@ sub queryCount{
 }
 ############################## getResults ##############################
 sub getResults{
-	my $dbh=shift();
+	my $database=shift();
 	my $query=shift();
 	my $variables=shift();
+	my $dbh=openDB($database);
 	my $sth=$dbh->prepare($query);
 	$sth->execute();
 	my @array=();
@@ -2043,40 +2061,8 @@ sub getResults{
 		if($undefined){next;}
 		push(@array,$hashtable);
 	}
-	return \@array;
-}
-############################## dumpDB ##############################
-sub dumpDB{
-	my $database=shift();
-	my $format=shift();
-	my $writer=shift();
-	my $dbh=openDB($database);
-	my $query="select n1.data,n2.data,n3.data from edge as e1 join node as n1 on e1.subject=n1.id join node as n2 on e1.predicate=n2.id join node as n3 on e1.object=n3.id";
-	my $where="";
-	my $sth=$dbh->prepare($query);
-	$sth->execute();
-	my $hash={};
-	if($format eq "json"){
-		my $rdf={};
-		while(my @rows=$sth->fetchrow_array()){
-			my $subject=$rows[0];
-			my $predicate=$rows[1];
-			my $object=$rows[2];
-			if(!exists($rdf->{$subject})){$rdf->{$subject}={};}
-			if(!exists($rdf->{$subject}->{$predicate})){$rdf->{$subject}->{$predicate}=$object;}
-			elsif(ref($rdf->{$subject}->{$predicate}) eq "ARRAY"){push(@{$rdf->{$subject}->{$predicate}},$object);}
-			else{$rdf->{$subject}->{$predicate}=[$rdf->{$subject}->{$predicate},$object];}
-		}
-		outputInJsonFormat($rdf,$writer);
-	}else{
-		while(my @rows=$sth->fetchrow_array()){
-			my $subject=$rows[0];
-			my $predicate=$rows[1];
-			my $object=$rows[2];
-			print $writer "$subject\t$predicate\t$object\n";
-		}
-	}
 	$dbh->disconnect;
+	return \@array;
 }
 ############################## deleteTSV ##############################
 sub deleteTSV{
@@ -2689,7 +2675,7 @@ sub unescapeOption{
 	$text=~s/\\\\/\\/g;
 	return $text;
 }
-############################## RDF SQLITE3 DATABASE ##############################
+############################## nodes and edges ##############################
 sub openDB{
 	my $database=shift();
 	my $dbh=DBI->connect("dbi:SQLite:dbname=$database");
@@ -2835,25 +2821,24 @@ sub getEdges{
 	while(my @rows=$sth->fetchrow_array()){push(@{$array},\@rows);}
 	return $array;
 }
+############################## countEdge ##############################
+sub countEdge{
+	my $database=shift();
+	my $dbh=openDB($database);
+	my $query="select count(*) from edge";
+	my $sth=$dbh->prepare($query);
+	$sth->execute();
+	my @rows=$sth->fetchrow_array();
+	return $rows[0];
+}
 ############################## newNode ##############################
 sub newNode{
 	my $database=shift();
 	my $dbh=openDB($database);
-	my $id=nodeMax($dbh)+1;
-	my $name="$database#node$id";
-	my $sth=$dbh->prepare("INSERT OR IGNORE INTO node(id,data) VALUES(?,?)");
-	$sth->execute($id,$name);
-	$dbh->disconnect;
-	return $name;
-}
-############################## newJob ##############################
-sub newJob{
-	my $database=shift();
-	my $dbh=openDB($database);
-	my $name="$basename".getDatetime();
+	my $name="n".getDatetime();
 	my $id=data2id($dbh,$name);
 	while(defined($id)){
-		$name="$basename".getDatetime();
+		$name="n".getDatetime();
 		$id=data2id($dbh,$name);
 		sleep(1);
 	}

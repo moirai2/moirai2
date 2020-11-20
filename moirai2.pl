@@ -18,6 +18,9 @@ my $program_path="$prgdir/$program_name";
 ############################## OPTIONS ##############################
 use vars qw($opt_c $opt_d $opt_g $opt_G $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_p $opt_q $opt_r $opt_s);
 getopts('c:d:g:G:hHi:lm:o:pqr:s:');
+############################## CONFIG ##############################
+my $udockerDirectory="/work/ah3q/udocker";
+my $singularityDirectory="/work/ah3q/singularity";
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -38,7 +41,6 @@ $urls->{"daemon/maxjob"}="https://moirai2.github.io/schema/daemon/maxjob";
 $urls->{"daemon/singlethread"}="https://moirai2.github.io/schema/daemon/singlethread";
 $urls->{"daemon/qsubopt"}="https://moirai2.github.io/schema/daemon/qsubopt";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
-$urls->{"daemon/workflow"}="https://moirai2.github.io/schema/daemon/workflow";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"daemon/stderr"}="https://moirai2.github.io/schema/daemon/stderr";
 $urls->{"daemon/stdout"}="https://moirai2.github.io/schema/daemon/stdout";
@@ -75,13 +77,14 @@ sub help{
 	print "\n";
 	print "Program: Executes MOIRAI2 command of a spcified URL json.\n";
 	print "\n";
-	print "Usage: perl $program_name [Options] JSON [ASSIGN/ARGV ..]\n";
+	print "Usage: perl $program_name [Options] JSON/BASH [ASSIGN/ARGV ..]\n";
 	print "\n";
 	print "       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).\n";
+	print "       BASH  URL or path to a command bash file (from https://moirai2.github.io/workflow/).\n";
 	print "     ASSIGN  Assign a MOIRAI2 variables with '\$VAR=VALUE' format.\n";
 	print "       ARGV  Arguments for input/output parameters.\n";
 	print "\n";
-	print "Options: -c  Use container for execution [docker,udocker].\n";
+	print "Options: -c  Use container for execution [docker,udocker,singularity].\n";
 	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
 	print "         -h  Show help message.\n";
 	print "         -H  Show update history.\n";
@@ -120,6 +123,7 @@ sub help{
 	if(defined($opt_H)){
 		print "############################## Updates ##############################\n";
 		print "\n";
+		print "2020/11/11  Added 'singularity' to container function.\n";
 		print "2020/11/06  Updated help and daemon functionality.\n";
 		print "2020/11/05  Added 'ls' function.\n";
 		print "2020/10/09  Repeat functionality removed.\n";
@@ -203,7 +207,7 @@ sub help_command{
 	print "    COMMAND  Bash command lines to execute.\n";
 	print "        EOS  Assign command lines with Unix's heredoc.\n";
 	print "\n";
-	print "Options: -c  Use container for execution [docker,udocker].\n";
+	print "Options: -c  Use container for execution [docker,udocker,singularity].\n";
 	print "         -d  RDF sqlite3 database (default='rdf.sqlite3').\n";
 	print "         -i  Input query for select in '\$sub->\$pred->\$obj' format.\n";
 	print "         -l  Show STDERR and STDOUT logs.\n";
@@ -274,6 +278,7 @@ sub help_ls{
 ############################## MAIN ##############################
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
+if(defined($opt_h)&&$ARGV[0]=~/\.(ba)?sh$/){printWorkflow($ARGV[0],$commands);exit(0);}
 if(scalar(@ARGV)>0&&$ARGV[0]eq"daemon"&&defined($opt_h)){help_daemon();exit(0);}
 if(scalar(@ARGV)>0&&$ARGV[0]eq"ls"&&defined($opt_h)){help_ls();exit(0);}
 if(scalar(@ARGV)>0&&$ARGV[0]eq"script"&&defined($opt_h)){help_script();exit(0);}
@@ -305,8 +310,6 @@ mkdir("$ctrldir/insert");chmod(0777,"$ctrldir/insert");
 mkdir("$ctrldir/delete");chmod(0777,"$ctrldir/delete");
 mkdir("$ctrldir/update");chmod(0777,"$ctrldir/update");
 mkdir("$ctrldir/completed");chmod(0777,"$ctrldir/completed");
-mkdir("$ctrldir/stdout");chmod(0777,"$ctrldir/stdout");
-mkdir("$ctrldir/stderr");chmod(0777,"$ctrldir/stderr");
 mkdir("$ctrldir/submit");chmod(0777,"$ctrldir/submit");
 #just in case jobs are completed while moirai2.pl was not running by termination
 my $executes={};
@@ -334,15 +337,14 @@ if(defined($opt_o)){
 if(defined($opt_l)){printRows($queryResults->{".keys"},$queryResults->{".hashs"});}
 ##### handle commmand #####
 my @nodeids;
-my $cmdurl=(scalar(@ARGV)>0)?$ARGV[0]:undef;
+my $cmdurl=shift(@ARGV);
 if($cmdurl eq "command"){
-	my @commands=();
+	my @lines=();
 	my ($inputs,$outputs)=handleInputOutput($insertKeys,$queryResults);
-	while(<STDIN>){chomp;push(@commands,$_);}
-	$cmdurl=createJson($rootdir,$inputs,$outputs,@commands);
+	while(<STDIN>){chomp;push(@lines,$_);}
+	$cmdurl=createJson($rootdir,$inputs,$outputs,@lines);
 }
 if(defined($cmdurl)){
-	shift(@ARGV);
 	my ($arguments,$userdefined)=handleArguments(@ARGV);
 	@nodeids=commandProcess($cmdurl,$commands,$queryResults,$userdefined,$insertKeys,@{$arguments});
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
@@ -512,7 +514,6 @@ sub bashCommand{
 	my $vars=shift();
 	my $bashFiles=shift();
 	my $nodeid=$vars->{"nodeid"};
-	my $prjname=$vars->{"prjname"};
 	my $url=$command->{$urls->{"daemon/command"}};
 	my $workdir="$rootdir/".$vars->{"workdir"};
 	my $bashfile="$workdir/".$vars->{"bashfile"};
@@ -530,7 +531,7 @@ sub bashCommand{
 	open(OUT,">$bashfile");
 	print OUT "#!/bin/sh\n";
 	print OUT "########## system ##########\n";
-	my @systemvars=("cmdurl","prjname","rdfdb","nodeid","ctrldir","prgdir","rootdir","tmpdir","workdir");
+	my @systemvars=("cmdurl","rdfdb","nodeid","ctrldir","prgdir","rootdir","tmpdir","workdir");
 	my @unusedvars=();
 	my @systemfiles=("bashfile","stdoutfile","stderrfile","deletefile","updatefile","insertfile","completedfile");
 	my @outputvars=(@{$command->{"output"}});
@@ -573,8 +574,8 @@ sub bashCommand{
 		}
 	}
 	print OUT "########## open tmpdir ##########\n";
-	print OUT "mkdir -p /tmp/\$prjname\n";
-	print OUT "ln -s /tmp/\$prjname \$rootdir/\$workdir/tmp\n";
+	print OUT "mkdir -p /tmp/\$nodeid\n";
+	print OUT "ln -s /tmp/\$nodeid \$rootdir/\$workdir/tmp\n";
 	print OUT "########## initialize ##########\n";
 	print OUT "cat<<EOF>>\$workdir/\$insertfile\n";
 	my $inputs=$command->{"inputs"};
@@ -780,21 +781,22 @@ sub bashCommand{
 	}
 	print OUT "########## close tmpdir ##########\n";
 	print OUT "rm \$workdir/tmp\n";
-	print OUT "if [ -z \"\$(ls -A /tmp/\$prjname)\" ]; then\n";
-  	print OUT "rmdir /tmp/\$prjname\n";
+	print OUT "if [ -z \"\$(ls -A /tmp/\$nodeid)\" ]; then\n";
+  	print OUT "rmdir /tmp/\$nodeid\n";
 	print OUT "else\n";
-	print OUT "mv /tmp/\$prjname \$workdir/tmp\n";
+	print OUT "mv /tmp/\$nodeid \$workdir/tmp\n";
 	print OUT "fi\n";
 	print OUT "########## completed ##########\n";
 	my $importcount=0;
 	my $nodename=$nodeid;
 	$nodename=~s/[^A-za-z0-9]/_/g;
 	foreach my $importfile(@{$command->{$urls->{"daemon/import"}}}){print OUT "mv \$workdir/$importfile \$ctrldir/insert/$nodename.import\n";$importcount++;}
-	print OUT "mv \$workdir/\$completedfile \$ctrldir/completed/\$prjname.sh\n";
+	print OUT "mv \$workdir/\$completedfile \$ctrldir/completed/\$nodeid.sh\n";
 	close(OUT);
 	writeCompleteFile($completedfile,$stdoutfile,$stderrfile,$insertfile,$deletefile,$updatefile,$bashfile,\@scriptfiles,$ctrldir,$workdir);
 	if(exists($vars->{"bashfile"})){
-		if(defined($opt_c)){push(@{$bashFiles},[$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"bashfile"},$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"stdoutfile"},$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"stderrfile"},$nodeid]);}
+		if(defined($opt_c)){push(@{$bashFiles},[$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"bashfile"},$stdoutfile,$stderrfile,$nodeid]);}
+		#if(defined($opt_c)){push(@{$bashFiles},[$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"bashfile"},$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"stdoutfile"},$vars->{"rootdir"}."/".$vars->{"workdir"}."/".$vars->{"stderrfile"},$nodeid]);}
 		else{push(@{$bashFiles},[$bashfile,$stdoutfile,$stderrfile,$nodeid]);}
 	}
 }
@@ -1013,12 +1015,14 @@ sub commandProcessVars{
 sub automate{
 	my @files=getFiles("$ctrldir/automate");
 	if(scalar(@files)==0){return 0;}
-	my $total=0;
-	foreach my $file(@files){
-		system("bash $file");
-		if(defined($opt_l)){print STDERR "bsh $file\n";}
+	foreach my $file(sort{$a cmp $b}@files){
+		my $command=getBash($file);
+		my @lines=@{$command->{$urls->{"daemon/bash"}}};
+		my ($writer,$temp)=tempfile("bashXXXXXXXXXX",DIR=>$ctrldir,UNLINK=>1,SUFFIX=>".sh");
+		foreach my $line(@lines){print $writer "$line\n";}
+		system("bash $temp");
+		if(defined($opt_l)){print STDERR "bash $temp\n";}
 	}
-	return $total;
 }
 ############################## controlCompleted ##############################
 sub controlCompleted{
@@ -1213,13 +1217,6 @@ sub getExecuteJobsSelect{
 			$count++;
 		}
 	}
-	foreach my $line(@{$command->{"selectKeys"}}){
-		my @tokens=@{$line};
-		if($tokens[1] eq $urls->{"daemon/workflow"}){
-			my $nodekey=substr($tokens[0],1);
-			foreach my $vars(@{$executes->{$url}}){$vars->{"nodeid"}=$vars->{$nodekey};}
-		}
-	}
 	return $count;
 }
 ############################## getExecuteJobs ##############################
@@ -1272,7 +1269,7 @@ sub getFileContent{
 	my $path=shift();
 	open(IN,$path);
 	my $content;
-	while(<IN>){chomp;s/\r//g;$content.=$_;}
+	while(<IN>){s/\r//g;$content.=$_;}
 	close(IN);
 	return $content;
 }
@@ -1300,6 +1297,35 @@ sub getHttpContent{
 	my $res=$agent->request($request);
 	if($res->is_success){return $res->content;}
 	elsif($res->is_error){print $res;}
+}
+############################## getBash ##############################
+sub getBash{
+	my $url=shift();
+	my $username=shift();
+	my $password=shift();
+	my $content=($url=~/https?:\/\//)?getHttpContent($url,$username,$password):getFileContent($url);
+	my $line;
+	my @lines=();
+	foreach my $c(split(/\n/,$content)){
+		if($c=~/^\s*(.+)\s+\\$/){
+			if(defined($line)){$line.=" $1";}
+			else{$line=$1;}
+		}elsif(defined($line)){
+			$line.=" $c";
+			push(@lines,$line);
+			$line=undef;
+		}else{push(@lines,$c);}
+	}
+	if(defined($line)){push(@lines,$line);}
+	foreach my $line(@lines){
+		if($line=~/(perl )?moirai2\.pl/){
+			$line=~s/\s+\-q//;
+			$line=~s/\s+\-c\s+\S+//;
+			$line=~s/\s+\-d\s+\S+//;
+			$line=~s/moirai2\.pl/moirai2.pl -d $rdfdb/;
+		}
+	}
+	return {$urls->{"daemon/bash"}=>\@lines};
 }
 ############################## getJson ##############################
 sub getJson{
@@ -1463,25 +1489,24 @@ sub initExecute{
 	my $vars=shift();
 	if(!defined($vars)){$vars={};}
 	my $url=$command->{$urls->{"daemon/command"}};
-	$vars->{"basename"}=$basename;
+	my $nodeid=$vars->{"nodeid"};
 	$vars->{"rootdir"}=$rootdir;
 	$vars->{"prgdir"}=$prgdir;
 	$vars->{"ctrldir"}=$ctrldir;
 	$vars->{"cmdurl"}=$url;
 	$vars->{"rdfdb"}=$rdfdb;
-	my $basedir=mkdtemp("$workdir/work.XXXXXXXXXX");
-	chmod(0777,$basedir);
-	my $prjname=basename($basedir);
-	$vars->{"workdir"}="$basename/$prjname";
-	$vars->{"tmpdir"}="$basename/$prjname/tmp";
-	$vars->{"prjname"}=$prjname;
-	$vars->{"bashfile"}="$prjname.sh";
-	$vars->{"stderrfile"}="$prjname.stderr";
-	$vars->{"stdoutfile"}="$prjname.stdout";
-	$vars->{"insertfile"}="$prjname.insert";
-	$vars->{"deletefile"}="$prjname.delete";
-	$vars->{"updatefile"}="$prjname.update";
-	$vars->{"completedfile"}="$prjname.completed";
+	my $directory="$workdir/$nodeid";
+	mkdir($directory);
+	chmod(0777,$directory);
+	$vars->{"workdir"}="$basename/$nodeid";
+	$vars->{"tmpdir"}="$basename/$nodeid/tmp";
+	$vars->{"bashfile"}="$nodeid.sh";
+	$vars->{"stderrfile"}="$nodeid.stderr";
+	$vars->{"stdoutfile"}="$nodeid.stdout";
+	$vars->{"insertfile"}="$nodeid.insert";
+	$vars->{"deletefile"}="$nodeid.delete";
+	$vars->{"updatefile"}="$nodeid.update";
+	$vars->{"completedfile"}="$nodeid.completed";
 	return $vars;
 }
 ############################## jsonDecode ##############################
@@ -1679,7 +1704,7 @@ sub loadCommandFromURL{
 	my $commands=shift();
 	if(exists($commands->{$url})){return $commands->{$url};}
 	if(defined($opt_l)){print STDERR "#Loading $url:\t";}
-	my $command=getJson($url);
+	my $command=($url=~/\.json$/)?getJson($url):getBash($url);
 	if(scalar(keys(%{$command}))==0){print "ERROR: Couldn't load $url\n";exit(1);}
 	loadCommandFromURLSub($command,$url);
 	$command->{$urls->{"daemon/command"}}=$url;
@@ -1780,8 +1805,7 @@ sub mainProcess{
 				if(!$singlethread&&$maxjob<=0){last;}
 				my $vars=shift(@{$executes->{$url}});
 				initExecute($rdfdb,$command,$vars);
-				if(exists($command->{"selectKeys"})){push(@deletes,$vars->{"root"}."\t".$urls->{"daemon/workflow"}."\t$url");}
-				else{push(@deletes,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t".$vars->{"nodeid"});}
+				push(@deletes,$urls->{"daemon"}."\t".$urls->{"daemon/execute"}."\t".$vars->{"nodeid"});
 				my $datetime=`date +%s`;chomp($datetime);
 				push(@inserts,$vars->{"nodeid"}."\t".$urls->{"daemon/timethrown"}."\t$datetime");
 				bashCommand($command,$vars,$bashFiles);
@@ -2254,13 +2278,14 @@ sub throwJobs{
 	my $use_container=shift();
 	my $docker_image=shift();
 	if(scalar(@{$bashFiles})==0){return;}
-	my ($fh,$path)=mkstemps("$ctrldir/bash/runXXXXXXXXXX",".sh");
-	my $prjname=basename($path,".sh");
-	my $error_file="$ctrldir/stderr/$prjname.stderr";
-	my $log_file="$ctrldir/stdout/$prjname.stdout";
+	my $template=($use_qsub)?"$ctrldir/bash/qsubXXXXXXXXXX":"$ctrldir/bash/bashXXXXXXXXXX";
+	my ($fh,$path)=mkstemps($template,".sh");
+	my $fileid=basename($path,".sh");
+	my $qsub_stderr="$ctrldir/$fileid.stderr";
+	my $qsub_stdout="$ctrldir/$fileid.stdout";
 	if($use_qsub){
-		print $fh "#\$ -e $error_file\n";
-		print $fh "#\$ -o $log_file\n";
+		print $fh "#\$ -e $qsub_stderr\n";
+		print $fh "#\$ -o $qsub_stdout\n";
 	}
 	print $fh "PATH=$exportpath\n";
 	my @ids=();
@@ -2277,11 +2302,11 @@ sub throwJobs{
 			print $fh "  -v '$rootdir:/root' \\\n";
 			print $fh "  $docker_image \\\n";
 			print $fh "  /bin/bash $bashFile \\\n";
-			print $fh "  > $log_file \\\n";
-			print $fh "  2> $error_file\n";
+			print $fh "  > $qsub_stderr \\\n";
+			print $fh "  2> $stderrFile\n";
 		}elsif($use_container eq "udocker"){
 			print $fh "udocker \\\n";
-			print $fh "  --repo=/work/ah3q/udocker \\\n";
+			print $fh "  --repo=$udockerDirectory \\\n";
 			print $fh "  run \\\n";
 			print $fh "  --rm \\\n";
 			print $fh "  --user=root \\\n";
@@ -2289,8 +2314,17 @@ sub throwJobs{
 			print $fh "  --volume=$rootdir:/root \\\n";
 			print $fh "  $docker_image \\\n";
 			print $fh "  /bin/bash $bashFile \\\n";
-			print $fh "  > $log_file \\\n";
-			print $fh "  2> $error_file\n";
+			print $fh "  > $stdoutFile \\\n";
+			print $fh "  2> $stderrFile\n";
+		}elsif($use_container eq "singularity"){
+			$docker_image="$singularityDirectory/$docker_image.sif";
+			print $fh "singularity \\\n";
+			print $fh "  exec \\\n";
+			print $fh "  --bind=$rootdir:/root \\\n";
+			print $fh "  $docker_image \\\n";
+			print $fh "  /bin/bash $bashFile \\\n";
+			print $fh "  > $stdoutFile \\\n";
+			print $fh "  2> $stderrFile\n";
 		}else{
 			print $fh "bash $bashFile \\\n";
 			print $fh "  > $stdoutFile \\\n";
@@ -2298,11 +2332,11 @@ sub throwJobs{
 		}
 	}
 	if($use_qsub||defined($use_container)){
-		print $fh "if [ ! -s $error_file ];then\n";
-		print $fh "rm -f $error_file\n";
+		print $fh "if [ ! -s $qsub_stderr ];then\n";
+		print $fh "rm -f $qsub_stderr\n";
 		print $fh "fi\n";
-		print $fh "if [ ! -s $log_file ];then\n";
-		print $fh "rm -f $log_file\n";
+		print $fh "if [ ! -s $qsub_stdout ];then\n";
+		print $fh "rm -f $qsub_stdout\n";
 		print $fh "fi\n";
 	}
 	print $fh "rm -f $path\n";
