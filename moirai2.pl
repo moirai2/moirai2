@@ -198,7 +198,7 @@ sub help_command{
 	print "\n";
 	print "############################## HELP ##############################\n";
 	print "\n";
-	print "Usage: perl $program_name [Options] command [ASSIGN ..] << EOS\n";
+	print "Usage: perl $program_name [Options] command [ASSIGN ..] << 'EOS'\n";
 	print "COMMAND ..\n";
 	print "COMMAND2 ..\n";
 	print "EOS\n";
@@ -219,7 +219,7 @@ sub help_command{
 	print "\n";
 	print "############################## Examples ##############################\n";
 	print "\n";
-	print "1) perl $program_name -i 'A->#input->\$input' -o 'A->#output->\$output' command << EOS\n";
+	print "1) perl $program_name -i 'A->#input->\$input' -o 'A->#output->\$output' command << 'EOS'\n";
 	print "output=sort/\${input.basename}.txt\n";
 	print "sort \$input > \$output\n";
 	print "EOS\n";
@@ -1005,7 +1005,21 @@ sub commandProcessVars{
 		my $value=$output;
 		my $found=0;
 		if(exists($hash->{$value})){$value=$hash->{$value};$found=1;}
-		if(exists($userdefined->{$value})){$value=$userdefined->{$value};$found=1;}
+		if(exists($userdefined->{$value})){
+			$value=$userdefined->{$value};
+			if($value=~/\$(\w+)\.(\w+)/){
+				if(exists($vars->{$1})){
+					my $h=basenames($vars->{$1});
+					if(exists($h->{$2})){my $k="\\\$$1\\.$2";my $v=$h->{$2};$value=~s/$k/$v/g;}
+				}
+			}elsif($value=~/\$\{(\w+)\.(\w+)\}/){
+				if(exists($vars->{$1})){
+					my $h=basenames($vars->{$1});
+					if(exists($h->{$2})){my $k="\\\$\\{$1\\.$2\\}";my $v=$h->{$2};$value=~s/$k/$v/g;}
+				}
+			}
+			$found=1;
+		}
 		if($found==1){$vars->{$output}=$value;}
 	}
 	while(my($key,$val)=each(%{$hash})){if(!exists($vars->{$key})){$vars->{$key}=$val;}}

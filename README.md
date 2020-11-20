@@ -76,7 +76,7 @@ output.txt
 ### Example4
 * Order of input and output in arguments can be checked with a help option.
 ```shell
-perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
+$perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
 
 #URL     :https://moirai2.github.io/command/text/sort.json
 #Command :sort.json [input] [output]
@@ -86,6 +86,50 @@ perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
          :sort $input > $output
 ```
 * In sort.json case, first argument is 'input' and second argument is 'output'.
+* help option without any json URL will print out ordinary help message.
+```shell
+$perl moirai2.pl -h
+
+############################## HELP ##############################
+
+Program: Handles MOIRAI2 command with SQLITE3 database.
+Version: 2020/11/05
+Author: Akira Hasegawa (akira.hasegawa@riken.jp)
+
+Usage: perl moirai2.pl [Options] COMMAND
+
+Commands: daemon   Run daemon
+          file     Checks file information
+          ls       list directories/files
+          command  Execute from user specified command instead of a command json
+          loop     Loop check and execution indefinitely 
+          script   Retrieve scripts and bash files from a command json
+          test     For development purpose
+.....
+```
+* help option without a command will show more specific help message
+```shell
+$perl moirai2.pl -h ls
+
+############################## HELP ##############################
+
+Program: List files/directories and store path information to DB.
+
+Usage: perl moirai2.pl [Options] ls DIR DIR2 ..
+
+        DIR  Directory to search for (if not specified, DIR='.').
+
+Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
+         -g  grep specific string
+         -G  ungrep specific string
+         -o  Output query for insert in '$sub->$pred->$obj' format.
+         -r  Recursive search (default=0)
+
+Variables: $path, $directory, $filename, $basename, $suffix, $dirX (X=0~9), $baseX (X=0~9)
+
+Example: perl moirai2.pl -d DB -r 0 -g GREP -G UNREP -o '$basename->#id->$path' ls DIR DIR2 ..
+
+```
 
 ### Example5
 ```shell
@@ -93,10 +137,10 @@ $ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input=input.t
 $ ls output.txt
 output.txt
 ```
-* You can specify input and output by variable format "key=value".
+* You can specify input and output with "key=value" notation.
 * Order doesn't matter if variable format is used.
-* Notation can be either input=input.txt or '$input=input.txt' (be sure to use single quote in this case).
-* To know the valid input and output variable names use a help command explained in Example4
+* Notation can be either input=input.txt or '$input=input.txt' (be sure to use single quote when $ is used).
+* To know the valid input and output variable names use a help command explained in Example4.
 
 ### Example6
 ```shell
@@ -113,6 +157,9 @@ output.txt
 * A command json file used in the previous usage, specifies command lines, input, and output.
 * I have prepared basic commands at <a href="https://moirai2.github.io/command">https://moirai2.github.io/command</a>.
 * You can create your own command json file and use them.
+* https://moirai2.github.io/schema/daemon/input - For multiple values, ["$input1","$input2"]
+* https://moirai2.github.io/schema/daemon/bash - MAKE SURE you assign the output variables in your code.
+* https://moirai2.github.io/schema/daemon/output -  To specify multiple value, "$output1,$output2" is ok too.
 
 ### Example7
 * Information of an execution is stored in the Resource Description Framework (RDF) database (https://en.wikipedia.org/wiki/Resource_Description_Framework).
@@ -147,13 +194,16 @@ n20201119135641	https://moirai2.github.io/schema/daemon/timestarted	1605761801
 n20201119135641	https://moirai2.github.io/schema/daemon/timethrown	1605761801
 ```
 * Output option format is 'subject->predicate->object'.
-* Variables ($input and $output) need to be matched with variables specified in sort.json notation.
-* Be sure to use single quote (') instead of double quote (") when specifying output format.  Otherwise $input and $output will be treated as bash variables (bash tries to assign values to $input and $output resulting in empty values).
+* Variables ($input and $output) need to be matched with variables specified in command lines.
+* Be sure to use single quotes (') instead of double quotes (") when specifying output format.  Otherwise $input and $output will be treated as bash variables (bash tries to assign values to $input and $output resulting in empty values).
+* If you really want to use double quotes, Be sure to add '\' before '$'.
+```shell
+$perl moirai2.pl -o "\$input->sorted->\$output" https://moirai2.github.io/command/text/sort.json input=input.txt output=sorted.txt
+```
 
 ### Example9
-* With -i option, input values can be referenced from database.
+* With -i option, variable values can be referenced from the database.
 * Using result from previous example:
-$ perl rdf.pl select
 ```shell
 $ perl rdf.pl select % sorted
 input.txt	sorted	sorted.txt
@@ -161,6 +211,18 @@ $perl moirai2.pl -i '$original->sorted->$input' -o '$input->resorted->$output' h
 $ perl rdf.pl select % %sorted
 input.txt	sorted	sorted.txt
 sorted.txt	resorted	resorted.txt
+```
+* If there are multiple data assigned in the database, all the commands will be executed.
+```shell
+$ perl rdf.pl select % sorted
+input.txt	sorted	sorted.txt
+input2.txt	sorted	sorted2.txt
+$perl moirai2.pl -i '$original->sorted->$input' -o '$input->resorted->$output' https://moirai2.github.io/command/text/sort.json 'output=${input.basename}.resorted.txt'
+$ perl rdf.pl select % %sorted
+input.txt	sorted	sorted.txt
+input2.txt	sorted	sorted2.txt
+sorted.txt	resorted	sorted.resorted.txt
+sorted2.txt	resorted	sorted2.resorted.txt
 ```
 
 ### Example10
@@ -192,12 +254,134 @@ EOS
   * .baseX (X=int) - separated by non alphabet/number.  base0="D", base1="E", base2="F"
   * .dirX (X=int) - separated by '/'.  dir0="A", dir1="B", dir2="C"
 
+## Scripts
+
 ### moirai2.pl
+#### main
 ```shell
-$ perl moirai2.pl CMDURL ARGV [ARGV ..]
+Program: Handles MOIRAI2 command with SQLITE3 database.
+Version: 2020/11/05
+Author: Akira Hasegawa (akira.hasegawa@riken.jp)
+
+Usage: perl moirai2.pl [Options] COMMAND
+
+Commands: daemon   Run daemon
+          file     Checks file information
+          ls       list directories/files
+          command  Execute from user specified command instead of a command json
+          loop     Loop check and execution indefinitely 
+          script   Retrieve scripts and bash files from a command json
+          test     For development purpose
 ```
-List of default commands are here:
-https://moirai2.github.io/command
+
+#### default
+```shell
+Program: Executes MOIRAI2 command of a spcified URL json.
+
+Usage: perl moirai2.pl [Options] JSON/BASH [ASSIGN/ARGV ..]
+
+       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).
+       BASH  URL or path to a command bash file (from https://moirai2.github.io/workflow/).
+     ASSIGN  Assign a MOIRAI2 variables with '$VAR=VALUE' format.
+       ARGV  Arguments for input/output parameters.
+
+Options: -c  Use container for execution [docker,udocker,singularity].
+         -d  RDF sqlite3 database (default='rdf.sqlite3').
+         -h  Show help message.
+         -H  Show update history.
+         -i  Input query for select in '$sub->$pred->$obj' format.
+         -l  Show STDERR and STDOUT logs.
+         -m  Max number of jobs to throw (default='5').
+         -o  Output query for insert in '$sub->$pred->$obj' format.
+         -p  Prompt input parameter(s) to user.
+         -q  Use qsub for throwing jobs.
+         -r  Print return value.
+         -s  Loop second (default='10').
+```
+
+#### file
+```shell
+Program: Check and store file information to the database.
+
+Usage: perl moirai2.pl [Options] file
+
+Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
+         -i  Input query for select in '$sub->$pred->$obj' format.
+         -o  Output query for insert in '$sub->$pred->$obj' format.
+
+Variables:
+  $linecount   Print line count of a file (Can take care of gzip and bzip2).
+  $seqcount    Print sequence count of a FASTA/FASTQ files.
+  $filesize    Print size of a file.
+  $md5         Print MD5 of a file.
+  $timestamp   Print time stamp of a file.
+  $owner       Print owner of a file.
+  $group       Print group of a file.
+  $permission  Print permission of a file.
+```
+
+#### ls
+```shell
+Program: List files/directories and store path information to DB.
+
+Usage: perl moirai2.pl [Options] ls DIR DIR2 ..
+
+        DIR  Directory to search for (if not specified, DIR='.').
+
+Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
+         -g  grep specific string
+         -G  ungrep specific string
+         -o  Output query for insert in '$sub->$pred->$obj' format.
+         -r  Recursive search (default=0)
+
+Variables: $path, $directory, $filename, $basename, $suffix, $dirX (X=0~9), $baseX (X=0~9)
+```
+
+#### command
+```shell
+Usage: perl moirai2.pl [Options] command [ASSIGN ..] << 'EOS'
+COMMAND ..
+COMMAND2 ..
+EOS
+
+     ASSIGN  Assign a MOIRAI2 variables with '$VAR=VALUE' format.
+    COMMAND  Bash command lines to execute.
+        EOS  Assign command lines with Unix's heredoc.
+
+Options: -c  Use container for execution [docker,udocker,singularity].
+         -d  RDF sqlite3 database (default='rdf.sqlite3').
+         -i  Input query for select in '$sub->$pred->$obj' format.
+         -l  Show STDERR and STDOUT logs.
+         -m  Max number of jobs to throw (default='5').
+         -o  Output query for insert in '$sub->$pred->$obj' format.
+         -q  Use qsub for throwing jobs.
+         -r  Print return value.
+         -s  Loop second (default='10').
+```
+
+#### loop
+```shell
+Program: Check for Moirai2 commands every X seconds and execute.
+
+Usage: perl moirai2.pl [Options] loop
+
+Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
+         -l  Show STDERR and STDOUT logs.
+         -m  Max number of jobs to throw (default='5').
+         -q  Use qsub for throwing jobs(default='bash').
+         -s  Loop second (default='no loop').
+```
+
+#### script
+```shell
+Program: Retrieves script and bash files from URL and save them to a directory.
+
+Usage: perl moirai2.pl [Options] script JSON
+
+       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).
+
+Options: -o  Output directory (default='.').
+```
 
 ### rdf.pl
 
