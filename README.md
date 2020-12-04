@@ -226,6 +226,24 @@ sorted2.txt	resorted	sorted2.resorted.txt
 ```
 
 ### Example10
+* By joining input and output notations of commands, the pipeline/workflow can be created.
+```shell
+$ cat workflow.sh
+mkdir -p grepped
+mkdir -p sorted
+mkdir -p uniqued
+$perl moirai2.pl -o 'workflow->input->$path' input
+$perl moirai2.pl -i '$hoge->input->$input' -o '$input->grepped->$output' https://moirai2.github.io/command/text/grep.json 'output=grepped/${input.filename}' 'pattern=moirai2'
+$perl moirai2.pl -i '$hoge->grepped->$input' -o '$input->sorted->$output' https://moirai2.github.io/command/text/sort.json 'output=sorted/${input.filename}'
+$perl moirai2.pl -i '$hoge->sorted->$input' -o '$input->uniqued->$output' https://moirai2.github.io/command/text/uniq_c.json 'output=uniqued/${input.filename}'
+```
+  * This line adds files under input directory to the database.
+  * If there are A.txt and B.txt under input/ directory, 'workflow->input->input/A.txt' and 'workflow->input->input/B.txt' will be added to the database.
+```shell
+$perl moirai2.pl -o 'workflow->input->$path' input
+```
+
+### Example11
 * The command lines don't have to be specified through json.
 ```shell
 $ perl moirai2.pl -i '$original->resorted->$file' -o '$file->wc-l->$result' command << 'EOS'

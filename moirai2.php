@@ -3,18 +3,16 @@ $command=$_GET["command"];
 //############################## submit.php ##############################
 if($command=="submit"){
 	foreach($_POST as $key=>$value){$params[$key]=$value;}
-	$db=filterDatabasePath($params["rdfdb"]);
-	if($db==null)exit(1);
+	$moiraidir=filterDatabasePath($params["rdfdb"]);
+	if($moiraidir==null)exit(1);
 	unset($params["rdfdb"]);
-	$ctrldir=basename($db);
-	if(preg_match("/^([^\.]+)\./",$ctrldir,$matches)){$ctrldir=$matches[1];}
 	$tsv=tmpData($params);
 	chmod($tsv,0777);
 	if($tsv==null)exit(1);
-	if(!file_exists($ctrldir)){mkdir($ctrldir);chmod($ctrldir,0777);}
-	if(!file_exists("$ctrldir/ctrl")){mkdir("$ctrldir/ctrl");chmod("$ctrldir/ctrl",0777);}
-	if(!file_exists("$ctrldir/ctrl/submit")){mkdir("$ctrldir/ctrl/submit");chmod("$ctrldir/ctrl/submit",0777);}
-	rename($tsv,"$ctrldir/ctrl/submit/".basename($tsv).".txt");
+	if(!file_exists($moiraidir)){mkdir($moiraidir);chmod($moiraidir,0777);}
+	if(!file_exists("$moiraidir/ctrl")){mkdir("$moiraidir/ctrl");chmod("$moiraidir/ctrl",0777);}
+	if(!file_exists("$moiraidir/ctrl/submit")){mkdir("$moiraidir/ctrl/submit");chmod("$moiraidir/ctrl/submit",0777);}
+	rename($tsv,"$moiraidir/ctrl/submit/".basename($tsv).".txt");
 //############################## insert.php ##############################
 }else if($command=="insert"){
 	$db=filterDatabasePath($_POST["rdfdb"]);
@@ -39,27 +37,13 @@ if($command=="submit"){
 	if($json==null)exit(1);
 	system("perl rdf.pl -d $db -f json update < $json");
 	unlink($json);
-//############################## newnode.php ##############################
-}else if($command=="newnode"){
-	$db=filterDatabasePath($_POST["rdfdb"]);
-	if($db==null)exit(1);
-	$id=trim(`perl rdf.pl -d $db newnode`);
-	echo $id;
-//############################## command.php ##############################
-}else if($command=="command"){
-	$db=filterDatabasePath($_POST["rdfdb"]);
-	$json=tmpData($_POST["data"]);
-	if($db==null)exit(1);
-	$id=trim(`perl rdf.pl -d $db -f json command < $json`);
-	unlink($json);
-	echo $id;
 //############################## select.php ##############################
 }else if($command=="select"){
 	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
 	$json=tmpData($_POST["query"]);
 	if($json==null)exit(1);
-	exec("perl rdf.pl -d $db select < $json",$array);
+	exec("perl rdf.pl -d $db -f json select < $json",$array);
 	unlink($json);
 	foreach($array as $line){echo "$line\n";}
 //############################## query.php ##############################
@@ -68,7 +52,7 @@ if($command=="submit"){
 	if($db==null)exit(1);
 	$json=tmpData($_POST["query"]);
 	if($json==null)exit(1);
-	exec("perl rdf.pl -d $db query < $json",$array);
+	exec("perl rdf.pl -d $db -f json query < $json",$array);
 	unlink($json);
 	foreach($array as $line){echo "$line\n";}
 //############################## symlink.php ##############################
@@ -121,36 +105,6 @@ if($command=="submit"){
 			echo $path;
 		}
 	}catch(Exception $e){echo "ERROR";}
-//############################## ls.php ##############################
-}else if($command=="ls"){
-	$directory=$_POST["directory"];
-	$suffix=$_POST["filesuffix"];
-	$depth=$_POST["depth"];
-	$getDir=$_POST["getDir"];
-	$getFile=$_POST["getFile"];
-	$detail=$_POST["detail"];
-	$grep=$_POST["grep"];
-	if($depth==NULL)$depth=1;
-	if($getFile==NULL)$getFile=1;
-	if($getDir==NULL)$getDir=0;
-	$files=ls_file($directory,$depth,$grep,$suffix,$getFile,$getDir,$detail,array());
-	echo "[";
-	$i=0;
-	foreach($files as $file){
-		if($i>0)echo ",";
-		if(is_array($file)){
-			echo "{";
-			$j=0;
-			foreach(array_keys($file) as $s){
-				if($j>0)echo ",";
-				echo "\"$s\":\"".$file[$s]."\"";
-				$j++;
-			}
-			echo "}";
-		}else echo "\"$file\"\n";
-		$i++;
-	}
-	echo "]";
 //############################## proxy.php ##############################
 }else if($command=="proxy"){
 	$url=$_POST["url"];
@@ -198,34 +152,6 @@ if($command=="submit"){
 	unlink($zipFilepath);
 //############################## default ##############################
 }else{
-}
-//############################## ls_file ##############################
-function ls_file($path,$depth=1,$grep,$suffix,$getFile=1,$getDir=0,$detail=0,$array){
-	if($array==NULL)$array=array();
-	if(is_dir($path)){
-		if($getDir)if($grep==""||preg_match("/$grep/",$path)){
-			if($detail)array_push($array,array("path"=>$path,"mtime"=>date("Y/m/d H:i:s",filemtime($path)),"atime"=>date("Y/m/d H:i:s",fileatime($path)),"ctime"=>date("Y/m/d H:i:s",filectime($path)),"group"=>posix_getpwuid(filegroup($path))["name"],"owner"=>posix_getpwuid(fileowner($path))["name"],"type"=>filetype($path),"size"=>filesize($path),"perms"=>substr(sprintf('%o',fileperms($path)),-3)));
-			else array_push($array,$path);
-		}
-		$reader=opendir($path);
-		while(false!==($names[]=readdir($reader)));
-		closedir($reader);
-		sort($names);
-		foreach($names as $name){
-			if($name==""  )continue;
-			if($name=="." )continue;
-			if($name=="..")continue;
-			if($path!="" && $path!="."){$name="$path/$name";}
-			if($depth!=0)$array=ls_file($name,$depth-1,$grep,$suffix,$getFile,$getDir,$detail,$array);
-		}
-	}else if(is_file($path)||is_link($path)){
-		if($getFile==0){return $array;}
-		if($grep!=""&&!preg_match("/$grep/",$path)){return $array;}
-		if($suffix!=""&&!preg_match("/$suffix$/",$path)){return $array;}
-		if($detail)array_push($array,array("path"=>$path,"mtime"=>date("Y/m/d H:i:s",filemtime($path)),"atime"=>date("Y/m/d H:i:s",fileatime($path)),"ctime"=>date("Y/m/d H:i:s",filectime($path)),"group"=>posix_getpwuid(filegroup($path))["name"],"owner"=>posix_getpwuid(fileowner($path))["name"],"type"=>filetype($path),"size"=>filesize($path),"perms"=>substr(sprintf('%o',fileperms($path)),-3)));
-		else array_push($array,$path);
-	}
-	return $array;
 }
 // ############################## list_file ##############################
 function list_file($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
