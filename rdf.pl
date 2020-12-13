@@ -60,6 +60,7 @@ sub help{
 	print "           seqcount  Record sequence count of a file\n";
 	print "             submit  Record new job submission\n";
 	print "               test  For development purpose\n";
+	print "          appendlog  Append stderr/stdout/bash/script information to log file\n";
 	print "\n";
 }
 sub help_import{
@@ -84,9 +85,11 @@ sub help_import{
 my $moiraiDir=(defined($opt_d))?$opt_d:"moirai";
 my $dbDir="$moiraiDir/db";
 my $logDir="$moiraiDir/log";
+my $errorDir="$logDir/error";
 mkdir($moiraiDir);chmod(0777,$moiraiDir);
 mkdir($dbDir);chmod(0777,$dbDir);
 mkdir($logDir);chmod(0777,$logDir);
+mkdir($errorDir);chmod(0777,$errorDir);
 my $command=shift(@ARGV);
 if($command eq"delete"){commandDelete(@ARGV);}
 elsif($command eq"import"){commandImport(@ARGV);}
@@ -103,7 +106,19 @@ elsif($command eq"md5"){commandMd5(@ARGV);}
 elsif($command eq"commands"){commandCommands(@ARGV);}
 elsif($command eq"executes"){commandExecutes(@ARGV);}
 elsif($command eq"submit"){commandSubmit(@ARGV);}
+elsif($command eq"appendlog"){commandAppendLog(@ARGV);}
 elsif($command eq"test"){test();}
+############################## commandAppendLog ##############################
+sub commandAppendLog{
+	my $id=shift();
+	my $file=getFileFromExecid($id);
+	if($file=~/\.gz$/){return;}
+	elsif($file=~/\.bz2$/){return;}
+	if(!-e $file){return;}
+	open(OUT,">>$file");
+	while(<STDIN>){print OUT;}
+	close(OUT);
+}
 ############################## commandCommands ##############################
 sub commandCommands{
 	my $logs=loadLogs();
@@ -411,6 +426,7 @@ sub logJson{
 		my $completed=0;
 		while(my ($key,$val)=each(%{$json->{$id}})){
 			if($key eq $urls->{"daemon/execute"}&&$val eq "completed"){$completed=1;}
+			elsif($key eq $urls->{"daemon/execute"}&&$val eq "error"){$completed=-1;}
 			if(ref($val)eq"ARRAY"){
 				foreach my $v(@{$val}){print $writer "$key\t$v\n";$inserted++;$count++;}
 			}else{print $writer "$key\t$val\n";$inserted++;$count++;}
@@ -423,7 +439,11 @@ sub logJson{
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
 			system("mv $tempfile2 $file");
-			if($completed){system("gzip $file");}
+			if($completed<0){
+				my $error=getFileFromExecid($id,1);
+				mkdirs(dirname($error));
+				system("mv $file $error");
+			}elsif($completed>0){system("gzip $file");}
 		}
 		$total+=$inserted;
 	}
@@ -675,10 +695,13 @@ sub getDatetime{my $time=shift;return getDate("",$time).getTime("",$time);}
 ############################## getFileFromExecid ##############################
 sub getFileFromExecid{
 	my $execid=shift();
+	my $errorflag=shift();
 	my $dirname=substr($execid,1,8);
 	my $path="$logDir/$dirname/$execid.txt";
-	if(-e "$path.gz"){return "$path.gz";}
+	if(-e "$errorDir/$execid.txt"){return "$errorDir/$execid.txt";}
+	elsif(-e "$path.gz"){return "$path.gz";}
 	elsif(-e "$path.bz2"){return "$path.bz2";}
+	elsif(defined($errorflag)){return "$errorDir/$execid.txt";}
 	else{return $path;}
 }
 ############################## getFileFromPredicate ##############################
@@ -896,6 +919,7 @@ sub loadLogs{
 		my $reader=openFile($file);
 		while(<$reader>){
 			chomp;
+			if(/^========================================/){next;}
 			my ($key,$val)=split(/\t/);
 			$hash->{$basename}->{$key}=$val;
 		}

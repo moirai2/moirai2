@@ -18,6 +18,13 @@ moirai2.prototype.rdfInsert=function(rdf,method){
 	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.done(function(data){if(method!=null)method(data);});
 }
+moirai2.prototype.rdfUpdate=function(rdf,method){
+	var self=this;
+	var json={rdfdb:self.rdfdb,data:JSON.stringify(rdf)};
+	var post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=update",data:json});
+	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
+	post.done(function(data){if(method!=null)method(data);});
+}
 moirai2.prototype.submitJob=function(json){
 	var self=this;
 	if(!("rdfdb" in json))json["rdfdb"]=self.rdfdb;
