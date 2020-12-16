@@ -24,13 +24,9 @@ $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
 $urls->{"daemon/bash"}="https://moirai2.github.io/schema/daemon/bash";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
-$urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
-$urls->{"file"}="https://moirai2.github.io/schema/file";
-$urls->{"file/md5"}="https://moirai2.github.io/schema/file/md5";
-$urls->{"file/filesize"}="https://moirai2.github.io/schema/file/filesize";
-$urls->{"file/linecount"}="https://moirai2.github.io/schema/file/linecount";
-$urls->{"file/seqcount"}="https://moirai2.github.io/schema/file/seqcount";
+$urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
+$urls->{"daemon/timethrown"}="https://moirai2.github.io/schema/daemon/timethrown";
 ############################## HELP ##############################
 sub help{
 	print "\n";
@@ -50,6 +46,7 @@ sub help{
 	print "             update  Update triple(s)\n";
 	print "\n";
 	print "Commands used by moirai2.pl:\n";
+	print "             export  export database content to moirai2.pl HTML\n";
 	print "           commands  Return commands to be executed\n";
 	print "           filesize  Record file size of a file\n";
 	print "               jobs  Return jobs to be executed\n";
@@ -82,6 +79,7 @@ sub help_import{
 	print "\n";
 }
 ############################## MAIN ##############################
+if(defined($opt_h)){help();exit();}
 my $moiraiDir=(defined($opt_d))?$opt_d:"moirai";
 my $dbDir="$moiraiDir/db";
 my $logDir="$moiraiDir/log";
@@ -107,7 +105,205 @@ elsif($command eq"commands"){commandCommands(@ARGV);}
 elsif($command eq"executes"){commandExecutes(@ARGV);}
 elsif($command eq"submit"){commandSubmit(@ARGV);}
 elsif($command eq"appendlog"){commandAppendLog(@ARGV);}
+elsif($command eq"export"){commandExport(@ARGV);}
 elsif($command eq"test"){test();}
+############################## commandExport ##############################
+sub commandExport{
+	my $target=shift();
+	if(!defined($target)){$target="db";}
+	my $result;
+	if($target eq "db"){$result=loadDbToArray($dbDir);}
+	elsif($target eq "log"){$result=loadLogToHash($logDir);}
+	elsif($target eq "network"){$result=loadDbToVisNetwork($dbDir);}
+	print jsonEncode($result)."\n";
+}
+############################## toNodesAndEdges ##############################
+sub toNodesAndEdges{
+	my $directory=shift();	
+	my @files=listFiles(undef,undef,-1,$directory);
+	my $objects={};
+	my $nodes={};
+	my $predicates={};
+	my $nodeindex=1;
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		$predicates->{$p}=$nodeindex;
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if($s eq"root"&&!exists($objects->{"root"})){$objects->{"root"}=0;$nodes->{0}="root";}
+			if($o!~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
+				$objects->{$o}=$nodeindex;
+				if(!exists($nodes->{$nodeindex})){
+					if($o=~/^\S+\.\w+$/){$nodes->{$nodeindex}=$p;}
+					else{$nodes->{$nodeindex}=$p;}
+				}
+			}elsif(!exists($nodes->{$nodeindex})){$nodes->{$nodeindex}=$p;}
+		}
+		close($reader);
+		$nodeindex++;
+	}
+	my $subjectIndex=0;
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if(!exists($objects->{$s})){
+				$objects->{$s}=$nodeindex;
+				if(!exists($nodes->{$nodeindex})){
+					if($s=~/^\S+\.\w+$/){$nodes->{$nodeindex}="file$subjectIndex";}
+					else{$nodes->{$nodeindex}="val$subjectIndex";}
+					$subjectIndex++;
+				}
+			}
+		}
+		close($reader);
+		$nodeindex++;
+	}
+	my $edges={};
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if(!exists($objects->{$s})){next;}
+			my $from=$objects->{$s};
+			if(!exists($edges->{$from})){$edges->{$from}={};}
+			if(exists($objects->{$o})){
+				my $to=$objects->{$o};
+				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
+			}elsif($o=~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
+				my $to=$predicates->{$p};
+				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
+			}
+		}
+		close($reader);
+	}
+	return ($nodes,$edges);
+}
+############################## loadDbToVisNetwork ##############################
+sub loadDbToVisNetwork{
+	my $directory=shift();	
+	my ($nodes,$edges)=toNodesAndEdges($directory);
+	my $visEdges=[];
+	my $visNodes=[];
+	foreach my $from(keys(%{$edges})){
+		my $hash={"from"=>$from};
+		foreach my $to(keys(%{$edges->{$from}})){
+			$hash->{"to"}=$to;
+			$hash->{"label"}=$edges->{$from}->{$to};
+			$hash->{"color"}="lightGrey";
+		}
+		push(@{$visEdges},$hash);
+	}
+	foreach my $index(keys(%{$nodes})){
+		my $label=$nodes->{$index};
+		my $hash={"id"=>$index,"label"=>$label};
+		if($label eq "root"){
+			$hash->{"shape"}="circle";
+			$hash->{"font"}=10;
+			$hash->{"color"}="red";
+		}elsif($label eq "file"){
+			$hash->{"shape"}="box";
+			$hash->{"font"}=20;
+			$hash->{"color"}="lightBlue";
+		}elsif($label eq "num"){
+			$hash->{"shape"}="circle";
+			$hash->{"color"}="lightGrey";
+		}elsif($label eq "val"){
+			$hash->{"shape"}="circle";
+			$hash->{"color"}="lightGrey";
+		}
+		push(@{$visNodes},$hash);
+	}
+	return [$visNodes,$visEdges];
+}
+############################## getCommandUrlFromFile ##############################
+sub getCommandUrlFromFile{
+	my $file=shift();
+	my $reader=openFile($file);
+	while(<$reader>){
+		chomp;
+		if(/^========================================/){next;}
+		my ($p,$o)=split(/\t/);
+		if($p eq $urls->{"daemon/command"}){return $o;}
+	}
+	return;
+}
+############################## loadLogToHash ##############################
+sub loadLogToHash{
+	my $directory=shift();
+	my @files=listFiles(undef,undef,-1,$directory);
+	my @array=();
+	foreach my $file(@files){
+		my $hash={};
+		my $s=getSubjectFromFile($file);
+		my $daemonregexp=quotemeta("https://moirai2.github.io/schema/daemon/");
+		my $url=getCommandUrlFromFile($file)."#";
+		if(!defined($url)){next;}
+		my $urlregexp=quotemeta($url);
+		my $reader=openFile($file);
+		$hash->{"daemon/execid"}=$s;
+		while(<$reader>){
+			chomp;
+			if(/^========================================/){next;}
+			my ($p,$o)=split(/\t/);
+			if($p eq $urls->{"daemon/timestarted"}){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p eq $urls->{"daemon/timeended"}){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p eq $urls->{"daemon/timethrown"}){$o=getDate("/",$o)." ".getTime(":",$o)}
+			if($p=~s/^$daemonregexp//){$p="daemon/$p";}
+			if($p=~s/^$urlregexp//){}
+			if(!exists($hash->{$p})){$hash->{$p}=$o;}
+			elsif(ref($hash->{$p})eq"ARRAY"){push(@{$hash->{$p}},$o);}
+			else{$hash->{$p}=[$hash->{$p},$o];}
+		}
+		close($reader);
+		push(@array,$hash);
+	}
+	return \@array;
+}
+############################## loadDbToArray ##############################
+sub loadDbToArray{
+	my $directory=shift();	
+	my ($nodes,$edges)=toNodesAndEdges($directory);
+	printTable($nodes,$edges);
+	my @queries=();
+	foreach my $from(keys(%{$edges})){
+		my $labelFrom="\$".$nodes->{$from};
+		foreach my $to(keys(%{$edges->{$from}})){
+			my $labelTo="\$".$nodes->{$to};
+			my $pred=$edges->{$from}->{$to};
+			my $query="$labelFrom->$pred->$labelTo";
+			push(@queries,$query);
+		}
+	}
+	my @results=queryResults(@queries);
+	return \@results;
+}
+############################## loadDbToHash ##############################
+sub loadDbToHash{
+	my $directory=shift();
+	my @files=listFiles(undef,undef,-1,$directory);
+	my $hash={};
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if(!exists($hash->{$s})){$hash->{$s};}
+			if(!exists($hash->{$s}->{$p})){$hash->{$s}->{$p}=$o;}
+			elsif(ref($hash->{$s}->{$p})eq"ARRAY"){push(@{$hash->{$s}->{$p}},$o);}
+			else{$hash->{$s}->{$p}=[$hash->{$s}->{$p},$o];}
+		}
+		close($reader);
+	}
+	return $hash;
+}
 ############################## commandAppendLog ##############################
 sub commandAppendLog{
 	my $id=shift();
@@ -635,7 +831,7 @@ sub countLines{
 		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
 		else{$count=`cat $file|wc -l`;}
 		if($count=~/(\d+)/){$count=$1;}
-		print $writer "$file\t".$urls->{"file/linecount"}."\t$count\n";
+		print $writer "$file\tfile/linecount\t$count\n";
 	}
 }
 ############################## countSequences ##############################
@@ -665,7 +861,7 @@ sub countSequences{
 		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
 		else{$count=`cat $file|wc -l`;}
 		if($count=~/(\d+)/){$count=$1;}
-		print $writer "$file\t".$urls->{"file/seqcount"}."\t$count\n";
+		print $writer "$file\tfile/seqcount\t$count\n";
 	}
 }
 ############################## createFile ##############################
@@ -732,6 +928,15 @@ sub getPredicatesFromJson{
 	my $hash={};
 	foreach my $s(keys(%{$json})){foreach my $p(keys(%{$json->{$s}})){$hash->{$p}=1;}}
 	return sort {$a cmp $b}keys(%{$hash});
+}
+############################## getSubjectFromFile ##############################
+sub getSubjectFromFile{
+	my $path=shift();
+	my $basename=basename($path);
+	$basename=~s/\.gz$//;
+	$basename=~s/\.bz2$//;
+	$basename=~s/\.txt$//;
+	return $basename;
 }
 ############################## getTime ##############################
 sub getTime{
@@ -942,13 +1147,13 @@ sub md5Files{
 			my $sum=`$md5 $file`;
 			chomp($sum);
 			if($sum=~/(\S+)$/){$sum=$1;}
-			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
+			print $writer "$file\tfile/md5\t$sum\n";
 		}elsif(defined($md5sum)){
 			chomp($md5sum);
 			my $sum=`$md5sum $file`;
 			chomp($sum);
 			if($sum=~/^(\S+)/){$sum=$1;}
-			print $writer "$file\t".$urls->{"file/md5"}."\t$sum\n";
+			print $writer "$file\tfile/md5\t$sum\n";
 		}
 	}
 }
@@ -1152,7 +1357,7 @@ sub sizeFiles{
 	my $recursivesearch=shift(@files);
 	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
 		my $size=-s $file;
-		print $writer "$file\t".$urls->{"file/filesize"}."\t$size\n";
+		print $writer "$file\tfile/filesize\t$size\n";
 	}
 }
 ############################## tsvToJson ##############################
@@ -1210,10 +1415,10 @@ sub test{
 	mkdir("test/db");
 	createFile("test/db/id.txt","A\tA1","B\tB1","C\tC1","D\tD1");
 	createFile("test/db/name.txt","A1\tAkira","B1\tBen","C1\tChris","D1\tDavid");
-	testCommand("perl rdf.pl linecount test/db/id.txt","test/db/id.txt\thttps://moirai2.github.io/schema/file/linecount\t4");
-	testCommand("perl rdf.pl md5 test/db/id.txt","test/db/id.txt\thttps://moirai2.github.io/schema/file/md5\t131e61dab9612108824858dc497bf713");
-	testCommand("perl rdf.pl filesize test/db/id.txt","test/db/id.txt\thttps://moirai2.github.io/schema/file/filesize\t20");
-	testCommand("perl rdf.pl seqcount test/db/id.txt","test/db/id.txt\thttps://moirai2.github.io/schema/file/seqcount\t4");
+	testCommand("perl rdf.pl linecount test/db/id.txt","test/db/id.txt\tfile/linecount\t4");
+	testCommand("perl rdf.pl md5 test/db/id.txt","test/db/id.txt\tfile/md5\t131e61dab9612108824858dc497bf713");
+	testCommand("perl rdf.pl filesize test/db/id.txt","test/db/id.txt\tfile/filesize\t20");
+	testCommand("perl rdf.pl seqcount test/db/id.txt","test/db/id.txt\tfile/seqcount\t4");
 	testCommand("perl rdf.pl -d test select ","A\tid\tA1\nB\tid\tB1\nC\tid\tC1\nD\tid\tD1\nA1\tname\tAkira\nB1\tname\tBen\nC1\tname\tChris\nD1\tname\tDavid");
 	testCommand("perl rdf.pl -d test select A","A\tid\tA1");
 	testCommand("perl rdf.pl -d test select % id","A\tid\tA1\nB\tid\tB1\nC\tid\tC1\nD\tid\tD1");

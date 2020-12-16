@@ -1,40 +1,40 @@
 //######################################## CONSTRUCTOR ########################################
 function moirai2(rdfdb){
-	var self=this;
+	let self=this;
 	this.rdfdb=rdfdb;
 }
 //######################################## QUERY ########################################
 moirai2.prototype.rdfQuery=function(text,method){
-	var self=this;
-	var json={rdfdb:self.rdfdb,query:text};
-	var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=query",data:json});
+	let self=this;
+	let json={rdfdb:self.rdfdb,query:text};
+	let post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=query",data:json});
 	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.done(function(data){if(method!=null)method(data);});
 }
 moirai2.prototype.rdfInsert=function(rdf,method){
-	var self=this;
-	var json={rdfdb:self.rdfdb,data:JSON.stringify(rdf)};
-	var post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=insert",data:json});
+	let self=this;
+	let json={rdfdb:self.rdfdb,data:JSON.stringify(rdf)};
+	let post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=insert",data:json});
 	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.done(function(data){if(method!=null)method(data);});
 }
 moirai2.prototype.rdfUpdate=function(rdf,method){
-	var self=this;
-	var json={rdfdb:self.rdfdb,data:JSON.stringify(rdf)};
-	var post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=update",data:json});
+	let self=this;
+	let json={rdfdb:self.rdfdb,data:JSON.stringify(rdf)};
+	let post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=update",data:json});
 	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.done(function(data){if(method!=null)method(data);});
 }
 moirai2.prototype.submitJob=function(json){
-	var self=this;
+	let self=this;
 	if(!("rdfdb" in json))json["rdfdb"]=self.rdfdb;
-	var post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=submit",data:json});
+	let post=$.ajax({type:'POST',dataType:'text',url:"moirai2.php?command=submit",data:json});
 	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
 	post.done(function(data){})
 }
 //######################################## Drag and Drop ########################################
 moirai2.prototype.initialize=function(id){
-	var self=this;
+	let self=this;
 	if(document.readyState=="loading"){
 		$(document).ready(function(){self.initialize(id);});
 		return this;
@@ -104,9 +104,9 @@ moirai2.prototype.dropped=function(event){
 //######################################## Utility ########################################
 moirai2.prototype.filename=function(path){return path.substring(path.lastIndexOf('\/')+1);}
 moirai2.prototype.isImageFile=function(path){return path.endsWith(".jpg")||path.endsWith(".jpeg")||path.endsWith(".png")||path.endsWith(".gif");}
-moirai2.prototype.readImage=function(path,method){if(Object.prototype.toString.call(path)==='[object String]'){var image=new Image();image.onload=function(){method(image);};image.src=path;}else{var reader=new FileReader();reader.onload=function(e){var image=new Image();image.onload=function(){method(image);};image.src=e.target.result;};reader.fail=function(xhr,textStatus){console.log("failed",xhr,textStatus);};reader.readAsDataURL(path);}}
-moirai2.prototype.readUrl=function(url,method){var self=this;$.post("moirai2.php?command=proxy",{url:url},function(data){method(data);});}
-moirai2.prototype.downloadFile=function(url,method){var self=this;var post=$.ajax({type:'POST',url:"moirai2.php?command=download",data:(typeof url==='object')?url:{'url':url}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
-moirai2.prototype.symlinkFile=function(url,method){var self=this;var post=$.ajax({type:'POST',url:"moirai2.php?command=symlink",data:(typeof url==='object')?url:{'url':url}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
-moirai2.prototype.uploadFile=function(file,method){var self=this;var fd=new FormData();fd.append("file",file,file.name);var post=$.ajax({type:'POST',contentType:false,processData:false,url:"moirai2.php?command=upload",data:fd,dataType:"text"}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});if(method!=null)post.success(function(path){method(path);});}
-moirai2.prototype.readFile=function(path,method){if(Object.prototype.toString.call(path)==='[object String]')$.get(path,function(data){method(data);});else{var reader=new FileReader();reader.onload=function(e){method(e.target.result);};reader.fail=function(xhr,textStatus){console.log("failed",xhr,textStatus);};reader.readAsText(path);}}
+moirai2.prototype.readImage=function(path,method){if(Object.prototype.toString.call(path)==='[object String]'){let image=new Image();image.onload=function(){method(image);};image.src=path;}else{let reader=new FileReader();reader.onload=function(e){let image=new Image();image.onload=function(){method(image);};image.src=e.target.result;};reader.fail=function(xhr,textStatus){console.log("failed",xhr,textStatus);};reader.readAsDataURL(path);}}
+moirai2.prototype.readUrl=function(url,method){let self=this;$.post("moirai2.php?command=proxy",{url:url},function(data){method(data);});}
+moirai2.prototype.downloadFile=function(url,method){let self=this;let post=$.ajax({type:'POST',url:"moirai2.php?command=download",data:(typeof url==='object')?url:{'url':url}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
+moirai2.prototype.symlinkFile=function(url,method){let self=this;let post=$.ajax({type:'POST',url:"moirai2.php?command=symlink",data:(typeof url==='object')?url:{'url':url}}).fail(function(xhr,data){console.log("failed",xhr,data);});if(method!=null)post.success(function(path){method(path);});}
+moirai2.prototype.uploadFile=function(file,method){let self=this;let fd=new FormData();fd.append("file",file,file.name);let post=$.ajax({type:'POST',contentType:false,processData:false,url:"moirai2.php?command=upload",data:fd,dataType:"text"}).fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});if(method!=null)post.success(function(path){method(path);});}
+moirai2.prototype.readFile=function(path,method){if(Object.prototype.toString.call(path)==='[object String]')$.get(path,function(data){method(data);});else{let reader=new FileReader();reader.onload=function(e){method(e.target.result);};reader.fail=function(xhr,textStatus){console.log("failed",xhr,textStatus);};reader.readAsText(path);}}
