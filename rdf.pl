@@ -79,7 +79,7 @@ sub help_import{
 	print "\n";
 }
 ############################## MAIN ##############################
-if(defined($opt_h)){help();exit();}
+if(defined($opt_h)||scalar(@ARGV)==0){help();exit();}
 my $moiraiDir=(defined($opt_d))?$opt_d:"moirai";
 my $dbDir="$moiraiDir/db";
 my $logDir="$moiraiDir/log";
@@ -89,23 +89,23 @@ mkdir($dbDir);chmod(0777,$dbDir);
 mkdir($logDir);chmod(0777,$logDir);
 mkdir($errorDir);chmod(0777,$errorDir);
 my $command=shift(@ARGV);
-if($command eq"delete"){commandDelete(@ARGV);}
+if($command eq"appendlog"){commandAppendLog(@ARGV);}
+elsif($command eq"commands"){commandCommands(@ARGV);}
+elsif($command eq"delete"){commandDelete(@ARGV);}
+elsif($command eq"executes"){commandExecutes(@ARGV);}
+elsif($command eq"export"){commandExport(@ARGV);}
+elsif($command eq"filesize"){commandFilesize(@ARGV);}
 elsif($command eq"import"){commandImport(@ARGV);}
 elsif($command eq"insert"){commandInsert(@ARGV);}
-elsif($command eq"select"){commandSelect(@ARGV);}
-elsif($command eq"update"){commandUpdate(@ARGV);}
-elsif($command eq"return"){commandReturn(@ARGV);}
-elsif($command eq"query"){commandQuery(@ARGV);}
-elsif($command eq"log"){commandLog(@ARGV);}
 elsif($command eq"linecount"){commandLinecount(@ARGV);}
-elsif($command eq"seqcount"){commandSeqcount(@ARGV);}
-elsif($command eq"filesize"){commandFilesize(@ARGV);}
+elsif($command eq"log"){commandLog(@ARGV);}
 elsif($command eq"md5"){commandMd5(@ARGV);}
-elsif($command eq"commands"){commandCommands(@ARGV);}
-elsif($command eq"executes"){commandExecutes(@ARGV);}
+elsif($command eq"query"){commandQuery(@ARGV);}
+elsif($command eq"return"){commandReturn(@ARGV);}
+elsif($command eq"select"){commandSelect(@ARGV);}
+elsif($command eq"seqcount"){commandSeqcount(@ARGV);}
 elsif($command eq"submit"){commandSubmit(@ARGV);}
-elsif($command eq"appendlog"){commandAppendLog(@ARGV);}
-elsif($command eq"export"){commandExport(@ARGV);}
+elsif($command eq"update"){commandUpdate(@ARGV);}
 elsif($command eq"test"){test();}
 ############################## commandExport ##############################
 sub commandExport{
@@ -116,193 +116,6 @@ sub commandExport{
 	elsif($target eq "log"){$result=loadLogToHash($logDir);}
 	elsif($target eq "network"){$result=loadDbToVisNetwork($dbDir);}
 	print jsonEncode($result)."\n";
-}
-############################## toNodesAndEdges ##############################
-sub toNodesAndEdges{
-	my $directory=shift();	
-	my @files=listFiles(undef,undef,-1,$directory);
-	my $objects={};
-	my $nodes={};
-	my $predicates={};
-	my $nodeindex=1;
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		$predicates->{$p}=$nodeindex;
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if($s eq"root"&&!exists($objects->{"root"})){$objects->{"root"}=0;$nodes->{0}="root";}
-			if($o!~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
-				$objects->{$o}=$nodeindex;
-				if(!exists($nodes->{$nodeindex})){
-					if($o=~/^\S+\.\w+$/){$nodes->{$nodeindex}=$p;}
-					else{$nodes->{$nodeindex}=$p;}
-				}
-			}elsif(!exists($nodes->{$nodeindex})){$nodes->{$nodeindex}=$p;}
-		}
-		close($reader);
-		$nodeindex++;
-	}
-	my $subjectIndex=0;
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if(!exists($objects->{$s})){
-				$objects->{$s}=$nodeindex;
-				if(!exists($nodes->{$nodeindex})){
-					if($s=~/^\S+\.\w+$/){$nodes->{$nodeindex}="file$subjectIndex";}
-					else{$nodes->{$nodeindex}="val$subjectIndex";}
-					$subjectIndex++;
-				}
-			}
-		}
-		close($reader);
-		$nodeindex++;
-	}
-	my $edges={};
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if(!exists($objects->{$s})){next;}
-			my $from=$objects->{$s};
-			if(!exists($edges->{$from})){$edges->{$from}={};}
-			if(exists($objects->{$o})){
-				my $to=$objects->{$o};
-				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
-			}elsif($o=~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
-				my $to=$predicates->{$p};
-				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
-			}
-		}
-		close($reader);
-	}
-	return ($nodes,$edges);
-}
-############################## loadDbToVisNetwork ##############################
-sub loadDbToVisNetwork{
-	my $directory=shift();	
-	my ($nodes,$edges)=toNodesAndEdges($directory);
-	my $visEdges=[];
-	my $visNodes=[];
-	foreach my $from(keys(%{$edges})){
-		my $hash={"from"=>$from};
-		foreach my $to(keys(%{$edges->{$from}})){
-			$hash->{"to"}=$to;
-			$hash->{"label"}=$edges->{$from}->{$to};
-			$hash->{"color"}="lightGrey";
-		}
-		push(@{$visEdges},$hash);
-	}
-	foreach my $index(keys(%{$nodes})){
-		my $label=$nodes->{$index};
-		my $hash={"id"=>$index,"label"=>$label};
-		if($label eq "root"){
-			$hash->{"shape"}="circle";
-			$hash->{"font"}=10;
-			$hash->{"color"}="red";
-		}elsif($label eq "file"){
-			$hash->{"shape"}="box";
-			$hash->{"font"}=20;
-			$hash->{"color"}="lightBlue";
-		}elsif($label eq "num"){
-			$hash->{"shape"}="circle";
-			$hash->{"color"}="lightGrey";
-		}elsif($label eq "val"){
-			$hash->{"shape"}="circle";
-			$hash->{"color"}="lightGrey";
-		}
-		push(@{$visNodes},$hash);
-	}
-	return [$visNodes,$visEdges];
-}
-############################## getCommandUrlFromFile ##############################
-sub getCommandUrlFromFile{
-	my $file=shift();
-	my $reader=openFile($file);
-	while(<$reader>){
-		chomp;
-		if(/^========================================/){next;}
-		my ($p,$o)=split(/\t/);
-		if($p eq $urls->{"daemon/command"}){return $o;}
-	}
-	return;
-}
-############################## loadLogToHash ##############################
-sub loadLogToHash{
-	my $directory=shift();
-	my @files=listFiles(undef,undef,-1,$directory);
-	my @array=();
-	foreach my $file(@files){
-		my $hash={};
-		my $s=getSubjectFromFile($file);
-		my $daemonregexp=quotemeta("https://moirai2.github.io/schema/daemon/");
-		my $url=getCommandUrlFromFile($file)."#";
-		if(!defined($url)){next;}
-		my $urlregexp=quotemeta($url);
-		my $reader=openFile($file);
-		$hash->{"daemon/execid"}=$s;
-		while(<$reader>){
-			chomp;
-			if(/^========================================/){next;}
-			my ($p,$o)=split(/\t/);
-			if($p eq $urls->{"daemon/timestarted"}){$o=getDate("/",$o)." ".getTime(":",$o)}
-			elsif($p eq $urls->{"daemon/timeended"}){$o=getDate("/",$o)." ".getTime(":",$o)}
-			elsif($p eq $urls->{"daemon/timethrown"}){$o=getDate("/",$o)." ".getTime(":",$o)}
-			if($p=~s/^$daemonregexp//){$p="daemon/$p";}
-			if($p=~s/^$urlregexp//){}
-			if(!exists($hash->{$p})){$hash->{$p}=$o;}
-			elsif(ref($hash->{$p})eq"ARRAY"){push(@{$hash->{$p}},$o);}
-			else{$hash->{$p}=[$hash->{$p},$o];}
-		}
-		close($reader);
-		push(@array,$hash);
-	}
-	return \@array;
-}
-############################## loadDbToArray ##############################
-sub loadDbToArray{
-	my $directory=shift();	
-	my ($nodes,$edges)=toNodesAndEdges($directory);
-	printTable($nodes,$edges);
-	my @queries=();
-	foreach my $from(keys(%{$edges})){
-		my $labelFrom="\$".$nodes->{$from};
-		foreach my $to(keys(%{$edges->{$from}})){
-			my $labelTo="\$".$nodes->{$to};
-			my $pred=$edges->{$from}->{$to};
-			my $query="$labelFrom->$pred->$labelTo";
-			push(@queries,$query);
-		}
-	}
-	my @results=queryResults(@queries);
-	return \@results;
-}
-############################## loadDbToHash ##############################
-sub loadDbToHash{
-	my $directory=shift();
-	my @files=listFiles(undef,undef,-1,$directory);
-	my $hash={};
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if(!exists($hash->{$s})){$hash->{$s};}
-			if(!exists($hash->{$s}->{$p})){$hash->{$s}->{$p}=$o;}
-			elsif(ref($hash->{$s}->{$p})eq"ARRAY"){push(@{$hash->{$s}->{$p}},$o);}
-			else{$hash->{$s}->{$p}=[$hash->{$s}->{$p},$o];}
-		}
-		close($reader);
-	}
-	return $hash;
 }
 ############################## commandAppendLog ##############################
 sub commandAppendLog{
@@ -872,6 +685,18 @@ sub createFile{
 	foreach my $line(@lines){print OUT "$line\n";}
 	close(OUT);
 }
+############################## getCommandUrlFromFile ##############################
+sub getCommandUrlFromFile{
+	my $file=shift();
+	my $reader=openFile($file);
+	while(<$reader>){
+		chomp;
+		if(/^========================================/){next;}
+		my ($p,$o)=split(/\t/);
+		if($p eq $urls->{"daemon/command"}){return $o;}
+	}
+	return;
+}
 ############################## getDate ##############################
 sub getDate{
 	my $delim=shift;
@@ -1113,6 +938,113 @@ sub listFiles{
 		closedir(DIR);
 	}
 	return sort{$a cmp $b}@inputfiles;
+}
+############################## loadLogToHash ##############################
+sub loadLogToHash{
+	my $directory=shift();
+	my @files=listFiles(undef,undef,-1,$directory);
+	my @array=();
+	foreach my $file(@files){
+		my $hash={};
+		my $s=getSubjectFromFile($file);
+		my $daemonregexp=quotemeta("https://moirai2.github.io/schema/daemon/");
+		my $url=getCommandUrlFromFile($file)."#";
+		if(!defined($url)){next;}
+		my $urlregexp=quotemeta($url);
+		my $reader=openFile($file);
+		$hash->{"daemon/execid"}=$s;
+		while(<$reader>){
+			chomp;
+			if(/^========================================/){next;}
+			my ($p,$o)=split(/\t/);
+			if($p eq $urls->{"daemon/timestarted"}){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p eq $urls->{"daemon/timeended"}){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p eq $urls->{"daemon/timethrown"}){$o=getDate("/",$o)." ".getTime(":",$o)}
+			if($p=~s/^$daemonregexp//){$p="daemon/$p";}
+			if($p=~s/^$urlregexp//){}
+			if(!exists($hash->{$p})){$hash->{$p}=$o;}
+			elsif(ref($hash->{$p})eq"ARRAY"){push(@{$hash->{$p}},$o);}
+			else{$hash->{$p}=[$hash->{$p},$o];}
+		}
+		close($reader);
+		push(@array,$hash);
+	}
+	return \@array;
+}
+############################## loadDbToArray ##############################
+sub loadDbToArray{
+	my $directory=shift();	
+	my ($nodes,$edges)=toNodesAndEdges($directory);
+	printTable($nodes,$edges);
+	my @queries=();
+	foreach my $from(keys(%{$edges})){
+		my $labelFrom="\$".$nodes->{$from};
+		foreach my $to(keys(%{$edges->{$from}})){
+			my $labelTo="\$".$nodes->{$to};
+			my $pred=$edges->{$from}->{$to};
+			my $query="$labelFrom->$pred->$labelTo";
+			push(@queries,$query);
+		}
+	}
+	my @results=queryResults(@queries);
+	return \@results;
+}
+############################## loadDbToHash ##############################
+sub loadDbToHash{
+	my $directory=shift();
+	my @files=listFiles(undef,undef,-1,$directory);
+	my $hash={};
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if(!exists($hash->{$s})){$hash->{$s};}
+			if(!exists($hash->{$s}->{$p})){$hash->{$s}->{$p}=$o;}
+			elsif(ref($hash->{$s}->{$p})eq"ARRAY"){push(@{$hash->{$s}->{$p}},$o);}
+			else{$hash->{$s}->{$p}=[$hash->{$s}->{$p},$o];}
+		}
+		close($reader);
+	}
+	return $hash;
+}
+############################## loadDbToVisNetwork ##############################
+sub loadDbToVisNetwork{
+	my $directory=shift();	
+	my ($nodes,$edges)=toNodesAndEdges($directory);
+	my $visEdges=[];
+	my $visNodes=[];
+	foreach my $from(keys(%{$edges})){
+		my $hash={"from"=>$from};
+		foreach my $to(keys(%{$edges->{$from}})){
+			$hash->{"to"}=$to;
+			$hash->{"label"}=$edges->{$from}->{$to};
+			$hash->{"color"}="lightGrey";
+		}
+		push(@{$visEdges},$hash);
+	}
+	foreach my $index(keys(%{$nodes})){
+		my $label=$nodes->{$index};
+		my $hash={"id"=>$index,"label"=>$label};
+		if($label eq "root"){
+			$hash->{"shape"}="circle";
+			$hash->{"font"}=10;
+			$hash->{"color"}="red";
+		}elsif($label eq "file"){
+			$hash->{"shape"}="box";
+			$hash->{"font"}=20;
+			$hash->{"color"}="lightBlue";
+		}elsif($label eq "num"){
+			$hash->{"shape"}="circle";
+			$hash->{"color"}="lightGrey";
+		}elsif($label eq "val"){
+			$hash->{"shape"}="circle";
+			$hash->{"color"}="lightGrey";
+		}
+		push(@{$visNodes},$hash);
+	}
+	return [$visNodes,$visEdges];
 }
 ############################## loadLogs ##############################
 sub loadLogs{
@@ -1359,6 +1291,74 @@ sub sizeFiles{
 		my $size=-s $file;
 		print $writer "$file\tfile/filesize\t$size\n";
 	}
+}
+############################## toNodesAndEdges ##############################
+sub toNodesAndEdges{
+	my $directory=shift();	
+	my @files=listFiles(undef,undef,-1,$directory);
+	my $objects={};
+	my $nodes={};
+	my $predicates={};
+	my $nodeindex=1;
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		$predicates->{$p}=$nodeindex;
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if($s eq"root"&&!exists($objects->{"root"})){$objects->{"root"}=0;$nodes->{0}="root";}
+			if($o!~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
+				$objects->{$o}=$nodeindex;
+				if(!exists($nodes->{$nodeindex})){
+					if($o=~/^\S+\.\w+$/){$nodes->{$nodeindex}=$p;}
+					else{$nodes->{$nodeindex}=$p;}
+				}
+			}elsif(!exists($nodes->{$nodeindex})){$nodes->{$nodeindex}=$p;}
+		}
+		close($reader);
+		$nodeindex++;
+	}
+	my $subjectIndex=0;
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if(!exists($objects->{$s})){
+				$objects->{$s}=$nodeindex;
+				if(!exists($nodes->{$nodeindex})){
+					if($s=~/^\S+\.\w+$/){$nodes->{$nodeindex}="file$subjectIndex";}
+					else{$nodes->{$nodeindex}="val$subjectIndex";}
+					$subjectIndex++;
+				}
+			}
+		}
+		close($reader);
+		$nodeindex++;
+	}
+	my $edges={};
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if(!exists($objects->{$s})){next;}
+			my $from=$objects->{$s};
+			if(!exists($edges->{$from})){$edges->{$from}={};}
+			if(exists($objects->{$o})){
+				my $to=$objects->{$o};
+				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
+			}elsif($o=~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
+				my $to=$predicates->{$p};
+				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
+			}
+		}
+		close($reader);
+	}
+	return ($nodes,$edges);
 }
 ############################## tsvToJson ##############################
 sub tsvToJson{

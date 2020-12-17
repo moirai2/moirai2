@@ -18,9 +18,6 @@ my $program_path="$prgdir/$program_name";
 ############################## OPTIONS ##############################
 use vars qw($opt_c $opt_d $opt_g $opt_G $opt_h $opt_H $opt_i $opt_l $opt_m $opt_o $opt_p $opt_q $opt_r $opt_s $opt_t);
 getopts('c:d:g:G:hHi:lm:o:pqr:s:t:');
-############################## CONFIG ##############################
-my $udockerDirectory="/work/ah3q/udocker";
-my $singularityDirectory="/work/ah3q/singularity";
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
@@ -137,14 +134,14 @@ sub help{
 		print "2020/12/15  'html' command  added to report workflow in HTML format.\n";
 		print "2020/12/14  Create and keep json file from user defined command\n";
 		print "2020/12/13  'empty output' and 'ignore stderr/stout' functions added.\n";
-		print "2020/12/12  stdout and stderr reported to log file.\n";
-		print "2020/12/11  'assign' function added.\n";
-		print "2020/12/01  Adapt to new rdf.pl.\n";
+		print "2020/12/12  stdout and stderr reports are appended to a log file.\n";
+		print "2020/12/11  'assign' function added to assign value if doesn't exit.\n";
+		print "2020/12/01  Adapt to new rdf.pl which doens't user sqlite3 database.\n";
 		print "2020/11/20  Import and execute workflow bash file.\n";
 		print "2020/11/11  Added 'singularity' to container function.\n";
 		print "2020/11/06  Updated help and daemon functionality.\n";
-		print "2020/11/05  Added 'ls' function.\n";
-		print "2020/10/09  Repeat functionality removed.\n";
+		print "2020/11/05  Added 'ls' function to insert file information to the database.\n";
+		print "2020/10/09  Repeat functionality has been removed, since loop is bad...\n";
 		print "2020/07/29  Able to run user defined command using 'EOS'.\n";
 		print "2020/02/17  Temporary directory can be /tmp to reduce I/O traffic as much as possible.\n";
 		print "2019/07/04  \$opt_i is specified with \$opt_o, it'll check if executing commands are necessary.\n";
@@ -186,6 +183,26 @@ sub help_assign{
 	print "\n";
 	print "1) perl $program_name -o 'A->B->C' assign\n";
 	print " - Insert 'A->B->C' triple, if 'A->B->?' is not found in the RDF database.\n";
+	print "\n";
+}
+sub help_check{
+	print "\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] check";
+	print "\n";
+	print "Options: -i  Input query to assign in '\$sub->\$pred->\$obj' format.\n";
+	print "         -o  Output query to assign in '\$sub->\$pred->\$obj' format.\n";
+	print "\n";
+	print "############################## Examples ##############################\n";
+	print "\n";
+	print "1) perl $program_name -i '\$id->rawcount->\$count1,\$id->tagcount->\$count2' '\$count1==\$count2'\n";
+	print " - Check if \$count1 and \$count2 are same.\n";
+	print "\n";
+	print "2) perl $program_name -i '\$id->rawcount->\$count1,\$id->tagcount->\$count2' -o '\$id->check->\$check' '\$count1==\$count2'\n";
+	print " - Check if \$count1 and \$count2 are same and same the result in '\$id->check->\$check'.\n";
+	print " - If there are same 'OK', if not 'ERROR'.\n";
+	print " - Differences will be saved under \$logdir/check/.\n";
 	print "\n";
 }
 sub help_command{
@@ -234,28 +251,6 @@ sub help_command{
 	print " - Query database with 'A->input->\$input' and store new triple 'A->output->\$output'.\n";
 	print "\n";
 }
-sub help_html{
-	print "\n";
-	print "############################## HELP ##############################\n";
-	print "\n";
-	print "Program: Print out a HTML representation of the database.\n";
-	print "\n";
-	print "Usage: perl $program_name [Options] html \n";
-	print "\n";
-}
-sub help_extract{
-	print "\n";
-	print "############################## HELP ##############################\n";
-	print "\n";
-	print "Program: Extracts script and bash files from URL and save them to a directory.\n";
-	print "\n";
-	print "Usage: perl $program_name [Options] script JSON\n";
-	print "\n";
-	print "       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).\n";
-	print "\n";
-	print "Options: -o  Output directory (default='.').\n";
-	print "\n";
-}
 sub help_daemon{
 	print "\n";
 	print "############################## HELP ##############################\n";
@@ -269,6 +264,28 @@ sub help_daemon{
 	print "Options: -o  Log output directory (default='daemon').\n";
 	print "         -r  Recursive search through a directory (default='0').\n";
 	print "         -s  Loop second (default='10 sec').\n";
+	print "\n";
+}
+sub help_extract{
+	print "\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Program: Extracts script and bash files from URL and save them to a directory.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] script JSON\n";
+	print "\n";
+	print "       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).\n";
+	print "\n";
+	print "Options: -o  Output directory (default='out').\n";
+	print "\n";
+}
+sub help_html{
+	print "\n";
+	print "############################## HELP ##############################\n";
+	print "\n";
+	print "Program: Print out a HTML representation of the database.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] html > HTML\n";
 	print "\n";
 }
 sub help_ls{
@@ -323,14 +340,13 @@ sub help_ls{
 my $commands={};
 if(defined($opt_h)&&$ARGV[0]=~/\.json$/){printCommand($ARGV[0],$commands);exit(0);}
 if(defined($opt_h)&&$ARGV[0]=~/\.(ba)?sh$/){printWorkflow($ARGV[0],$commands);exit(0);}
-if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"daemon"){help_daemon();exit(0);}
-if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"ls"){help_ls();exit(0);}
-if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"extract"){help_extract();exit(0);}
-if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"command"){help_command();exit(0);}
-if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"file"){help_file();exit(0);}
 if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"assign"){help_assign();exit(0);}
-if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"html"){help_html();exit(0);}
 if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"check"){help_check();exit(0);}
+if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"command"){help_command();exit(0);}
+if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"daemon"){help_daemon();exit(0);}
+if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"extract"){help_extract();exit(0);}
+if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"html"){help_html();exit(0);}
+if(defined($opt_h)&&scalar(@ARGV)>0&&$ARGV[0]eq"ls"){help_ls();exit(0);}
 if(defined($opt_h)||defined($opt_H)||scalar(@ARGV)==0){help();}
 my $moiraidir=(defined($opt_d))?$opt_d:"moirai";
 if($moiraidir=~/^(.+)\/$/){$moiraidir=$1;}
@@ -343,31 +359,35 @@ my $errordir="$logdir/error";
 my $checkdir="$logdir/check";
 my $jsondir="$logdir/json";
 my $ctrldir="$moiraidir/ctrl";
+my $udockerdir="$bindir/udocker";
+my $singularitydir="$bindir/singularity";
 my $home=`echo \$HOME`;chomp($home);
 my $exportpath="$bindir:$home/bin:\$PATH";
 my $sleeptime=defined($opt_s)?$opt_s:10;
 my $maxjob=defined($opt_m)?$opt_m:5;
 if($ARGV[0] eq "assign"){shift(@ARGV);assign(@ARGV);exit(0);}
 if($ARGV[0] eq "daemon"){shift(@ARGV);daemon(@ARGV);exit(0);}
-if($ARGV[0] eq "test"){shift(@ARGV);test();exit(0);}
 if($ARGV[0] eq "extract"){shift(@ARGV);extract(@ARGV);exit(0);}
 if($ARGV[0] eq "html"){shift(@ARGV);html(@ARGV);exit(0);}
+if($ARGV[0] eq "test"){shift(@ARGV);test();exit(0);}
 mkdir($moiraidir);chmod(0777,$moiraidir);
 mkdir($dbdir);chmod(0777,$dbdir);
 mkdir($logdir);chmod(0777,$logdir);
 mkdir($errordir);chmod(0777,$errordir);
 mkdir($jsondir);chmod(0777,$jsondir);
-mkdir($bindir);chmod(0777,$bindir);
 mkdir($ctrldir);chmod(0777,$ctrldir);
 mkdir($checkdir);chmod(0777,$checkdir);
+mkdir($bindir);chmod(0777,$bindir);
+mkdir($udockerdir);chmod(0777,$udockerdir);
+mkdir($singularitydir);chmod(0777,$singularitydir);
 mkdir("$ctrldir/bash");chmod(0777,"$ctrldir/bash");
 mkdir("$ctrldir/insert");chmod(0777,"$ctrldir/insert");
 mkdir("$ctrldir/log");chmod(0777,"$ctrldir/log");
 mkdir("$ctrldir/completed");chmod(0777,"$ctrldir/completed");
 mkdir("$ctrldir/submit");chmod(0777,"$ctrldir/submit");
 mkdir("$ctrldir/error");chmod(0777,"$ctrldir/error");
-if($ARGV[0] eq "ls"){shift(@ARGV);ls(@ARGV);exit(0);}
 if($ARGV[0] eq "check"){shift(@ARGV);check(@ARGV);exit(0);}
+if($ARGV[0] eq "ls"){shift(@ARGV);ls(@ARGV);exit(0);}
 #just in case jobs are completed while moirai2.pl was not running by termination
 my $executes={};
 controlProcess($executes);
@@ -380,7 +400,7 @@ if(getNumberOfJobsRunning()>0){
 }
 if($ARGV[0] eq "automate"){automate();exit(0);}
 ##### handle inputs and outputs #####
-my $queryResults={};
+my $queryResults;
 my $userdefined={};
 my $queryKeys;
 my $insertKeys;
@@ -389,13 +409,12 @@ if(defined($opt_o)){checkInputOutput($opt_o);}
 if(defined($opt_i)){
 	$queryKeys=handleKeys($opt_i);
 	$queryResults=getQueryResults($dbdir,$userdefined,$opt_i);
-}
-if(!exists($queryResults->{".hashs"})){$queryResults->{".hashs"}=[{}];}
+}else{$queryResults=[[],[{}]];}
 if(defined($opt_o)){
 	$insertKeys=handleKeys($opt_o);
 	if(defined($opt_i)){removeUnnecessaryExecutes($queryResults,$insertKeys);}
 }
-if(defined($opt_l)){printRows($queryResults->{".keys"},$queryResults->{".hashs"});}
+if(defined($opt_l)){printRows($queryResults->[0],$queryResults->[1]);}
 ##### handle commmand #####
 my @execids;
 my $cmdurl=shift(@ARGV);
@@ -465,7 +484,7 @@ sub checkEval{
 ############################## check ##############################
 sub check{
 	my @checks=@_;
-	if(!defined($opt_i)){print STDERR "Please use option 'i' to assign triple query\n";exit(1);}
+	if(!defined($opt_i)){print STDERR "Please use option '-i' to assign triple query\n";exit(1);}
 	else{checkInputOutput($opt_i);}
 	my $queryResults=getQueryResults($dbdir,$userdefined,$opt_i);
 	if(defined($opt_o)){
@@ -474,7 +493,7 @@ sub check{
 		removeUnnecessaryExecutes($queryResults,$insertKeys);
 		my ($writer,$temp)=tempfile(UNLINK=>1);
 		my ($writer2,$temp2)=tempfile();
-		foreach my $result(@{$queryResults->{".hashs"}}){
+		foreach my $result(@{$queryResults->[1]}){
 			my @lines=checkEval($result,$opt_i,@checks);
 			foreach my $line(@lines){print $writer2 "$line\n";}
 			my $check=(scalar(@lines)>0)?"ERROR":"OK";
@@ -499,7 +518,7 @@ sub check{
 			system("mv $temp2 $file");
 		}
 	}else{
-		foreach my $result(@{$queryResults->{".hashs"}}){
+		foreach my $result(@{$queryResults->[1]}){
 			my @lines=checkEval($result,$opt_i,@checks);
 			if(scalar(@lines)>0){foreach my $line(@lines){print "$line\n";}}
 		}
@@ -591,7 +610,7 @@ sub absolutePath {
 ############################## assign ##############################
 sub assign{
 	if(!defined($opt_o)){
-		print STDERR "Please use option 'o' to assign triple\n";
+		print STDERR "Please use option '-o' to assign triple\n";
 		exit(1);
 	}
 	checkInputOutput($opt_o);
@@ -617,7 +636,7 @@ sub assignCommand{
 	my @inputs=@{$command->{$urls->{"daemon/input"}}};
 	my @outputs=@{$command->{$urls->{"daemon/output"}}};
 	my $keys={};
-	foreach my $key(@{$queryResults->{".keys"}}){$keys->{$key}++;}
+	foreach my $key(@{$queryResults->[0]}){$keys->{$key}++;}
 	foreach my $input(@inputs){
 		if(exists($userdefined->{$input})){next;}
 		if(exists($keys->{$input})){$userdefined->{$input}="\$$input";next;}
@@ -1063,14 +1082,6 @@ sub fileStats{
 	}
 	return $hash;
 }
-############################## filecheck ##############################
-sub filecheck{
-	my $path=shift();
-	if($path=~/\.te?xt$/){
-	}if($path=~/\.gz(ip)?$/){
-	}elsif($path=~/\.bz(ip)?2$/){
-	}
-}
 ############################## linecount ##############################
 sub linecount{
 	my $path=shift();
@@ -1173,7 +1184,7 @@ sub commandProcess{
 	assignCommand($command,$userdefined,$queryResults);
 	my @execids=();
 	my $keys;
-	foreach my $hash(@{$queryResults->{".hashs"}}){
+	foreach my $hash(@{$queryResults->[1]}){
 		my $vars=commandProcessVars($hash,$userdefined,$insertKeys,\@inputs,\@outputs);
 		if(!defined($keys)){my @temp=sort{$a cmp $b}keys(%{$vars});$keys=\@temp;}
 		my $execid=commandProcessSub($url,$vars,$cmdLine,\@inputs,\@outputs);
@@ -1554,20 +1565,12 @@ sub getQueryResults{
 	my $dbdir=shift();
 	my $userdefined=shift();
 	my $input=shift();
-	my $hash={};
 	my ($query,$keys)=parseQuery(replaceStringWithHash($userdefined,$input));
-	my @keys=();
 	my @queries=split(/,/,$input);
-	foreach my $query(@queries){
-		my @tokens=split(/\-\>/,$query);
-		foreach my $token(@tokens){if($token=~/^\$(.+)$/){push(@keys,$1);}}
-	}
 	my $command="perl $prgdir/rdf.pl -d $moiraidir -f json query '".join("','",@queries)."'";
 	my $result=`$command`;chomp($result);
 	my $hashs=jsonDecode($result);
-	$hash->{".keys"}=$keys;
-	$hash->{".hashs"}=$hashs;
-	return $hash;
+	return [$keys,$hashs];
 }
 ############################## handleArguments ##############################
 sub handleArguments{
@@ -1627,7 +1630,7 @@ sub handleInputOutput{
 	my $queryResults=shift();
 	my $inputs={};
 	my $outputs={};
-	foreach my $token(@{$queryResults->{".keys"}}){$inputs->{"\$$token"}=1;}
+	foreach my $token(@{$queryResults->[0]}){$inputs->{"\$$token"}=1;}
 	foreach my $token(@{$insertKeys}){
 		foreach my $t(@{$token}){
 			if($t!~/^\$/){next;}
@@ -2298,7 +2301,7 @@ sub removeUnnecessaryExecutes{
 		$results->{$predicate}=\@results;
 	}
 	my @array=();
-	foreach my $hash(@{$queryResults->{".hashs"}}){
+	foreach my $hash(@{$queryResults->[1]}){
 		my $hit=0;
 		foreach my $out(@{$insertKeys}){
 			my $pred=$out->[1];
@@ -2333,7 +2336,7 @@ sub removeUnnecessaryExecutes{
 		}
 		if($hit==0){push(@array,$hash);}
 	}
-	$queryResults->{".hashs"}=\@array;
+	$queryResults->[1]=\@array;
 }
 ############################## checkArray ##############################
 sub checkArray{
@@ -2374,7 +2377,7 @@ sub sandbox{
 sub extract{
 	my @urls=@_;
 	my $outdir=$opt_o;
-	if(!defined($outdir)){$outdir=".";}
+	if(!defined($outdir)){$outdir="out";}
 	mkdir($outdir);
 	foreach my $url(@urls){
 		foreach my $out(writeScript($url,$outdir,$commands)){print "$out\n";}
@@ -2428,21 +2431,23 @@ sub test{
 	print OUT "{\"https://moirai2.github.io/schema/daemon/docker\":\"ubuntu\",\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}\n";
 	close(OUT);
 	my $name=`uname -s`;chomp($name);
-	testCommand2("perl moirai2.pl -d test/moirai -r unamea test/C.json","^$name");
-	testCommand2("perl moirai2.pl -q -d test/moirai -r unamea test/C.json","^$name");
-	testCommand2("perl moirai2.pl -d test/moirai -r unamea -c docker test/C.json","^Linux");
-	testCommand2("perl moirai2.pl -q -d test/moirai -r unamea -c docker test/C.json","^Linux");
+	testCommand2("perl moirai2.pl -d test/moirai -s 1 -r unamea test/C.json","^$name");
+	testCommand2("perl moirai2.pl -q -d test/moirai -s 1 -r unamea test/C.json","^$name");
+	testCommand2("perl moirai2.pl -d test/moirai -s 1 -r unamea -c docker test/C.json","^Linux");
+	testCommand2("perl moirai2.pl -q -d test/moirai -s 1 -r unamea -c docker test/C.json","^Linux");
 	unlink("test/C.json");
 	open(OUT,">test/moirai/ctrl/insert/A.txt");
 	print OUT "A\t#name\tAkira\n";
 	close(OUT);
-	system("echo 'mkdir -p test/moirai/\$dirname'|perl moirai2.pl -d test/moirai -i '\$id->#name->\$dirname' -o '\$id->#mkdir->done' command");
+	system("echo 'mkdir -p test/moirai/\$dirname'|perl moirai2.pl -d test/moirai -s 1 -i '\$id->#name->\$dirname' -o '\$id->#mkdir->done' command");
 	if(!-e "test/moirai/Akira"){print STDERR "test/moirai/Akira directory not created";}
 	open(OUT,">test/moirai/ctrl/insert/B.txt");
 	print OUT "B\t#name\tBen\n";
 	close(OUT);
-	system("echo 'mkdir -p test/moirai/\$dirname'|perl moirai2.pl -d test/moirai -i '\$id->#name->\$dirname' -o '\$id->#mkdir->done' command");
+	system("echo 'mkdir -p test/moirai/\$dirname'|perl moirai2.pl -d test/moirai -s 1 -i '\$id->#name->\$dirname' -o '\$id->#mkdir->done' command");
 	if(!-e "test/moirai/Ben"){print STDERR "test/moirai/Ben directory not created";}
+	testCommand("perl moirai2.pl -d test/moirai -o 'A->B->C' assign","inserted 1");
+	testCommand("perl moirai2.pl -d test/moirai -o 'A->B->C' assign","");
 	system("rm -r test/moirai");
 	system("rm -r test");
 }
@@ -2512,7 +2517,7 @@ sub throwJobs{
 			print $fh "  2> $stderrFile\n";
 		}elsif($use_container eq "udocker"){
 			print $fh "udocker \\\n";
-			print $fh "  --repo=$udockerDirectory \\\n";
+			print $fh "  --repo=$udockerdir \\\n";
 			print $fh "  run \\\n";
 			print $fh "  --rm \\\n";
 			print $fh "  --user=root \\\n";
@@ -2523,7 +2528,7 @@ sub throwJobs{
 			print $fh "  > $stdoutFile \\\n";
 			print $fh "  2> $stderrFile\n";
 		}elsif($use_container eq "singularity"){
-			$docker_image="$singularityDirectory/$docker_image.sif";
+			$docker_image="$singularitydir/$docker_image.sif";
 			print $fh "singularity \\\n";
 			print $fh "  exec \\\n";
 			print $fh "  --bind=$rootdir:/root \\\n";
