@@ -2,10 +2,10 @@
 use strict 'vars';
 use Cwd;
 use File::Basename;
+use File::Which;
 use File::Temp qw/tempfile tempdir/;
 use FileHandle;
 use Getopt::Std;
-use DBI;
 use File::Path;
 use LWP::UserAgent;
 use HTTP::Request::Common;
@@ -20,8 +20,6 @@ use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_q $opt_r);
 getopts('d:f:g:G:hqr:');
 ############################## URLs ##############################
 my $urls={};
-$urls->{"daemon"}="https://moirai2.github.io/schema/daemon";
-$urls->{"daemon/bash"}="https://moirai2.github.io/schema/daemon/bash";
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
@@ -49,6 +47,7 @@ sub help{
 	print "             export  export database content to moirai2.pl HTML\n";
 	print "           commands  Return commands to be executed\n";
 	print "           filesize  Record file size of a file\n";
+	print "          filestats  Record filesize/linecount/seqcount/md5 of a file\n";
 	print "               jobs  Return jobs to be executed\n";
 	print "          linecount  Line count of a file\n";
 	print "                log  Record log information\n";
@@ -75,11 +74,14 @@ sub help_import{
 	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
-	print "UPDATED: 2020/11/27  Shift system to a database directory structure\n";
+	print "UPDATED: 2021/01/07  Predicate of query can have variable\n";
+	print "         2020/11/27  Shift system to a database directory structure\n";
 	print "\n";
 }
 ############################## MAIN ##############################
 if(defined($opt_h)||scalar(@ARGV)==0){help();exit();}
+my $command=shift(@ARGV);
+if($command eq"test"){test();}
 my $moiraiDir=(defined($opt_d))?$opt_d:"moirai";
 my $dbDir="$moiraiDir/db";
 my $logDir="$moiraiDir/log";
@@ -88,13 +90,15 @@ mkdir($moiraiDir);chmod(0777,$moiraiDir);
 mkdir($dbDir);chmod(0777,$dbDir);
 mkdir($logDir);chmod(0777,$logDir);
 mkdir($errorDir);chmod(0777,$errorDir);
-my $command=shift(@ARGV);
+my $md5cmd=which('md5sum');
+if(!defined($md5cmd)){$md5cmd=which('md5');}
 if($command eq"appendlog"){commandAppendLog(@ARGV);}
 elsif($command eq"commands"){commandCommands(@ARGV);}
 elsif($command eq"delete"){commandDelete(@ARGV);}
 elsif($command eq"executes"){commandExecutes(@ARGV);}
 elsif($command eq"export"){commandExport(@ARGV);}
 elsif($command eq"filesize"){commandFilesize(@ARGV);}
+elsif($command eq"filestats"){commandFileStats(@ARGV);}
 elsif($command eq"import"){commandImport(@ARGV);}
 elsif($command eq"insert"){commandInsert(@ARGV);}
 elsif($command eq"linecount"){commandLinecount(@ARGV);}
@@ -106,7 +110,6 @@ elsif($command eq"select"){commandSelect(@ARGV);}
 elsif($command eq"seqcount"){commandSeqcount(@ARGV);}
 elsif($command eq"submit"){commandSubmit(@ARGV);}
 elsif($command eq"update"){commandUpdate(@ARGV);}
-elsif($command eq"test"){test();}
 ############################## commandExport ##############################
 sub commandExport{
 	my $target=shift();
@@ -247,24 +250,25 @@ sub commandExecutes{
 	}
 	print jsonEncode($executes)."\n";
 }
+############################## commandFileStats ##############################
+sub commandFileStats{
+	my @arguments=@_;
+	my @files=();
+	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
+	else{@files=@arguments;}
+	my $writer=IO::File->new(">&STDOUT");
+	fileStats($writer,$opt_g,$opt_G,$opt_r,@files);
+	close($writer);
+}
 ############################## commandFilesize ##############################
 sub commandFilesize{
 	my @arguments=@_;
 	my @files=();
 	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@arguments;}
-	if(defined($opt_d)){
-		my ($writer,$file)=tempfile(UNLINK=>1);
-		sizeFiles($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-		my $reader=IO::File->new($file);
-		#my $linecount=dbImport($database,$reader);
-		close($reader);
-	}else{
-		my $writer=IO::File->new(">&STDOUT");
-		sizeFiles($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-	}
+	my $writer=IO::File->new(">&STDOUT");
+	sizeFiles($writer,$opt_g,$opt_G,$opt_r,@files);
+	close($writer);
 }
 ############################## commandImport ##############################
 sub commandImport{
@@ -278,15 +282,19 @@ sub commandImport{
 	while(<STDIN>){
 		chomp;
 		my ($s,$p,$o)=split(/\t/);
+		if(!defined($p)){next;}
+		if(!defined($o)){next;}
 		if(!exists($writers->{$p})&&!exists($excess->{$p})){
 			my $file=getFileFromPredicate($p);
 			if($file=~/\.gz$/){$writers->{$p}=undef;}
 			elsif($file=~/\.bz2$/){$writers->{$p}=undef;}
 			elsif(keys(%{$writers})<$limit-2){
 				my ($writer,$tempfile)=tempfile(UNLINK=>1);
-				my $reader=openFile($file);
-				while(<$reader>){chomp;print $writer "$_\n";}
-				close($reader);
+				if(-e $file){
+					my $reader=openFile($file);
+					while(<$reader>){chomp;print $writer "$_\n";}
+					close($reader);
+				}else{mkdirs(dirname($file));}
 				$writers->{$p}=$writer;
 				$files->{$file}=$tempfile;
 			}else{
@@ -308,9 +316,11 @@ sub commandImport{
 		if($file=~/\.gz$/){next;}
 		elsif($file=~/\.bz2$/){next;}
 		my ($writer,$tempfile)=tempfile(UNLINK=>1);
-		my $reader=openFile($file);
-		while(<$reader>){chomp;print $writer "$_\n";}
-		close($reader);
+		if(-e $file){
+			my $reader=openFile($file);
+			while(<$reader>){chomp;print $writer "$_\n";}
+			close($reader);
+		}else{mkdirs(dirname($file));}
 		foreach my $line(@{$array}){print $writer "$line\n";$total++;}
 		close($writer);
 		$files->{$file}=$tempfile;
@@ -382,18 +392,9 @@ sub commandLinecount{
 	my @files=();
 	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@arguments;}
-	if(defined($opt_d)){
-		my ($writer,$file)=tempfile(UNLINK=>1);
-		countLines($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-		my $reader=IO::File->new($file);
-		#my $linecount=dbImport($database,$reader);
-		close($reader);
-	}else{
-		my $writer=IO::File->new(">&STDOUT");
-		countLines($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-	}
+	my $writer=IO::File->new(">&STDOUT");
+	countLines($writer,$opt_g,$opt_G,$opt_r,@files);
+	close($writer);
 }
 ############################## commandLog ##############################
 sub commandLog{
@@ -464,18 +465,9 @@ sub commandMd5{
 	my @files=();
 	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@arguments;}
-	if(defined($opt_d)){
-		my ($writer,$file)=tempfile(UNLINK=>1);
-		md5Files($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-		my $reader=IO::File->new($file);
-		#my $linecount=dbImport($database,$reader);
-		close($reader);
-	}else{
-		my $writer=IO::File->new(">&STDOUT");
-		md5Files($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-	}
+	my $writer=IO::File->new(">&STDOUT");
+	md5Files($writer,$opt_g,$opt_G,$opt_r,@files);
+	close($writer);
 }
 ############################## commandQuery ##############################
 sub commandQuery{
@@ -552,18 +544,9 @@ sub commandSeqcount{
 	my @files=();
 	if(scalar(@arguments)==0){while(<STDIN>){chomp;push(@files,$_);}}
 	else{@files=@arguments;}
-	if(defined($opt_d)){
-		my ($writer,$file)=tempfile(UNLINK=>1);
-		countSequences($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-		my $reader=IO::File->new($file);
-		#my $linecount=dbImport($database,$reader);
-		close($reader);
-	}else{
-		my $writer=IO::File->new(">&STDOUT");
-		countSequences($writer,$opt_g,$opt_G,$opt_r,@files);
-		close($writer);
-	}
+	my $writer=IO::File->new(">&STDOUT");
+	countSequences($writer,$opt_g,$opt_G,$opt_r,@files);
+	close($writer);
 }
 ############################## commandSubmit ##############################
 sub commandSubmit{
@@ -628,6 +611,81 @@ sub updateJson{
 		$total+=$updated;
 	}
 	return $total;
+}
+############################## checkBinary ##############################
+sub checkBinary{
+	my $file=shift();
+	while(-l $file){$file=readlink($file);}
+	my $result=`file --mime $file`;
+	if($result=~/charset\=binary/){return 1;}
+}
+############################## fileStats ##############################
+sub fileStats{
+	my @files=@_;
+	my $writer=shift(@files);
+	my $filegrep=shift(@files);
+	my $fileungrep=shift(@files);
+	my $recursivesearch=shift(@files);
+	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
+		# count line and seq
+		my $linecount;
+		my $seqcount;
+		if($file=~/\.bam$/){#bam file
+			$linecount=`samtools view -c $file`;
+			chomp($linecount);
+			$seqcount=`samtools view -c -f 0x2 $file`;
+			$seqcount=($seqcount>0)?1:0;
+			if($seqcount){$seqcount=`samtools view -c -f 0x2 -F 0x184 $file`;}
+			else{$seqcount=`samtools view -c -F 0x184 $file`;}
+			chomp($seqcount);
+		}elsif($file=~/\.sam$/){#sam
+			$linecount=`samtools view -S -c $file`;
+			chomp($linecount);
+			$seqcount=`samtools view -S -c -f 0x2 $file`;
+			$seqcount=($seqcount>0)?1:0;
+			if($seqcount){$seqcount=`samtools view -S -c -f 0x2 -F 0x184 $file`;}
+			else{$seqcount=`samtools view -S -c -F 0x184 $file`;}
+			chomp($seqcount);
+		}elsif($file=~/\.gz(ip)?$/){#gzip
+			$linecount=`gzip -cd $file|wc -l`;
+			chomp($linecount);
+			if($file=~/\.f(ast)?a\.gz(ip)?$/){$seqcount=`gzip -cd $file|grep '>'|wc -l`;chomp($seqcount);}
+			elsif($file=~/\.f(ast)?q\.gz(ip)?$/){$seqcount=$linecount/4;chomp($seqcount);}
+		}elsif($file=~/\.bz(ip)?2$/){ #bzip
+			$linecount=`bzip2 -cd $file|wc -l`;
+			chomp($linecount);
+			if($file=~/\.f(ast)?a\.bz(ip)?2$/){$seqcount=`bzip -cd $file|grep '>'|wc -l`;chomp($seqcount);}
+			elsif($file=~/\.f(ast)?q\.bz(ip)?2$/){$seqcount=$linecount/4;chomp($seqcount);}
+		}elsif(checkBinary($file)){# binary file
+			print $writer "$file\tfile/binary\ttrue\n";
+		}else{
+			$linecount=`cat $file|wc -l`;
+			chomp($linecount);
+			if($file=~/\.f(ast)?a$/){$seqcount=`cat $file|grep '>'|wc -l`;chomp($seqcount);}
+			elsif($file=~/\.f(ast)?q$/){$seqcount=$linecount/4;chomp($seqcount);}
+		}
+		if(defined($linecount)){
+			if($linecount=~/(\d+)/){$linecount=$1;}
+			print $writer "$file\tfile/linecount\t$linecount\n";
+		}
+		if(defined($seqcount)){
+			if($seqcount=~/(\d+)/){$seqcount=$1;}
+			print $writer "$file\tfile/seqcount\t$seqcount\n";
+		}
+		#md5
+		if(defined($md5cmd)){
+			my $sum=`$md5cmd<$file`;
+			chomp($sum);
+			if($sum=~/^(\w+)/){$sum=$1;}
+			print $writer "$file\tfile/md5\t$sum\n";
+		}
+		#filesize
+		my $filesize=-s $file;
+		print $writer "$file\tfile/filesize\t$filesize\n";
+		my @stats=stat($file);
+		my $mtime=$stats[9];
+		print $writer "$file\tfile/mtime\t$mtime\n";
+	}
 }
 ############################## countLines ##############################
 sub countLines{
@@ -855,7 +913,7 @@ sub toJsonHash{
 			last;
 		}elsif($findKey==1){
 			if($value ne ""){$hash->{$key}=$value;$value="";}
-			if($chars->[$index] eq ":"){$key=chomp($key);$findKey=0;}
+			if($chars->[$index] eq ":"){chomp($key);$findKey=0;}
 			elsif($chars->[$index] eq "\""){($key,$index)=toJsonStringDoubleQuote($chars,$index+1);$findKey=0;}
 			elsif($chars->[$index] eq "\'"){($key,$index)=toJsonStringSingleQuote($chars,$index+1);$findKey=0;}
 			elsif($chars->[$index]!~/^\s$/){$key.=$chars->[$index];}
@@ -975,7 +1033,6 @@ sub loadLogToHash{
 sub loadDbToArray{
 	my $directory=shift();	
 	my ($nodes,$edges)=toNodesAndEdges($directory);
-	printTable($nodes,$edges);
 	my @queries=();
 	foreach my $from(keys(%{$edges})){
 		my $labelFrom="\$".$nodes->{$from};
@@ -1072,19 +1129,10 @@ sub md5Files{
 	my $fileungrep=shift(@files);
 	my $recursivesearch=shift(@files);
 	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
-		my $md5=`which md5`;
-		my $md5sum=`which md5sum`;
-		if(defined($md5)){
-			chomp($md5);
-			my $sum=`$md5 $file`;
+		if(defined($md5cmd)){
+			my $sum=`$md5cmd $file`;
 			chomp($sum);
 			if($sum=~/(\S+)$/){$sum=$1;}
-			print $writer "$file\tfile/md5\t$sum\n";
-		}elsif(defined($md5sum)){
-			chomp($md5sum);
-			my $sum=`$md5sum $file`;
-			chomp($sum);
-			if($sum=~/^(\S+)/){$sum=$1;}
 			print $writer "$file\tfile/md5\t$sum\n";
 		}
 	}
@@ -1180,7 +1228,7 @@ sub queryResults{
 	foreach my $query(@queries){
 		my ($s,$p,$o)=split(/\-\>/,$query);
 		my @array=queryVariables($s,$p,$o);
-		$values->{$query}=\@array;
+		if(scalar(@array)>0){$values->{$query}=\@array;}
 	}
 	my @results=();
 	for(my $i=0;$i<scalar(@queries);$i++){
@@ -1219,20 +1267,32 @@ sub queryVariables{
 	my $subject=shift();
 	my $predicate=shift();
 	my $object=shift();
-	my $sub=".*";
-	my $pre=".*";
-	my $obj=".*";
-	my $subVar=1;
-	my $preVar=1;
-	my $objVar=1;
-	if($subject=~/^\$(.+)$/){$subject=$1}
-	else{$sub=$subject;$subVar=0;}
-	if($predicate=~/^\$(.+)$/){$predicate=$1}
-	else{$pre=$predicate;$preVar=0;}
-	if($object=~/^\$(.+)$/){$object=$1}
-	else{$obj=$object;$objVar=0;}
+	my @subVars=();
+	my @preVars=();
+	my @objVars=();
+	if($subject=~/\$(\w+)/){
+		while($subject=~/\$(\w+)/){
+			push(@subVars,$1);
+			$subject=~s/\$(\w+)/(.+)/;
+		}
+		$subject="$subject";
+	}
+	if($predicate=~/\$(\w+)/){
+		while($predicate=~/\$(\w+)/){
+			push(@preVars,$1);
+			$predicate=~s/\$(\w+)/(.+)/;
+		}
+		$predicate="$predicate";
+	}
+	if($object=~/\$(\w+)/){
+		while($object=~/\$(\w+)/){
+			push(@objVars,$1);
+			$object=~s/\$(\w+)/(.+)/;
+		}
+		$object="$object";
+	}
 	my @files=listFiles(undef,undef,-1,$dbDir);
-	my @files=narrowDownByPredicate($pre,@files);
+	my @files=narrowDownByPredicate($predicate,@files);
 	my @array=();
 	foreach my $file(@files){
 		my $p=getPredicateFromFile($file);
@@ -1240,13 +1300,22 @@ sub queryVariables{
 		while(<$reader>){
 			chomp;
 			my ($s,$o)=split(/\t/);
-			if($s!~/^$sub$/){next;}
-			if($o!~/^$obj$/){next;}
+			if($s!~/^$subject$/){next;}
+			if($o!~/^$object$/){next;}
 			my $h={};
-			if($subVar){$h->{$subject}=$s;}
-			if($preVar){$h->{$predicate}=$p;}
-			if($objVar){$h->{$object}=$o;}
-			push(@array,$h);
+			if(scalar(@subVars)>0){
+				my @results=$s=~/^$subject$/;
+				for(my $i=0;$i<scalar(@subVars);$i++){$h->{$subVars[$i]}=$results[$i];}
+			}
+			if(scalar(@preVars)>0){
+				my @results=$p=~/^$predicate$/;
+				for(my $i=0;$i<scalar(@preVars);$i++){$h->{$preVars[$i]}=$results[$i];}
+			}
+			if(scalar(@objVars)>0){
+				my @results=$o=~/^$object$/;
+				for(my $i=0;$i<scalar(@objVars);$i++){$h->{$objVars[$i]}=$results[$i];}
+			}
+			if(scalar(keys(%{$h}))>0){push(@array,$h);}
 		}
 		close($reader);
 	}
@@ -1473,5 +1542,7 @@ sub test{
 	unlink("test/update.json");
 	unlink("test/import.txt");
 	rmdir("test/db");
+	rmdir("test/log/error");
+	rmdir("test/log");
 	rmdir("test");
 }
