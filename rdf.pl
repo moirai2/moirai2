@@ -12,6 +12,7 @@ use HTTP::Request::Common;
 use Time::HiRes;
 use Time::Local;
 use Time::localtime;
+use Time::Piece;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
@@ -71,10 +72,13 @@ sub help_import{
 	print "     -q  quiet mode\n";
 	print "\n";
 	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
-	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
-	print "   NOTE:  Need to specify database for most manipulations.\n";
+	print "          '%' is wildcard for subject/predicate/object.\n";
+	print "          Need to specify database for most manipulations.\n";
+	print "          When DB text file is gzipped/bzipped, DB can't be updated.\n";
+	print "          Update = insertion / update / deletion\n";
 	print "\n";
-	print "UPDATED: 2021/01/07  Predicate of query can have variable\n";
+	print "UPDATED: 2021/01/31  Now can access RDF database through web\n";
+	print "         2021/01/07  Predicate of query can have variable\n";
 	print "         2020/11/27  Shift system to a database directory structure\n";
 	print "\n";
 }
@@ -522,6 +526,7 @@ sub commandSelect{
 	$subject=~s/\%/.*/g;
 	$predicate=~s/\%/.*/g;
 	$object=~s/\%/.*/g;
+	downloadPredicate($predicate);
 	my @files=listFiles(undef,undef,-1,$dbDir);
 	my @files=narrowDownByPredicate($predicate,@files);
 	foreach my $file(@files){
@@ -618,6 +623,76 @@ sub checkBinary{
 	while(-l $file){$file=readlink($file);}
 	my $result=`file --mime $file`;
 	if($result=~/charset\=binary/){return 1;}
+}
+############################## getURLFromPredicate ##############################
+sub getURLFromPredicate{
+	my $predicate=shift();
+	if($predicate=~/^(.+)#(.+)$/){$predicate=$1;}
+	if($predicate=~/^(.+)\.json$/){$predicate=$1;}
+	my $url="$predicate.txt.gz";
+	my $lastModified=getLastModified($url);
+	if(defined($lastModified)){return ($url,$lastModified);}
+	$url="$predicate.txt.bz2";
+	$lastModified=getLastModified($url);
+	if(defined($lastModified)){return ($url,$lastModified);}
+	$url="$predicate.txt";
+	$lastModified=getLastModified($url);
+	if(defined($lastModified)){return ($url,$lastModified);}
+	return;
+}
+############################## downloadPredicate ##############################
+sub downloadPredicate{
+	my $predicate=shift();
+	if($predicate!~/https?:\/\//){next;}
+	my ($url,$lastModified)=getURLFromPredicate($predicate);
+	if(!defined($lastModified)){return;}
+	my $file=getFileFromPredicate($predicate);
+	if(-e $file){
+		my $modTime=$lastModified->epoch;
+		my $modTime2=getModTime($file);
+		if($modTime2>=$modTime){return;}
+	}
+	mkdirs(dirname($file));
+	if(!defined($opt_q)){print STDERR "Downloading: $file\n";}
+	downloadHttpContent($url,$file);
+	system("gzip $file");
+}
+############################## getModTime ##############################
+sub getModTime{
+	my $file=shift();
+	my @stats=stat($file);
+	return $stats[9];
+}
+############################## getLastModified ##############################
+sub getLastModified{
+	my $url=shift();
+	my $ua=LWP::UserAgent->new;
+	my $req=HTTP::Request->new(GET=>$url);
+	my $res=$ua->simple_request($req);
+	foreach my $line(split(/\n/,$res->headers_as_string)){
+		if($line=~/Last-Modified:\s(\S+),\s(\S+)\s(\S+)\s(\S+)\s(\S+)\sGMT$/){
+			my $week=$1;
+			my $day=$2;
+			my $month=$3;
+			my $year=$4;
+			my $time=$5;
+			if($month=~/^Jan/){$month="01";}
+			elsif($month=~/^Feb/){$month="02";}
+			elsif($month=~/^Mar/){$month="03";}
+			elsif($month=~/^Apr/){$month="04";}
+			elsif($month=~/^May/){$month="05";}
+			elsif($month=~/^Jun/){$month="06";}
+			elsif($month=~/^Jul/){$month="07";}
+			elsif($month=~/^Aug/){$month="08";}
+			elsif($month=~/^Sep/){$month="09";}
+			elsif($month=~/^Oct/){$month="10";}
+			elsif($month=~/^Nov/){$month="11";}
+			elsif($month=~/^Dec/){$month="12";}
+			my $t=Time::Piece->strptime("$year$month$day $time", "%Y%m%d %H:%M:%S");
+			return $t;
+		}
+	}
+	return;
 }
 ############################## fileStats ##############################
 sub fileStats{
@@ -786,12 +861,32 @@ sub getFileFromExecid{
 ############################## getFileFromPredicate ##############################
 sub getFileFromPredicate{
 	my $predicate=shift();
-	if($predicate=~/^https?:\/\/(.+)$/){$predicate=$1;}
+	if($predicate=~/^(https?):\/\/(.+)$/){$predicate="$1/$2";}
 	if($predicate=~/^(.+)#(.+)$/){$predicate=$1;}
 	if($predicate=~/^(.+)\.json$/){$predicate=$1;}
 	if(-e "$dbDir/$predicate.txt.gz"){return "$dbDir/$predicate.txt.gz";}
 	elsif(-e "$dbDir/$predicate.txt.bz2"){return "$dbDir/$predicate.txt.bz2";}
 	else{return "$dbDir/$predicate.txt";}
+}
+############################## downloadHttpContent ##############################
+sub downloadHttpContent{
+	my $url=shift();
+	my $file=shift();
+	my $lwp = LWP::UserAgent->new(timeout=>10);
+    my $res=$lwp->get($url,':content_file'=>$file);
+    if (!$res->is_success){print STDERR "ERROR downloading $url to $file\n";}
+}
+############################## getHttpContent ##############################
+sub getHttpContent{
+	my $url=shift();
+	my $username=shift();
+	my $password=shift();
+	my $agent=new LWP::UserAgent();
+	my $request=HTTP::Request->new(GET=>$url);
+	if($username ne ""||$password ne ""){$request->authorization_basic($username,$password);}
+	my $res=$agent->request($request);
+	if($res->is_success){return $res->content;}
+	elsif($res->is_error){print $res;}
 }
 ############################## getPredicateFromFile ##############################
 sub getPredicateFromFile{
@@ -799,7 +894,8 @@ sub getPredicateFromFile{
 	my $dirname=dirname($path);
 	my $basename=basename($path);
 	if($dirname=~/^$dbDir\/(.+)$/){$basename="$1/$basename";}
-	if($basename=~/^moirai2\.github\.io/){$basename="https://$basename";}
+	if($basename=~/^https\/(.+)$/){$basename="https://$1";}
+	elsif($basename=~/^http\/(.+)$/){$basename="http://$1";}
 	if($basename=~/^(.+)\.te?xt\.gz(ip)?$/){return $1;}
 	elsif($basename=~/^(.+)\.te?xt\.bz(ip)2?$/){return $1;}
 	elsif($basename=~/^(.+)\.te?xt$/){return $1;}
@@ -1161,7 +1257,7 @@ sub mkdirs {
 sub narrowDownByPredicate{
 	my @files=@_;
 	my $predicate=shift(@files);
-	if($predicate=~/^https?:\/\/(.+)$/){$predicate=$1;}
+	if($predicate=~/^(https?):\/\/(.+)$/){$predicate="$1/$2";}
 	my @results=();
 	foreach my $file(@files){
 		if($file=~/^$dbDir\/$predicate\.te?xt$/){push(@results,$file);}
@@ -1227,7 +1323,12 @@ sub queryResults{
 	my $values={};
 	foreach my $query(@queries){
 		my ($s,$p,$o)=split(/\-\>/,$query);
-		my @array=queryVariables($s,$p,$o);
+		downloadPredicate($p);
+	}
+	my @files=listFiles(undef,undef,-1,$dbDir);
+	foreach my $query(@queries){
+		my ($s,$p,$o)=split(/\-\>/,$query);
+		my @array=queryVariables($s,$p,$o,@files);
 		if(scalar(@array)>0){$values->{$query}=\@array;}
 	}
 	my @results=();
@@ -1264,9 +1365,10 @@ sub queryResults{
 }
 ############################## queryVariables ##############################
 sub queryVariables{
-	my $subject=shift();
-	my $predicate=shift();
-	my $object=shift();
+	my @files=@_;
+	my $subject=shift(@files);
+	my $predicate=shift(@files);
+	my $object=shift(@files);
 	my @subVars=();
 	my @preVars=();
 	my @objVars=();
@@ -1291,8 +1393,7 @@ sub queryVariables{
 		}
 		$object="$object";
 	}
-	my @files=listFiles(undef,undef,-1,$dbDir);
-	my @files=narrowDownByPredicate($predicate,@files);
+	@files=narrowDownByPredicate($predicate,@files);
 	my @array=();
 	foreach my $file(@files){
 		my $p=getPredicateFromFile($file);
@@ -1474,12 +1575,15 @@ sub testSub{
 sub test{
 	testSub("getPredicateFromFile(\"$dbDir/A.txt\")","A");
 	testSub("getPredicateFromFile(\"$dbDir/B/A.txt\")","B/A");
-	testSub("getPredicateFromFile(\"$dbDir/moirai2.github.io/schema/daemon/bash.txt\")","https://moirai2.github.io/schema/daemon/bash");
+	testSub("getPredicateFromFile(\"$dbDir/https/moirai2.github.io/schema/daemon/bash.txt\")","https://moirai2.github.io/schema/daemon/bash");
+	testSub("getPredicateFromFile(\"$dbDir/http/localhost/~ah3q/moirai2/A.txt.gz\")","http://localhost/~ah3q/moirai2/A");
 	testSub("getFileFromPredicate(\"A\")","$dbDir/A.txt");
 	testSub("getFileFromPredicate(\"A/B\")","$dbDir/A/B.txt");
 	testSub("getFileFromPredicate(\"A/B#CDF\")","$dbDir/A/B.txt");
 	testSub("getFileFromPredicate(\"A/B.json\")","$dbDir/A/B.txt");
 	testSub("getFileFromPredicate(\"A/B.json#D\")","$dbDir/A/B.txt");
+	testSub("getFileFromPredicate(\"http://A.B.C/D/E\")","$dbDir/http/A.B.C/D/E.txt");
+	testSub("getFileFromPredicate(\"https://A.B.C/D/E.json#F\")","$dbDir/https/A.B.C/D/E.txt");
 	mkdir("test");
 	mkdir("test/db");
 	createFile("test/db/id.txt","A\tA1","B\tB1","C\tC1","D\tD1");
