@@ -2,7 +2,6 @@
 use strict 'vars';
 use Cwd;
 use File::Basename;
-use File::Which;
 use File::Temp qw/tempfile tempdir/;
 use FileHandle;
 use Getopt::Std;
@@ -94,8 +93,7 @@ mkdir($moiraiDir);chmod(0777,$moiraiDir);
 mkdir($dbDir);chmod(0777,$dbDir);
 mkdir($logDir);chmod(0777,$logDir);
 mkdir($errorDir);chmod(0777,$errorDir);
-my $md5cmd=which('md5sum');
-if(!defined($md5cmd)){$md5cmd=which('md5');}
+my $md5cmd=getWhich();
 if($command eq"appendlog"){commandAppendLog(@ARGV);}
 elsif($command eq"commands"){commandCommands(@ARGV);}
 elsif($command eq"delete"){commandDelete(@ARGV);}
@@ -624,6 +622,18 @@ sub checkBinary{
 	my $result=`file --mime $file`;
 	if($result=~/charset\=binary/){return 1;}
 }
+############################## getWhich ##############################
+sub getWhich{
+	my $out=`which md5sum 2>&1`;
+	chomp($out);
+	if($out=~/Can\'t locate/){$out=undef;}
+	if(!defined($out)){
+		$out=`which md5 2>&1`;
+		if($out=~/Can\'t locate/){$out=undef;}
+		chomp($out);
+	}
+	return $out;
+}
 ############################## getURLFromPredicate ##############################
 sub getURLFromPredicate{
 	my $predicate=shift();
@@ -643,7 +653,7 @@ sub getURLFromPredicate{
 ############################## downloadPredicate ##############################
 sub downloadPredicate{
 	my $predicate=shift();
-	if($predicate!~/https?:\/\//){next;}
+	if($predicate!~/https?:\/\//){return;}
 	my ($url,$lastModified)=getURLFromPredicate($predicate);
 	if(!defined($lastModified)){return;}
 	my $file=getFileFromPredicate($predicate);

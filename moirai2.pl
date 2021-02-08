@@ -3,7 +3,6 @@ use strict 'vars';
 use Cwd;
 use File::Basename;
 use File::Temp;
-use File::Which;
 use FileHandle;
 use Getopt::Std;
 use LWP::UserAgent;
@@ -447,8 +446,7 @@ mkdir("$ctrldir/submit");chmod(0777,"$ctrldir/submit");
 mkdir("$ctrldir/error");chmod(0777,"$ctrldir/error");
 if($ARGV[0] eq "check"){shift(@ARGV);check(@ARGV);exit(0);}
 if($ARGV[0] eq "ls"){shift(@ARGV);ls(@ARGV);exit(0);}
-my $md5cmd=which('md5sum');
-if(!defined($md5cmd)){$md5cmd=which('md5');}
+my $md5cmd=getWhich();
 #just in case jobs are completed while moirai2.pl was not running by termination
 my $executes={};
 controlProcess($executes);
@@ -460,6 +458,7 @@ if(getNumberOfJobsRunning()>0){
 	if($prompt ne "y"&&$prompt ne "yes"&&$prompt ne "Y"&&$prompt ne "YES"){system("rm $ctrldir/bash/*");}
 }
 if($ARGV[0] eq "automate"){automate();exit(0);}
+my $cmdurl=shift(@ARGV);
 ##### handle inputs and outputs #####
 my $queryResults;
 my $queryKeys;
@@ -496,7 +495,6 @@ if(defined($opt_o)){
 if(defined($opt_l)){printRows($queryResults->[0],$queryResults->[1]);}
 ##### handle commmand #####
 my @execids;
-my $cmdurl=shift(@ARGV);
 my $cmdLine;
 if($cmdurl eq "command"){
 	my @lines=();
@@ -1479,6 +1477,18 @@ sub getTime{
 }
 ############################## getDatetime ##############################
 sub getDatetime{my $time=shift;return getDate("",$time).getTime("",$time);}
+############################## getWhich ##############################
+sub getWhich{
+	my $out=`which md5sum 2>&1`;
+	chomp($out);
+	if($out=~/Can\'t locate/){$out=undef;}
+	if(!defined($out)){
+		$out=`which md5 2>&1`;
+		if($out=~/Can\'t locate/){$out=undef;}
+		chomp($out);
+	}
+	return $out;
+}
 ############################## commandProcessVars ##############################
 sub commandProcessVars{
 	my $hash=shift();
@@ -2582,10 +2592,7 @@ sub scriptCodeForBash{
 }
 ############################## test ##############################
 sub test{
-	mkdir(test);
-	#testCommand("perl moirai2.pl -d test/moirai -s 1 -o 'A->B->C' prompt 'Question'","test/output.txt");
-	#exit();
-	unlink("test/moirai");
+	mkdir("test");
 	open(OUT,">test/A.json");
 	print OUT "{\"https://moirai2.github.io/schema/daemon/input\":\"\$string\",\"https://moirai2.github.io/schema/daemon/bash\":[\"output=\\\"\$workdir/output.txt\\\"\",\"echo \\\"\$string\\\" > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}\n";
 	close(OUT);
