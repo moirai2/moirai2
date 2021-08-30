@@ -2,22 +2,24 @@
 use strict 'vars';
 use Cwd;
 use File::Basename;
+use File::Which;
 use File::Temp qw/tempfile tempdir/;
 use FileHandle;
 use Getopt::Std;
 use File::Path;
+use LWP::Simple;
 use LWP::UserAgent;
 use HTTP::Request::Common;
+use HTTP::Status;
 use Time::HiRes;
 use Time::Local;
 use Time::localtime;
-use Time::Piece;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
 ############################## OPTIONS ##############################
-use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_q $opt_r);
-getopts('d:f:g:G:hqr:');
+use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_q $opt_r $opt_s);
+getopts('d:f:g:G:hqr:s:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
@@ -31,7 +33,7 @@ sub help{
 	print "############################## HELP ##############################\n";
 	print "\n";
 	print "Program: Utilities for handling a RDF sqlite3 database.\n";
-	print "Version: 2020/12/03\n";
+	print "Version: 2021/07/24\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
 	print "Usage: perl $program_name [Options] COMMAND\n";
@@ -43,58 +45,43 @@ sub help{
 	print "             select  Select triple(s)\n";
 	print "             update  Update triple(s)\n";
 	print "\n";
-	print "Commands used by moirai2.pl:\n";
-	print "             export  export database content to moirai2.pl HTML\n";
-	print "           commands  Return commands to be executed\n";
+	print "Commands of file statistics:\n";
 	print "           filesize  Record file size of a file\n";
 	print "          filestats  Record filesize/linecount/seqcount/md5 of a file\n";
-	print "               jobs  Return jobs to be executed\n";
 	print "          linecount  Line count of a file\n";
-	print "                log  Record log information\n";
 	print "                md5  Record md5 of a file\n";
-	print "             return  Return result(s) from logs\n";
 	print "           seqcount  Record sequence count of a file\n";
-	print "             submit  Record new job submission\n";
-	print "               test  For development purpose\n";
-	print "          appendlog  Append stderr/stdout/bash/script information to log file\n";
 	print "\n";
-}
-sub help_import{
-	print "PROGRAM: $program_name\n";
-	print "  USAGE: Utilities for handling a RDF sqlite3 database.\n";
-	print "COMMAND: $program_name -d DB COMMAND\n";
+	print "Commands used by moirai2.pl:\n";
+	print "           commands  Return commands to be executed from lookForNewCommands()\n";
+	print "           executes  Information about executed commands from getExecuteJobs()\n";
+	print "             export  export database content to moirai2.pl HTML from html()\n";
+	print "             return  Return result(s) from logs from main()\n";
+	print "             submit  Record new job submission from controlSubmit()\n";
+	print "               test  For development purpose\n";
 	print "\n";
 	print "Options:\n";
 	print "     -d  database directory path (default='rdf')\n";
 	print "     -f  input/output format (json,tsv)\n";
 	print "     -h  show help message\n";
 	print "     -q  quiet mode\n";
+	print "     -s  separate delimiter (default='\t')\n";
 	print "\n";
 	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
-	print "          '%' is wildcard for subject/predicate/object.\n";
-	print "          Need to specify database for most manipulations.\n";
-	print "          When DB text file is gzipped/bzipped, DB can't be updated.\n";
-	print "          Update = insertion / update / deletion\n";
-	print "\n";
-	print "UPDATED: 2021/01/31  Now can access RDF database through web\n";
-	print "         2021/01/07  Predicate of query can have variable\n";
-	print "         2020/11/27  Shift system to a database directory structure\n";
+	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
+	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
 }
 ############################## MAIN ##############################
 if(defined($opt_h)||scalar(@ARGV)==0){help();exit();}
 my $command=shift(@ARGV);
-if($command eq"test"){test();}
 my $moiraiDir=(defined($opt_d))?$opt_d:"moirai";
 my $dbDir="$moiraiDir/db";
 my $logDir="$moiraiDir/log";
 my $errorDir="$logDir/error";
-mkdir($moiraiDir);chmod(0777,$moiraiDir);
-mkdir($dbDir);chmod(0777,$dbDir);
-mkdir($logDir);chmod(0777,$logDir);
-mkdir($errorDir);chmod(0777,$errorDir);
-my $md5cmd=getWhich();
-if($command eq"appendlog"){commandAppendLog(@ARGV);}
+my $md5cmd=which('md5sum');
+if(!defined($md5cmd)){$md5cmd=which('md5');}
+if($command eq"test"){test();}
 elsif($command eq"commands"){commandCommands(@ARGV);}
 elsif($command eq"delete"){commandDelete(@ARGV);}
 elsif($command eq"executes"){commandExecutes(@ARGV);}
@@ -104,7 +91,6 @@ elsif($command eq"filestats"){commandFileStats(@ARGV);}
 elsif($command eq"import"){commandImport(@ARGV);}
 elsif($command eq"insert"){commandInsert(@ARGV);}
 elsif($command eq"linecount"){commandLinecount(@ARGV);}
-elsif($command eq"log"){commandLog(@ARGV);}
 elsif($command eq"md5"){commandMd5(@ARGV);}
 elsif($command eq"query"){commandQuery(@ARGV);}
 elsif($command eq"return"){commandReturn(@ARGV);}
@@ -112,33 +98,12 @@ elsif($command eq"select"){commandSelect(@ARGV);}
 elsif($command eq"seqcount"){commandSeqcount(@ARGV);}
 elsif($command eq"submit"){commandSubmit(@ARGV);}
 elsif($command eq"update"){commandUpdate(@ARGV);}
-############################## commandExport ##############################
-sub commandExport{
-	my $target=shift();
-	if(!defined($target)){$target="db";}
-	my $result;
-	if($target eq "db"){$result=loadDbToArray($dbDir);}
-	elsif($target eq "log"){$result=loadLogToHash($logDir);}
-	elsif($target eq "network"){$result=loadDbToVisNetwork($dbDir);}
-	print jsonEncode($result)."\n";
-}
-############################## commandAppendLog ##############################
-sub commandAppendLog{
-	my $id=shift();
-	my $file=getFileFromExecid($id);
-	if($file=~/\.gz$/){return;}
-	elsif($file=~/\.bz2$/){return;}
-	if(!-e $file){return;}
-	open(OUT,">>$file");
-	while(<STDIN>){print OUT;}
-	close(OUT);
-}
 ############################## commandCommands ##############################
 sub commandCommands{
 	my $logs=loadLogs();
 	my @urls=();
 	foreach my $id(keys(%{$logs})){
-		if($logs->{$id}->{$urls->{"daemon/execute"}}ne"registered"){next;}
+		if(exists($logs->{$id}->{$urls->{"daemon/execute"}})){next;}
 		if(exists($logs->{$id}->{$urls->{"daemon/command"}})){push(@urls,$logs->{$id}->{$urls->{"daemon/command"}});}
 	}
 	if(!defined($opt_f)){$opt_f="tsv";}
@@ -236,7 +201,7 @@ sub commandExecutes{
 	my $executes={};
 	foreach my $id(keys(%{$logs})){
 		if(exists($hash->{$id})){next;}
-		if($logs->{$id}->{$urls->{"daemon/execute"}}ne"registered"){next;}
+		if(exists($logs->{$id}->{$urls->{"daemon/execute"}})){next;}
 		if($logs->{$id}->{$urls->{"daemon/command"}}ne $url){next;}
 		if(!exists($executes->{$id})){$executes->{$id}={};}
 		while(my ($key,$val)=each(%{$logs->{$id}})){
@@ -251,6 +216,16 @@ sub commandExecutes{
 		}
 	}
 	print jsonEncode($executes)."\n";
+}
+############################## commandExport ##############################
+sub commandExport{
+	my $target=shift();
+	if(!defined($target)){$target="db";}
+	my $result;
+	if($target eq "db"){$result=loadDbToArray($dbDir);}
+	elsif($target eq "log"){$result=loadLogToHash($logDir);}
+	elsif($target eq "network"){$result=loadDbToVisNetwork($dbDir);}
+	print jsonEncode($result)."\n";
 }
 ############################## commandFileStats ##############################
 sub commandFileStats{
@@ -280,10 +255,11 @@ sub commandImport{
 	my $files={};
 	my $total=0;
 	my $limit=`ulimit -n`;
+	my $delim=defined($opt_s)?$opt_s:"\t";
 	chomp($limit);
 	while(<STDIN>){
 		chomp;
-		my ($s,$p,$o)=split(/\t/);
+		my ($s,$p,$o)=split(/$delim/);
 		if(!defined($p)){next;}
 		if(!defined($o)){next;}
 		if(!exists($writers->{$p})&&!exists($excess->{$p})){
@@ -332,6 +308,7 @@ sub commandImport{
 		close($writer2);
 		chmod(0777,$tempfile2);
 		system("sort $tempfile -u > $tempfile2");
+		if(!-e $dbDir){prepareDbDir();}
 		system("mv $tempfile2 $file");
 	}
 	if($total>0){utime(undef,undef,$moiraiDir);utime(undef,undef,$dbDir);}
@@ -382,6 +359,7 @@ sub insertJson{
 			close($writer2);
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
+			if(!-e $dbDir){prepareDbDir();}
 			system("mv $tempfile2 $file");
 		}
 		$total+=$inserted;
@@ -397,69 +375,6 @@ sub commandLinecount{
 	my $writer=IO::File->new(">&STDOUT");
 	countLines($writer,$opt_g,$opt_G,$opt_r,@files);
 	close($writer);
-}
-############################## commandLog ##############################
-sub commandLog{
-	my $total=0;
-	if(scalar(@ARGV)>0){
-		my $json={$ARGV[0]=>{$ARGV[1]=>$ARGV[2]}};
-		$total=logJson($json);
-	}else{
-		if(!defined($opt_f)){$opt_f="tsv";}
-		my $reader=IO::File->new("-");
-		my $json=($opt_f eq "tsv")?tsvToJson($reader):readJson($reader);
-		close($reader);
-		$total=logJson($json);
-	}
-	if($total>0){utime(undef,undef,$moiraiDir);utime(undef,undef,$logDir);}
-	if(!defined($opt_q)){ "inserted $total\n";}
-}
-sub logJson{
-	my $json=shift();
-	my $total=0;
-	foreach my $id(keys(%{$json})){
-		my $inserted=0;
-		my $count=0;
-		my $file=getFileFromExecid($id);
-		if($file=~/\.gz$/){next;}
-		elsif($file=~/\.bz2$/){next;}
-		my ($writer,$tempfile)=tempfile();
-		if(-e $file){
-			my $reader=openFile($file);
-			while(<$reader>){
-				chomp;
-				my ($key,$val)=split(/\t/);
-				if($key eq $urls->{"daemon/execute"}){next;}
-				print $writer "$_\n";
-				$count++;
-			}
-			close($reader);
-		}else{mkdirs(dirname($file));}
-		my $completed=0;
-		while(my ($key,$val)=each(%{$json->{$id}})){
-			if($key eq $urls->{"daemon/execute"}&&$val eq "completed"){$completed=1;}
-			elsif($key eq $urls->{"daemon/execute"}&&$val eq "error"){$completed=-1;}
-			if(ref($val)eq"ARRAY"){
-				foreach my $v(@{$val}){print $writer "$key\t$v\n";$inserted++;$count++;}
-			}else{print $writer "$key\t$val\n";$inserted++;$count++;}
-		}
-		close($writer);
-		if($count==0){unlink($file);}
-		elsif($inserted>0){
-			my ($writer2,$tempfile2)=tempfile();
-			close($writer2);
-			chmod(0777,$tempfile2);
-			system("sort $tempfile -u > $tempfile2");
-			system("mv $tempfile2 $file");
-			if($completed<0){
-				my $error=getFileFromExecid($id,1);
-				mkdirs(dirname($error));
-				system("mv $file $error");
-			}elsif($completed>0){system("gzip $file");}
-		}
-		$total+=$inserted;
-	}
-	return $total;
 }
 ############################## commandMd5 ##############################
 sub commandMd5{
@@ -504,13 +419,22 @@ sub commandReturn{
 	my $file=getFileFromExecid($execid);
 	my $reader=openFile($file);
 	my @results=();
-	while(<$reader>){
-		chomp;
-		my ($key,$val)=split(/\t/);
-		if($key eq $match){push(@results,$val);}
+	if($match eq "stdout"||$match eq "stderr"){
+		my $flag=0;
+		while(<$reader>){
+			chomp;
+			if(/^\#{40} (.+) \#{40}$/){if($1 eq $match){$flag=1;}else{$flag=0;}}
+			elsif($flag==1){print "$_\n";}
+		}
+	}else{
+		while(<$reader>){
+			chomp;
+			my ($key,$val)=split(/\t/);
+			if($key eq $match){push(@results,$val);}
+		}
+		if(scalar(@results)==0){return;}
+		print join(" ",@results)."\n";
 	}
-	if(scalar(@results)==0){return;}
-	print join(" ",@results)."\n";
 }
 ############################## commandSelect ##############################
 sub commandSelect{
@@ -524,7 +448,6 @@ sub commandSelect{
 	$subject=~s/\%/.*/g;
 	$predicate=~s/\%/.*/g;
 	$object=~s/\%/.*/g;
-	downloadPredicate($predicate);
 	my @files=listFiles(undef,undef,-1,$dbDir);
 	my @files=narrowDownByPredicate($predicate,@files);
 	foreach my $file(@files){
@@ -558,7 +481,7 @@ sub commandSubmit{
 	my $reader=IO::File->new("-");
 	my $json=($opt_f eq "tsv")?readHash($reader):readJson($reader);
 	close($reader);
-	my $id="s".getDatetime();
+	my $id="w".getDatetime();
 	my $rdf={};
 	$rdf->{$id}={};
 	foreach my $key(keys(%{$json})){$rdf->{$id}->{$key}=$json->{$key};}
@@ -587,19 +510,32 @@ sub updateJson{
 	my $total=0;
 	my @predicates=getPredicatesFromJson($json);
 	foreach my $predicate(@predicates){
+		my $hash={};
+		foreach my $s(keys(%{$json})){
+			if(!exists($json->{$s}->{$predicate})){next;}
+			my $o=$json->{$s}->{$predicate};
+			if(ref($o)eq"ARRAY"){$hash->{$s}=$o;}
+			else{$hash->{$s}=[$o];}
+		}
 		my $updated=0;
 		my $count=0;
 		my $file=getFileFromPredicate($predicate);
 		if($file=~/\.gz$/){next;}
 		elsif($file=~/\.bz2$/){next;}
-		if(!-e $file){next;}
 		my $reader=openFile($file);
 		my ($writer,$tempfile)=tempfile();
 		while(<$reader>){
 			chomp;
 			my ($s,$o)=split(/\t/);
-			if(exists($json->{$s})&&exists($json->{$s}->{$predicate})){print $writer "$s\t".$json->{$s}->{$predicate}."\n";$updated++;$count++;}
-			else{print $writer "$s\t$o\n";$count++;}
+			if(!exists($hash->{$s})){
+				print $writer "$s\t$o\n";$count++;
+			}
+		}
+		foreach my $s(keys(%{$hash})){
+			if(!exists($hash->{$s})){next;}
+			foreach my $o(@{$hash->{$s}}){
+				print $writer "$s\t$o\n";$updated++;$count++;
+			}
 		}
 		close($writer);
 		close($reader);
@@ -609,6 +545,7 @@ sub updateJson{
 			close($writer2);
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
+			if(!-e $dbDir){prepareDbDir();}
 			system("mv $tempfile2 $file");
 		}
 		$total+=$updated;
@@ -621,88 +558,6 @@ sub checkBinary{
 	while(-l $file){$file=readlink($file);}
 	my $result=`file --mime $file`;
 	if($result=~/charset\=binary/){return 1;}
-}
-############################## getWhich ##############################
-sub getWhich{
-	my $out=`which md5sum 2>&1`;
-	chomp($out);
-	if($out=~/Can\'t locate/){$out=undef;}
-	if(!defined($out)){
-		$out=`which md5 2>&1`;
-		if($out=~/Can\'t locate/){$out=undef;}
-		chomp($out);
-	}
-	return $out;
-}
-############################## getURLFromPredicate ##############################
-sub getURLFromPredicate{
-	my $predicate=shift();
-	if($predicate=~/^(.+)#(.+)$/){$predicate=$1;}
-	if($predicate=~/^(.+)\.json$/){$predicate=$1;}
-	my $url="$predicate.txt.gz";
-	my $lastModified=getLastModified($url);
-	if(defined($lastModified)){return ($url,$lastModified);}
-	$url="$predicate.txt.bz2";
-	$lastModified=getLastModified($url);
-	if(defined($lastModified)){return ($url,$lastModified);}
-	$url="$predicate.txt";
-	$lastModified=getLastModified($url);
-	if(defined($lastModified)){return ($url,$lastModified);}
-	return;
-}
-############################## downloadPredicate ##############################
-sub downloadPredicate{
-	my $predicate=shift();
-	if($predicate!~/https?:\/\//){return;}
-	my ($url,$lastModified)=getURLFromPredicate($predicate);
-	if(!defined($lastModified)){return;}
-	my $file=getFileFromPredicate($predicate);
-	if(-e $file){
-		my $modTime=$lastModified->epoch;
-		my $modTime2=getModTime($file);
-		if($modTime2>=$modTime){return;}
-	}
-	mkdirs(dirname($file));
-	if(!defined($opt_q)){print STDERR "Downloading: $file\n";}
-	downloadHttpContent($url,$file);
-	system("gzip $file");
-}
-############################## getModTime ##############################
-sub getModTime{
-	my $file=shift();
-	my @stats=stat($file);
-	return $stats[9];
-}
-############################## getLastModified ##############################
-sub getLastModified{
-	my $url=shift();
-	my $ua=LWP::UserAgent->new;
-	my $req=HTTP::Request->new(GET=>$url);
-	my $res=$ua->simple_request($req);
-	foreach my $line(split(/\n/,$res->headers_as_string)){
-		if($line=~/Last-Modified:\s(\S+),\s(\S+)\s(\S+)\s(\S+)\s(\S+)\sGMT$/){
-			my $week=$1;
-			my $day=$2;
-			my $month=$3;
-			my $year=$4;
-			my $time=$5;
-			if($month=~/^Jan/){$month="01";}
-			elsif($month=~/^Feb/){$month="02";}
-			elsif($month=~/^Mar/){$month="03";}
-			elsif($month=~/^Apr/){$month="04";}
-			elsif($month=~/^May/){$month="05";}
-			elsif($month=~/^Jun/){$month="06";}
-			elsif($month=~/^Jul/){$month="07";}
-			elsif($month=~/^Aug/){$month="08";}
-			elsif($month=~/^Sep/){$month="09";}
-			elsif($month=~/^Oct/){$month="10";}
-			elsif($month=~/^Nov/){$month="11";}
-			elsif($month=~/^Dec/){$month="12";}
-			my $t=Time::Piece->strptime("$year$month$day $time", "%Y%m%d %H:%M:%S");
-			return $t;
-		}
-	}
-	return;
 }
 ############################## fileStats ##############################
 sub fileStats{
@@ -824,6 +679,7 @@ sub countSequences{
 sub createFile{
 	my @lines=@_;
 	my $path=shift(@lines);
+	mkdirs(dirname($path));
 	open(OUT,">$path");
 	foreach my $line(@lines){print OUT "$line\n";}
 	close(OUT);
@@ -871,32 +727,16 @@ sub getFileFromExecid{
 ############################## getFileFromPredicate ##############################
 sub getFileFromPredicate{
 	my $predicate=shift();
+	my $dir=$dbDir;
 	if($predicate=~/^(https?):\/\/(.+)$/){$predicate="$1/$2";}
+	elsif($predicate=~/^(.+)\@(.+)\:(.+)/){$predicate="ssh/$1/$2/$3";}
+	elsif($predicate=~/^(.+)\:(.+)$/){$dir="$1/db";$predicate=$2;}
 	if($predicate=~/^(.+)#(.+)$/){$predicate=$1;}
 	if($predicate=~/^(.+)\.json$/){$predicate=$1;}
-	if(-e "$dbDir/$predicate.txt.gz"){return "$dbDir/$predicate.txt.gz";}
-	elsif(-e "$dbDir/$predicate.txt.bz2"){return "$dbDir/$predicate.txt.bz2";}
-	else{return "$dbDir/$predicate.txt";}
-}
-############################## downloadHttpContent ##############################
-sub downloadHttpContent{
-	my $url=shift();
-	my $file=shift();
-	my $lwp = LWP::UserAgent->new(timeout=>10);
-    my $res=$lwp->get($url,':content_file'=>$file);
-    if (!$res->is_success){print STDERR "ERROR downloading $url to $file\n";}
-}
-############################## getHttpContent ##############################
-sub getHttpContent{
-	my $url=shift();
-	my $username=shift();
-	my $password=shift();
-	my $agent=new LWP::UserAgent();
-	my $request=HTTP::Request->new(GET=>$url);
-	if($username ne ""||$password ne ""){$request->authorization_basic($username,$password);}
-	my $res=$agent->request($request);
-	if($res->is_success){return $res->content;}
-	elsif($res->is_error){print $res;}
+	if($predicate=~/\%/){return $dir;}
+	elsif(-e "$dir/$predicate.txt.gz"){return "$dir/$predicate.txt.gz";}
+	elsif(-e "$dir/$predicate.txt.bz2"){return "$dir/$predicate.txt.bz2";}
+	else{return "$dir/$predicate.txt";}
 }
 ############################## getPredicateFromFile ##############################
 sub getPredicateFromFile{
@@ -904,10 +744,12 @@ sub getPredicateFromFile{
 	my $dirname=dirname($path);
 	my $basename=basename($path);
 	if($dirname=~/^$dbDir\/(.+)$/){$basename="$1/$basename";}
-	if($basename=~/^https\/(.+)$/){$basename="https://$1";}
-	elsif($basename=~/^http\/(.+)$/){$basename="http://$1";}
+	elsif($dirname=~/^\//){$basename="$dirname/$basename";}
+	elsif($dirname=~/^(.+)\/db\/(.+)$/){$basename="$1:$2/$basename";}
+	if($basename=~/^(https?)\/(.+)$/){$basename="$1://$2";}
+	elsif($basename=~/^ssh\/(.+?)\/(.+?)\/(.+)$/){$basename="$1\@$2:$3";}
 	if($basename=~/^(.+)\.te?xt\.gz(ip)?$/){return $1;}
-	elsif($basename=~/^(.+)\.te?xt\.bz(ip)2?$/){return $1;}
+	elsif($basename=~/^(.+)\.te?xt\.bz(ip)?2$/){return $1;}
 	elsif($basename=~/^(.+)\.te?xt$/){return $1;}
 	else{return $basename;}
 }
@@ -1267,12 +1109,12 @@ sub mkdirs {
 sub narrowDownByPredicate{
 	my @files=@_;
 	my $predicate=shift(@files);
-	if($predicate=~/^(https?):\/\/(.+)$/){$predicate="$1/$2";}
+	#if($predicate=~/^https?:\/\/(.+)$/){$predicate=$1;}
 	my @results=();
 	foreach my $file(@files){
-		if($file=~/^$dbDir\/$predicate\.te?xt$/){push(@results,$file);}
-		elsif($file=~/^$dbDir\/$predicate\.te?xt\.gz(ip)?$/){push(@results,$file);}
-		elsif($file=~/^$dbDir\/$predicate\.te?xt\.bz(ip)?2$/){push(@results,$file);}
+		if($file=~/db\/$predicate\.te?xt$/){push(@results,$file);}
+		elsif($file=~/db\/$predicate\.te?xt\.gz(ip)?$/){push(@results,$file);}
+		elsif($file=~/db\/$predicate\.te?xt\.bz(ip)?2$/){push(@results,$file);}
 	}
 	return @results;
 }
@@ -1283,6 +1125,13 @@ sub openFile{
 	elsif($path=~/\.bz(ip)?2$/){return IO::File->new("bzip2 -cd $path|");}
 	elsif($path=~/\.bam$/){return IO::File->new("samtools view $path|");}
 	else{return IO::File->new($path);}
+}
+############################## prepareDbDir ##############################
+sub prepareDbDir{
+	mkdir($moiraiDir);
+	chmod(0777,$moiraiDir);
+	mkdir($dbDir);
+	chmod(0777,$dbDir);
 }
 ############################## printTable ##############################
 sub printTable{
@@ -1333,12 +1182,7 @@ sub queryResults{
 	my $values={};
 	foreach my $query(@queries){
 		my ($s,$p,$o)=split(/\-\>/,$query);
-		downloadPredicate($p);
-	}
-	my @files=listFiles(undef,undef,-1,$dbDir);
-	foreach my $query(@queries){
-		my ($s,$p,$o)=split(/\-\>/,$query);
-		my @array=queryVariables($s,$p,$o,@files);
+		my @array=queryVariables($s,$p,$o);
 		if(scalar(@array)>0){$values->{$query}=\@array;}
 	}
 	my @results=();
@@ -1375,10 +1219,9 @@ sub queryResults{
 }
 ############################## queryVariables ##############################
 sub queryVariables{
-	my @files=@_;
-	my $subject=shift(@files);
-	my $predicate=shift(@files);
-	my $object=shift(@files);
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
 	my @subVars=();
 	my @preVars=();
 	my @objVars=();
@@ -1403,7 +1246,15 @@ sub queryVariables{
 		}
 		$object="$object";
 	}
-	@files=narrowDownByPredicate($predicate,@files);
+	my $dir=$dbDir;
+	if($predicate=~/^(\S+)\:(\S+)$/){# dir2:dirname/basename.txt
+		$dir="$1/db";
+		$predicate=$2;
+	}elsif($predicate=~/^\//){# /dirname/basename.txt
+		$dir=$predicate;
+	}
+	my @files=listFiles(undef,undef,-1,$dir);
+	my @files=narrowDownByPredicate($predicate,@files);
 	my @array=();
 	foreach my $file(@files){
 		my $p=getPredicateFromFile($file);
@@ -1443,6 +1294,35 @@ sub readHash{
 		if($key ne ""){$hash->{$key}=$value;}
 	}
 	return $hash;
+}
+############################## setupPredicate ##############################
+sub setupPredicate{
+	my $predicate=shift();
+	my $path=getFileFromPredicate($predicate);
+	if($predicate=~/^https?\:\/\//){# https://dirname/basename.txt
+		mkdirs(dirname($path));
+		getstore("$predicate.txt",$path);
+		return $path;
+	}elsif($predicate=~/^.+\@.+\:.+/){# ah3q@dgt-ac4:dirname/basename.txt
+		my $result=system("find $predicate.txt");
+
+		system("rsync $predicate.txt $path");
+		return $path;
+	}else{
+		return $path;
+	}
+}
+############################## getHttpContent ##############################
+sub getHttpContent{
+	my $url=shift();
+	my $username=shift();
+	my $password=shift();
+	my $agent=new LWP::UserAgent();
+	my $request=HTTP::Request->new(GET=>$url);
+	if($username ne ""||$password ne ""){$request->authorization_basic($username,$password);}
+	my $res=$agent->request($request);
+	if($res->is_success){return $res->content;}
+	elsif($res->is_error){print $res;}
 }
 ############################## readJson ##############################
 sub readJson{
@@ -1583,17 +1463,40 @@ sub testSub{
 }
 ############################## test ##############################
 sub test{
+	my $result=system("ssh ah3q\@dgt-ac4 'find allTable.txt'");
+	print "result=$result\n";
+	exit();
+	#setupPredicate("http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage");
+	#setupPredicate("ah3q\@dgt-ac4:allImage");
+	#setupPredicate("geneBodyCoverage:allImage");
 	testSub("getPredicateFromFile(\"$dbDir/A.txt\")","A");
 	testSub("getPredicateFromFile(\"$dbDir/B/A.txt\")","B/A");
+	testSub("getPredicateFromFile(\"$dbDir/B/A.txt.gz\")","B/A");
+	testSub("getPredicateFromFile(\"$dbDir/B/A.txt.bz2\")","B/A");
+	testSub("getPredicateFromFile(\"/A/B/C/D/E.txt\")","/A/B/C/D/E");
+	testSub("getPredicateFromFile(\"test2/db/B/A.txt\")","test2:B/A");
 	testSub("getPredicateFromFile(\"$dbDir/https/moirai2.github.io/schema/daemon/bash.txt\")","https://moirai2.github.io/schema/daemon/bash");
-	testSub("getPredicateFromFile(\"$dbDir/http/localhost/~ah3q/moirai2/A.txt.gz\")","http://localhost/~ah3q/moirai2/A");
+	testSub("getPredicateFromFile(\"$dbDir/http/localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage.txt\")","http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage");
+	testSub("getPredicateFromFile(\"$dbDir/ssh/ah3q/dgt-ac4/A/B/C.txt\")","ah3q\@dgt-ac4:A/B/C");
+	testSub("getPredicateFromFile(\"$dbDir/ssh/ah3q/dgt-ac4/A/B/C.txt.bz2\")","ah3q\@dgt-ac4:A/B/C");
+	testSub("getFileFromPredicate(\"A/B%\")","$dbDir");
 	testSub("getFileFromPredicate(\"A\")","$dbDir/A.txt");
 	testSub("getFileFromPredicate(\"A/B\")","$dbDir/A/B.txt");
+	createFile("$dbDir/A/B.txt","A\tA1");
+	system("gzip $dbDir/A/B.txt");
+	testSub("getFileFromPredicate(\"A/B\")","$dbDir/A/B.txt.gz");
+	system("rm $dbDir/A/B.txt.gz");
 	testSub("getFileFromPredicate(\"A/B#CDF\")","$dbDir/A/B.txt");
 	testSub("getFileFromPredicate(\"A/B.json\")","$dbDir/A/B.txt");
 	testSub("getFileFromPredicate(\"A/B.json#D\")","$dbDir/A/B.txt");
-	testSub("getFileFromPredicate(\"http://A.B.C/D/E\")","$dbDir/http/A.B.C/D/E.txt");
-	testSub("getFileFromPredicate(\"https://A.B.C/D/E.json#F\")","$dbDir/https/A.B.C/D/E.txt");
+	testSub("getFileFromPredicate(\"test2:A/B\")","test2/db/A/B.txt");
+	testSub("getFileFromPredicate(\"http://A/B\")","$dbDir/http/A/B.txt");
+	testSub("getFileFromPredicate(\"https://A/B/C/D\")","$dbDir/https/A/B/C/D.txt");
+	testSub("getFileFromPredicate(\"http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage\")","$dbDir/http/localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage.txt");
+	testSub("getFileFromPredicate(\"ah3q\\\@dgt-ac4:A/B\")","$dbDir/ssh/ah3q/dgt-ac4/A/B.txt");
+	rmdir("moirai/db/A/");
+	rmdir("moirai/db/");
+	rmdir("moirai/");
 	mkdir("test");
 	mkdir("test/db");
 	createFile("test/db/id.txt","A\tA1","B\tB1","C\tC1","D\tD1");
@@ -1625,15 +1528,15 @@ sub test{
 	testCommand("perl rdf.pl -d test import < test/import.txt","inserted 8");
 	testCommand("perl rdf.pl -d test select % id","A\tid\tA1\nA\tid\tA2\nB\tid\tB1\nB\tid\tB2\nC\tid\tC1\nC\tid\tC2\nD\tid\tD1\nD\tid\tD2");
 	createFile("test/update.txt","A\tid\tA3","B\tid\tB3");
-	testCommand("perl rdf.pl -d test update < test/update.txt","updated 4");
+	testCommand("perl rdf.pl -d test update < test/update.txt","updated 2");
 	testCommand("perl rdf.pl -d test select A id","A\tid\tA3");
 	testCommand("perl rdf.pl -d test select B id","B\tid\tB3");
 	createFile("test/update.json","{\"A\":{\"name\":\"Akira\"},\"B\":{\"name\":\"Bob\"}}");
-	testCommand("perl rdf.pl -d test -f json update < test/update.json","updated 1");
-	testCommand("perl rdf.pl -d test select % name","A\tname\tAkira\nT\tname\tTsunami");
+	testCommand("perl rdf.pl -d test -f json update < test/update.json","updated 2");
+	testCommand("perl rdf.pl -d test select % name","A\tname\tAkira\nB\tname\tBob\nT\tname\tTsunami");
 	testCommand("perl rdf.pl -d test delete < test/update.txt","deleted 2");
 	testCommand("perl rdf.pl -d test select % id","C\tid\tC1\nC\tid\tC2\nD\tid\tD1\nD\tid\tD2");
-	testCommand("perl rdf.pl -d test -f json delete < test/update.json","deleted 1");
+	testCommand("perl rdf.pl -d test -f json delete < test/update.json","deleted 2");
 	testCommand("perl rdf.pl -d test select % name","T\tname\tTsunami");
 	testCommand("perl rdf.pl -d test delete % % %","deleted 5");
 	testCommand("perl rdf.pl -d test -f json insert < test/update.json","inserted 2");
@@ -1658,5 +1561,22 @@ sub test{
 	rmdir("test/db");
 	rmdir("test/log/error");
 	rmdir("test/log");
+	testCommand("perl rdf.pl -d test/A insert id0 name Tsunami","inserted 1");
+	testCommand("perl rdf.pl -d test/B insert id0 country Japan","inserted 1");
+	testCommand("perl rdf.pl -d test/A query '\$id->name->\$name'","id\tname\nid0\tTsunami");
+	testCommand("perl rdf.pl -d test/B query '\$id->country->\$country'","country\tid\nJapan\tid0");
+	testCommand("perl rdf.pl -d test/A query '\$id->name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
+	testCommand("perl rdf.pl -d test/A query '\$id->test/A:name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
+	testCommand("perl rdf.pl query '\$id->test/A:name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
+	testCommand("perl rdf.pl -d test/A delete % % %","deleted 1");
+	testCommand("perl rdf.pl -d test/B delete % % %","deleted 1");
+	rmdir("test/A/db");
+	rmdir("test/A/log/error");
+	rmdir("test/A/log");
+	rmdir("test/B/db");
+	rmdir("test/B/log/error");
+	rmdir("test/B/log");
+	rmdir("test/A");
+	rmdir("test/B");
 	rmdir("test");
 }
