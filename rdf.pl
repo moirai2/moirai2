@@ -17,9 +17,10 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
+my $program_version="2021/09/13";
 ############################## OPTIONS ##############################
-use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_q $opt_r $opt_s);
-getopts('d:f:g:G:hqr:s:');
+use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s);
+getopts('d:f:g:G:hi:qo:r:s:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
@@ -33,16 +34,22 @@ sub help{
 	print "############################## HELP ##############################\n";
 	print "\n";
 	print "Program: Utilities for handling a RDF sqlite3 database.\n";
-	print "Version: 2021/07/24\n";
+	print "Version: $program_version\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
 	print "Usage: perl $program_name [Options] COMMAND\n";
 	print "\n";
-	print "Commands:    delete  Delete triple(s)\n";
+	print "Commands:    assign  Assign triple if sub+pre doesn't exist\n";
+	print "             config  Load config setting to the database\n";
+	print "             delete  Delete triple(s)\n";
+	print "             export  export database content to moirai2.pl HTML from html()\n";
 	print "             import  Import triple(s)\n";
 	print "             insert  Insert triple(s)\n";
+	print "             prompt  Prompt value from user if necessary\n";
 	print "              query  Query with my original format (example: \$a->B->\$c)\n";
 	print "             select  Select triple(s)\n";
+	print "             submit  Record new job submission from controlSubmit()\n";
+	print "               test  For development purpose\n";
 	print "             update  Update triple(s)\n";
 	print "\n";
 	print "Commands of file statistics:\n";
@@ -51,14 +58,6 @@ sub help{
 	print "          linecount  Line count of a file\n";
 	print "                md5  Record md5 of a file\n";
 	print "           seqcount  Record sequence count of a file\n";
-	print "\n";
-	print "Commands used by moirai2.pl:\n";
-	print "           commands  Return commands to be executed from lookForNewCommands()\n";
-	print "           executes  Information about executed commands from getExecuteJobs()\n";
-	print "             export  export database content to moirai2.pl HTML from html()\n";
-	print "             return  Return result(s) from logs from main()\n";
-	print "             submit  Record new job submission from controlSubmit()\n";
-	print "               test  For development purpose\n";
 	print "\n";
 	print "Options:\n";
 	print "     -d  database directory path (default='rdf')\n";
@@ -72,19 +71,65 @@ sub help{
 	print "   NOTE:  Need to specify database for most manipulations.\n";
 	print "\n";
 }
+sub help_assign{
+	print "\n";
+	print "############################## assign ##############################\n";
+	print "\n";
+	print "Program: Insert SUB->PRE->OBJ when SUB->PRE is not assgined yet.\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] assign SUB PRE OBJ";
+	print "\n";
+	print "\n";
+	print "\n";
+}
+sub help_config{
+	print "\n";
+	print "############################## config ##############################\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] config FILE ARG1 ARG2 ARG3";
+	print "\n";
+	print "       FILE  config file written in this \"sub->pre obj\" format:.\n";
+	print "        ARG  Arguments passed to config in '\$1','\$2','\$3' format just like bash.\n";
+	print "\n";
+}
+sub help_prompt{
+	print "\n";
+	print "############################## prompt ##############################\n";
+	print "\n";
+	print "Usage: perl $program_name [Options] prompt [question]";
+	print "\n";
+	print "Options: -i  Input query for select from database in '\$sub->\$pred->\$obj' format.\n";
+	print "         -o  Output query to prompt in '\$sub->\$pred->\$obj' format.\n";
+	print "\n";
+	print "############################## Examples ##############################\n";
+	print "\n";
+	print "(1) perl $program_name -o 'A->B->\$answer' prompt 'What is your name?'\n";
+	print "  - Insert 'A->B->C' triple, if 'A->B->?' is not found in the RDF database.\n";
+	print "\n";
+	print "(2) perl $program_name -i 'A->B->C' -o 'C->D->\$answer' prompt 'What is your name?'\n";
+	print "  - Ask question if 'A->B->C' is found and 'C->D->?' is not found and insert 'C->D->\$answer' triple.\n";
+	print "\n";
+}
 ############################## MAIN ##############################
-if(defined($opt_h)||scalar(@ARGV)==0){help();exit();}
+if(defined($opt_h)||scalar(@ARGV)==0){
+	my $command=shift(@ARGV);
+	if($command eq"config"){help_config();}
+	elsif($command eq"prompt"){help_prompt();}
+	else{help();}
+	exit();
+}
 my $command=shift(@ARGV);
 my $moiraiDir=(defined($opt_d))?$opt_d:"moirai";
+my $jobDir="$moiraiDir/ctrl/job";
 my $dbDir="$moiraiDir/db";
 my $logDir="$moiraiDir/log";
 my $errorDir="$logDir/error";
 my $md5cmd=which('md5sum');
 if(!defined($md5cmd)){$md5cmd=which('md5');}
 if($command eq"test"){test();}
-elsif($command eq"commands"){commandCommands(@ARGV);}
+elsif($command eq"assign"){commandAssign(@ARGV);}
+elsif($command eq"config"){commandConfig(@ARGV);}
 elsif($command eq"delete"){commandDelete(@ARGV);}
-elsif($command eq"executes"){commandExecutes(@ARGV);}
 elsif($command eq"export"){commandExport(@ARGV);}
 elsif($command eq"filesize"){commandFilesize(@ARGV);}
 elsif($command eq"filestats"){commandFileStats(@ARGV);}
@@ -92,23 +137,61 @@ elsif($command eq"import"){commandImport(@ARGV);}
 elsif($command eq"insert"){commandInsert(@ARGV);}
 elsif($command eq"linecount"){commandLinecount(@ARGV);}
 elsif($command eq"md5"){commandMd5(@ARGV);}
+elsif($command eq"prompt"){commandPrompt(@ARGV);}
 elsif($command eq"query"){commandQuery(@ARGV);}
-elsif($command eq"return"){commandReturn(@ARGV);}
 elsif($command eq"select"){commandSelect(@ARGV);}
 elsif($command eq"seqcount"){commandSeqcount(@ARGV);}
 elsif($command eq"submit"){commandSubmit(@ARGV);}
 elsif($command eq"update"){commandUpdate(@ARGV);}
-############################## commandCommands ##############################
-sub commandCommands{
-	my $logs=loadLogs();
-	my @urls=();
-	foreach my $id(keys(%{$logs})){
-		if(exists($logs->{$id}->{$urls->{"daemon/execute"}})){next;}
-		if(exists($logs->{$id}->{$urls->{"daemon/command"}})){push(@urls,$logs->{$id}->{$urls->{"daemon/command"}});}
+############################## checkBinary ##############################
+sub checkBinary{
+	my $file=shift();
+	while(-l $file){$file=readlink($file);}
+	my $result=`file --mime $file`;
+	if($result=~/charset\=binary/){return 1;}
+}
+############################## checkInputOutput ##############################
+sub checkInputOutput{
+	my $queries=shift();
+	my $triple;
+	foreach my $query(split(/,/,$queries)){
+		my @tokens=split(/->/,$query);
+		if(scalar(@tokens)==1){
+		}elsif(scalar(@tokens)==3){
+			my $empty=0;
+			$triple=1;
+			foreach my $token(@tokens){if($token eq ""){$empty=1;last;}}
+			if($empty==1){
+				print STDERR "ERROR: '$query' has empty token.\n";
+				print STDERR "ERROR: Use single quote '\$a->b->\$c' instead of double quote \"\$a->b->\$c\".\n";
+				print STDERR "ERROR: Or escape '\$' with '\\' sign \"\\\$a->b->\\\$c\".\n";
+				exit(1);
+			}
+		}
 	}
-	if(!defined($opt_f)){$opt_f="tsv";}
-	if($opt_f eq "json"){print "[\"".join("\",\"",@urls)."\"]\n";}
-	else{foreach my $url(@urls){print "$url\n";}}
+	return $triple;
+}
+############################## checkRdfQuery ##############################
+sub checkRdfQuery{
+	my $queries=shift();
+	foreach my $query(split(/,/,$queries)){
+		my @tokens=split(/->/,$query);
+		if(scalar(@tokens)!=3){return;}
+	}
+	return 1;
+}
+############################## commandAssign ##############################
+sub commandAssign{
+	my @args=@_;
+	if(scalar(@args)<3){print STDERR "Please specify SUB PRE OBJ\n";return;}
+	my $sub=shift(@args);
+	my $pre=shift(@args);
+	my $obj=shift(@args);
+	my @lines=();
+	my $results=tripleSelect($sub,$pre,"%");
+	my $total=0;
+	if(scalar(keys(%{$results}))==0){$total=insertJson({$sub=>{$pre=>$obj}});}
+	if(!defined($opt_q)){print "inserted $total\n";}
 }
 ############################## commandDelete ##############################
 sub commandDelete{
@@ -191,32 +274,6 @@ sub deleteJson{
 	}
 	return $total;
 }
-############################## commandExecutes ##############################
-sub commandExecutes{
-	my @ids=@ARGV;
-	my $url=shift(@ids);
-	my $logs=loadLogs();
-	my $hash={};
-	foreach my $id(@ids){$hash->{$id}=1;}
-	my $executes={};
-	foreach my $id(keys(%{$logs})){
-		if(exists($hash->{$id})){next;}
-		if(exists($logs->{$id}->{$urls->{"daemon/execute"}})){next;}
-		if($logs->{$id}->{$urls->{"daemon/command"}}ne $url){next;}
-		if(!exists($executes->{$id})){$executes->{$id}={};}
-		while(my ($key,$val)=each(%{$logs->{$id}})){
-			if($key eq $urls->{"daemon/execute"}){next;}
-			if($key eq $urls->{"daemon/command"}){next;}
-			if($key=~/^$url#(.+)$/){
-				$key=$1;
-				if(!exists($executes->{$id}->{$key})){$executes->{$id}->{$key}=$val;}
-				elsif(ref($executes->{$id}->{$key})eq"ARRAY"){push(@{$executes->{$id}->{$key}},$val);}
-				else{$executes->{$id}->{$key}=[$executes->{$id}->{$key},$val]}
-			}
-		}
-	}
-	print jsonEncode($executes)."\n";
-}
 ############################## commandExport ##############################
 sub commandExport{
 	my $target=shift();
@@ -254,8 +311,8 @@ sub commandImport{
 	my $excess={};
 	my $files={};
 	my $total=0;
-	my $limit=`ulimit -n`;
 	my $delim=defined($opt_s)?$opt_s:"\t";
+	my $limit=`ulimit -n`;
 	chomp($limit);
 	while(<STDIN>){
 		chomp;
@@ -386,6 +443,70 @@ sub commandMd5{
 	md5Files($writer,$opt_g,$opt_G,$opt_r,@files);
 	close($writer);
 }
+############################## commandPrompt ##############################
+sub commandPrompt{
+	my ($arguments,$userdefined)=handleArguments(@ARGV);
+	my $results=[[],[{}]];
+	if(defined($opt_i)){
+		my $query=$opt_i;
+		while(my($key,$val)=each(%{$userdefined})){$query=~s/\$$key/$val/g;}
+		checkInputOutput($query);
+		if(checkRdfQuery($query)){
+			my @hashs=queryResults($query);
+			my $temp={};
+			foreach my $hash(@hashs){foreach my $key(keys(%{$hash})){$temp->{$key}=1;}}
+			my @keys=keys(%{$temp});
+			$results=[\@keys,\@hashs];
+		}else{
+			my $keys=handleInputOutput($query);
+			foreach my $key(@{$keys}){
+				foreach my $k(@{$keys}){if($k=~/^\$/){$k="%";}}
+				my $results=tripleSelect(@{$key});
+				if(scalar(keys(%{$results}))==0){return;}
+			}
+		}
+	}
+	my @questions=@{$arguments};
+	my $triples={};
+	if(defined($opt_o)){
+		checkInputOutput($opt_o);
+		my $insertKeys=handleInputOutput($opt_o);
+		my @keys=@{$results->[0]};
+		my @values=@{$results->[1]};
+		foreach my $insertKey(@{$insertKeys}){
+			foreach my $value(@values){
+				my @insert=($insertKey->[0],$insertKey->[1],$insertKey->[2]);
+				foreach my $key(@keys){my $val=$value->{$key};for(@insert){s/\$$key/$val/g;}}
+				while(my($key,$val)=each(%{$userdefined})){for(@insert){s/\$$key/$val/g;}}
+				my @array=@insert;
+				for(@array){if(/^\$/){$_="%";}}
+				my $results=tripleSelect(@array);
+				if(scalar(keys(%{$results}))>0){next;}
+				my $default;
+				my @options;
+				for(my $i=0;$i<scalar(@questions);$i++){
+					my $question=$questions[$i];
+					foreach my $key(@keys){my $val=$value->{$key};$question=~s/\$$key/$val/g;}
+					while(my($key,$val)=each(%{$userdefined})){$question=~s/\$$key/$val/g;}
+					if($question=~/\[default=(.+)\]/){$default=$1;}
+					if($question=~/\{(.+)\}/){@options=split(/\|/,$1);}
+					if($i>0){print "\n";}
+					print "$question";
+				}
+				my $answer=<STDIN>;
+				chomp($answer);
+				if($answer eq""&&defined($default)){$answer=$default;}
+				foreach my $token(@insert){$token=~s/\$answer/$answer/g;}
+				foreach my $token(@insert){$token=~s/\$_/$answer/g;}
+				if(!exists($triples->{$insert[0]})){$triples->{$insert[0]}={};}
+				if(!exists($triples->{$insert[0]}->{$insert[1]})){$triples->{$insert[0]}->{$insert[1]}=$insert[2];}
+				elsif(ref($triples->{$insert[0]}->{$insert[1]})eq"ARRAY"){push(@{$triples->{$insert[0]}->{$insert[1]}},$insert[2]);}
+				else{$triples->{$insert[0]}->{$insert[1]}=[$triples->{$insert[0]}->{$insert[1]},$insert[2]];}
+			}
+		}
+	}
+	if(scalar(keys(%{$triples}))>0){insertJson($triples);}
+}
 ############################## commandQuery ##############################
 sub commandQuery{
 	my @queries=();
@@ -411,58 +532,15 @@ sub commandQuery{
 		}
 	}
 }
-############################## commandReturn ##############################
-sub commandReturn{
-	my @arguments=@_;
-	my $execid=shift(@arguments);
-	my $match=shift(@arguments);
-	my $file=getFileFromExecid($execid);
-	my $reader=openFile($file);
-	my @results=();
-	if($match eq "stdout"||$match eq "stderr"){
-		my $flag=0;
-		while(<$reader>){
-			chomp;
-			if(/^\#{40} (.+) \#{40}$/){if($1 eq $match){$flag=1;}else{$flag=0;}}
-			elsif($flag==1){print "$_\n";}
-		}
-	}else{
-		while(<$reader>){
-			chomp;
-			my ($key,$val)=split(/\t/);
-			if($key eq $match){push(@results,$val);}
-		}
-		if(scalar(@results)==0){return;}
-		print join(" ",@results)."\n";
-	}
-}
 ############################## commandSelect ##############################
 sub commandSelect{
-	my @arguments=@_;
-	my $subject=shift(@arguments);
-	my $predicate=shift(@arguments);
-	my $object=shift(@arguments);
-	if(!defined($subject)){$subject="%";}
-	if(!defined($predicate)){$predicate="%";}
-	if(!defined($object)){$object="%";}
-	$subject=~s/\%/.*/g;
-	$predicate=~s/\%/.*/g;
-	$object=~s/\%/.*/g;
-	my @files=listFiles(undef,undef,-1,$dbDir);
-	my @files=narrowDownByPredicate($predicate,@files);
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		if(!-e $file){next;}
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if($s!~/^$subject$/){next;}
-			if($o!~/^$object$/){next;}
-			print "$s\t$p\t$o\n";
-		}
-		close($reader);
-	}
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	my $results=tripleSelect($subject,$predicate,$object);
+	if(!defined($opt_f)){$opt_f="tsv";}
+	if($opt_f eq "tsv"){printTripleInTSVFormat($results);}
+	elsif($opt_f eq "json"){print jsonEncode($results)."\n";}
 }
 ############################## commandSeqcount ##############################
 sub commandSeqcount{
@@ -552,12 +630,122 @@ sub updateJson{
 	}
 	return $total;
 }
-############################## checkBinary ##############################
-sub checkBinary{
-	my $file=shift();
-	while(-l $file){$file=readlink($file);}
-	my $result=`file --mime $file`;
-	if($result=~/charset\=binary/){return 1;}
+############################## commandConfig ##############################
+sub commandConfig{
+	my @args=@_;
+	my $file=shift(@args);
+	if(!defined($file)){
+		print STDERR "\n";
+		print STDERR "ERROR: Please specify config file\n";
+		print STDERR "perl rdf.pl config FILE\n";
+		print STDERR "\n";
+		exit(1);
+	}
+	open(IN,$file);
+	my $numbers={};
+	while(<IN>){
+		chomp;s/\r//g;
+		if(/^#/){next;}
+		if(/\$(\d+)/){$numbers->{$1}=$_;}
+	}
+	my @keys=sort{$a<=>$b}keys(%{$numbers});
+	my $nargs=$keys[scalar(@keys)-1];
+	close(IN);
+	if(scalar(@args)<$nargs){
+		print STDERR "\n";
+		print STDERR "ERROR: Numbers of arguments doesn't match\n";
+		print STDERR ">$file\n";
+		for(my $i=0;$i<scalar(@keys);$i++){print $numbers->{$keys[$i]}."\n";}
+		print STDERR "\n";
+		print STDERR "perl rdf.pl config FILE";
+		for(my $i=0;$i<$nargs;$i++){print " ARG".($i+1);}
+		print STDERR "\n";
+		print STDERR "\n";
+		exit(1);
+	}
+	my $vars={};
+	for(my $i=0;$i<scalar(@args);$i++){$vars->{"\$".($i+1)}=$args[$i];}
+	my $json={};
+	open(IN,$file);
+	while(<IN>){
+		chomp;s/\r//g;
+		if(/^#/){next;}
+		my ($key,$val)=split(/\t+/,$_);
+		my @tokens=split(/\-\>/,$key);
+		push(@tokens,$val);
+		if(scalar(@tokens)>2){
+			foreach my $token(@tokens){while(my($k,$v)=each(%{$vars})){$token=~s/$k/$v/g;}}
+			if(!exists($json->{$tokens[0]})){$json->{$tokens[0]}={};}
+			if(!exists($json->{$tokens[0]}->{$tokens[1]})){$json->{$tokens[0]}->{$tokens[1]}=$tokens[2];}
+			elsif(ref($json->{$tokens[0]}->{$tokens[1]})eq"ARRAY"){push(@{$json->{$tokens[0]}->{$tokens[1]}},$tokens[2]);}
+			else{$json->{$tokens[0]}->{$tokens[1]}=[$json->{$tokens[0]}->{$tokens[1]},$tokens[2]];}
+		}else{
+			if($key!~/^\$/){$key="\$$key";}
+			if($key=~/^\$/){$key="\\$key";}
+			if(exists($vars->{$val})){$vars->{$key}=$vars->{$val};}
+			else{$vars->{$key}=$val;}
+		}
+	}
+	close(IN);
+	my $total=updateJson($json);
+	if(!defined($opt_q)){print "updated $total\n";}
+}
+############################## countLines ##############################
+sub countLines{
+	my @files=@_;
+	my $writer=shift(@files);
+	my $filegrep=shift(@files);
+	my $fileungrep=shift(@files);
+	my $recursivesearch=shift(@files);
+	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
+		my $count=0;
+		if($file=~/\.bam$/){$count=`samtools view $file|wc -l`;}
+		elsif($file=~/\.sam$/){$count=`samtools view $file|wc -l`;}
+		elsif($file=~/\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;}
+		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
+		else{$count=`cat $file|wc -l`;}
+		if($count=~/(\d+)/){$count=$1;}
+		print $writer "$file\tfile/linecount\t$count\n";
+	}
+}
+############################## countSequences ##############################
+sub countSequences{
+	my @files=@_;
+	my $writer=shift(@files);
+	my $filegrep=shift(@files);
+	my $fileungrep=shift(@files);
+	my $recursivesearch=shift(@files);
+	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
+		my $count=0;
+		if($file=~/\.bam$/){
+			my $paired=`samtools view $file|head -n 1|perl -ne 'if(\$_&2){print \"0\";}else{print \"1\";}'`;
+			if($paired eq "1"){$count=`samtools view -f 0x2 -F 0x184 $file|wc -l`;}
+			else{$count=`samtools view -F 0x184 $file|wc -l`;}
+		}elsif($file=~/\.sam$/){
+			my $paired=`samtools view -S $file|head -n 1|perl -ne 'if(\$_&2){print \"1\";}else{print \"0\";}'`;
+			if($paired eq "1"){$count=`samtools view -S -f 0x2 -F 0x184 $file|wc -l`;}
+			else{$count=`samtools view -S -F 0x184 $file|wc -l`;}
+		}elsif($file=~/\.f(ast)?a$/){$count=`cat $file|grep '>'|wc -l`;}
+		elsif($file=~/\.f(ast)?q$/){$count=`cat $file|wc -l`;$count/=4;}
+		elsif($file=~/\.f(ast)?a\.gz(ip)?$/){$count=`gzip -cd $file|grep '>'|wc -l`;}
+		elsif($file=~/\.f(ast)?a\.bz(ip)?2$/){$count=`bzip2 -cd $file|grep '>'|wc -l`;}
+		elsif($file=~/\.f(ast)?q\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;$count/=4;}
+		elsif($file=~/\.f(ast)?q\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;$count/=4;}
+		elsif($file=~/\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;}
+		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
+		else{$count=`cat $file|wc -l`;}
+		if($count=~/(\d+)/){$count=$1;}
+		print $writer "$file\tfile/seqcount\t$count\n";
+	}
+}
+############################## createFile ##############################
+sub createFile{
+	my @lines=@_;
+	my $path=shift(@lines);
+	mkdirs(dirname($path));
+	open(OUT,">$path");
+	foreach my $line(@lines){print OUT "$line\n";}
+	close(OUT);
 }
 ############################## fileStats ##############################
 sub fileStats{
@@ -627,63 +815,6 @@ sub fileStats{
 		print $writer "$file\tfile/mtime\t$mtime\n";
 	}
 }
-############################## countLines ##############################
-sub countLines{
-	my @files=@_;
-	my $writer=shift(@files);
-	my $filegrep=shift(@files);
-	my $fileungrep=shift(@files);
-	my $recursivesearch=shift(@files);
-	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
-		my $count=0;
-		if($file=~/\.bam$/){$count=`samtools view $file|wc -l`;}
-		elsif($file=~/\.sam$/){$count=`samtools view $file|wc -l`;}
-		elsif($file=~/\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;}
-		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
-		else{$count=`cat $file|wc -l`;}
-		if($count=~/(\d+)/){$count=$1;}
-		print $writer "$file\tfile/linecount\t$count\n";
-	}
-}
-############################## countSequences ##############################
-sub countSequences{
-	my @files=@_;
-	my $writer=shift(@files);
-	my $filegrep=shift(@files);
-	my $fileungrep=shift(@files);
-	my $recursivesearch=shift(@files);
-	foreach my $file(listFiles($filegrep,$fileungrep,$recursivesearch,@files)){
-		my $count=0;
-		if($file=~/\.bam$/){
-			my $paired=`samtools view $file|head -n 1|perl -ne 'if(\$_&2){print \"0\";}else{print \"1\";}'`;
-			if($paired eq "1"){$count=`samtools view -f 0x2 -F 0x184 $file|wc -l`;}
-			else{$count=`samtools view -F 0x184 $file|wc -l`;}
-		}elsif($file=~/\.sam$/){
-			my $paired=`samtools view -S $file|head -n 1|perl -ne 'if(\$_&2){print \"1\";}else{print \"0\";}'`;
-			if($paired eq "1"){$count=`samtools view -S -f 0x2 -F 0x184 $file|wc -l`;}
-			else{$count=`samtools view -S -F 0x184 $file|wc -l`;}
-		}elsif($file=~/\.f(ast)?a$/){$count=`cat $file|grep '>'|wc -l`;}
-		elsif($file=~/\.f(ast)?q$/){$count=`cat $file|wc -l`;$count/=4;}
-		elsif($file=~/\.f(ast)?a\.gz(ip)?$/){$count=`gzip -cd $file|grep '>'|wc -l`;}
-		elsif($file=~/\.f(ast)?a\.bz(ip)?2$/){$count=`bzip2 -cd $file|grep '>'|wc -l`;}
-		elsif($file=~/\.f(ast)?q\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;$count/=4;}
-		elsif($file=~/\.f(ast)?q\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;$count/=4;}
-		elsif($file=~/\.gz(ip)?$/){$count=`gzip -cd $file|wc -l`;}
-		elsif($file=~/\.bz(ip)?2$/){$count=`bzip2 -cd $file|wc -l`;}
-		else{$count=`cat $file|wc -l`;}
-		if($count=~/(\d+)/){$count=$1;}
-		print $writer "$file\tfile/seqcount\t$count\n";
-	}
-}
-############################## createFile ##############################
-sub createFile{
-	my @lines=@_;
-	my $path=shift(@lines);
-	mkdirs(dirname($path));
-	open(OUT,">$path");
-	foreach my $line(@lines){print OUT "$line\n";}
-	close(OUT);
-}
 ############################## getCommandUrlFromFile ##############################
 sub getCommandUrlFromFile{
 	my $file=shift();
@@ -715,14 +846,10 @@ sub getDatetime{my $time=shift;return getDate("",$time).getTime("",$time);}
 ############################## getFileFromExecid ##############################
 sub getFileFromExecid{
 	my $execid=shift();
-	my $errorflag=shift();
 	my $dirname=substr($execid,1,8);
-	my $path="$logDir/$dirname/$execid.txt";
 	if(-e "$errorDir/$execid.txt"){return "$errorDir/$execid.txt";}
-	elsif(-e "$path.gz"){return "$path.gz";}
-	elsif(-e "$path.bz2"){return "$path.bz2";}
-	elsif(defined($errorflag)){return "$errorDir/$execid.txt";}
-	else{return $path;}
+	elsif(-e "$logDir/$dirname/$execid.txt"){return "$logDir/$dirname/$execid.txt";}
+	elsif(-e "$logDir/$dirname.tgz"){return "$logDir/$dirname.tgz";}
 }
 ############################## getFileFromPredicate ##############################
 sub getFileFromPredicate{
@@ -737,6 +864,18 @@ sub getFileFromPredicate{
 	elsif(-e "$dir/$predicate.txt.gz"){return "$dir/$predicate.txt.gz";}
 	elsif(-e "$dir/$predicate.txt.bz2"){return "$dir/$predicate.txt.bz2";}
 	else{return "$dir/$predicate.txt";}
+}
+############################## getHttpContent ##############################
+sub getHttpContent{
+	my $url=shift();
+	my $username=shift();
+	my $password=shift();
+	my $agent=new LWP::UserAgent();
+	my $request=HTTP::Request->new(GET=>$url);
+	if($username ne ""||$password ne ""){$request->authorization_basic($username,$password);}
+	my $res=$agent->request($request);
+	if($res->is_success){return $res->content;}
+	elsif($res->is_error){print $res;}
 }
 ############################## getPredicateFromFile ##############################
 sub getPredicateFromFile{
@@ -783,6 +922,35 @@ sub getTime{
 	my $second=$time->sec;
 	if($second<10){$second="0".$second;}
 	return $hour.$delim.$minute.$delim.$second;
+}
+############################## handleArguments ##############################
+sub handleArguments{
+	my @arguments=@_;
+	my $variables={};
+	my @array=();
+	my $index;
+	for($index=scalar(@arguments)-1;$index>=0;$index--){
+		my $argument=$arguments[$index];
+		if($argument=~/\;$/){last;}
+		elsif($argument=~/^(\$?\w+)\=(.+)$/){
+			my $key=$1;
+			my $val=$2;
+			if($key=~/^\$(.+)$/){$key=$1;}
+			$variables->{$key}=$val;
+		}else{last;}
+	}
+	for(my $i=0;$i<=$index;$i++){push(@array,$arguments[$i]);}
+	return (\@array,$variables);
+}
+############################## handleInputOutput ##############################
+sub handleInputOutput{
+	my $statement=shift();
+	my @array=();
+	my @statements;
+	if(ref($statement) eq "ARRAY"){@statements=@{$statement};}
+	else{@statements=split(",",$statement);}
+	foreach my $line(@statements){my @tokens=split(/\-\>/,$line);push(@array,\@tokens);}
+	return \@array;
 }
 ############################## jsonEncode ##############################
 sub jsonEncode{
@@ -1053,7 +1221,7 @@ sub loadDbToVisNetwork{
 }
 ############################## loadLogs ##############################
 sub loadLogs{
-	my @files=listFiles(".txt\$",undef,-1,$logDir);
+	my @files=listFiles(".txt\$",undef,-1,$jobDir);
 	my $hash={};
 	foreach my $file(@files){
 		my $basename=basename($file,".txt");
@@ -1124,6 +1292,7 @@ sub openFile{
 	if($path=~/\.gz(ip)?$/){return IO::File->new("gzip -cd $path|");}
 	elsif($path=~/\.bz(ip)?2$/){return IO::File->new("bzip2 -cd $path|");}
 	elsif($path=~/\.bam$/){return IO::File->new("samtools view $path|");}
+	elsif($path=~/\.tgz$/){return IO::File->new("tar -zxOf $path|");}
 	else{return IO::File->new($path);}
 }
 ############################## prepareDbDir ##############################
@@ -1175,6 +1344,17 @@ sub printTableSub{
 		elsif($return_type==2){print STDERR "$string\"$_\"\n";}
 	}
 	return wantarray?@output:$output[0];
+}
+############################## printTripleInTSVFormat ##############################
+sub printTripleInTSVFormat{
+	my $result=shift();
+	foreach my $sub(sort{$a cmp $b}keys(%{$result})){
+		foreach my $pre(sort{$a cmp $b}keys(%{$result->{$sub}})){
+			my $obj=$result->{$sub}->{$pre};
+			if(ref($obj) eq"ARRAY"){foreach my $o(@{$obj}){print "$sub\t$pre\t$o\n";}}
+			else{print "$sub\t$pre\t$obj\n";}
+		}
+	}
 }
 ############################## queryResults ##############################
 sub queryResults{
@@ -1295,6 +1475,22 @@ sub readHash{
 	}
 	return $hash;
 }
+############################## readJson ##############################
+sub readJson{
+	my $reader=shift();
+	my $json="";
+	while(<$reader>){chomp;s/\r//g;$json.=$_;}
+	return jsonDecode($json);
+}
+############################## readText ##############################
+sub readText{
+	my $file=shift();
+	my $text="";
+	open(IN,$file);
+	while(<IN>){s/\r//g;$text.=$_;}
+	close(IN);
+	return $text;
+}
 ############################## setupPredicate ##############################
 sub setupPredicate{
 	my $predicate=shift();
@@ -1312,34 +1508,6 @@ sub setupPredicate{
 		return $path;
 	}
 }
-############################## getHttpContent ##############################
-sub getHttpContent{
-	my $url=shift();
-	my $username=shift();
-	my $password=shift();
-	my $agent=new LWP::UserAgent();
-	my $request=HTTP::Request->new(GET=>$url);
-	if($username ne ""||$password ne ""){$request->authorization_basic($username,$password);}
-	my $res=$agent->request($request);
-	if($res->is_success){return $res->content;}
-	elsif($res->is_error){print $res;}
-}
-############################## readJson ##############################
-sub readJson{
-	my $reader=shift();
-	my $json="";
-	while(<$reader>){chomp;s/\r//g;$json.=$_;}
-	return jsonDecode($json);
-}
-############################## readText ##############################
-sub readText{
-	my $file=shift();
-	my $text="";
-	open(IN,$file);
-	while(<IN>){s/\r//g;$text.=$_;}
-	close(IN);
-	return $text;
-}
 ############################## sizeFiles ##############################
 sub sizeFiles{
 	my @files=@_;
@@ -1351,6 +1519,30 @@ sub sizeFiles{
 		my $size=-s $file;
 		print $writer "$file\tfile/filesize\t$size\n";
 	}
+}
+############################## testCommand ##############################
+sub testCommand{
+	my $command=shift();
+	my $value2=shift();
+	my $file=shift();
+	my ($writer,$file)=tempfile(UNLINK=>1);
+	close($writer);
+	if(system("$command > $file")){return 1;}
+	my $value1=readText($file);
+	chomp($value1);
+	if($value1 eq $value2){return 0;}
+	print STDERR ">$command\n";
+	print STDERR "$value1\n";
+	print STDERR "$value2\n";
+}
+############################## testSub ##############################
+sub testSub{
+	my $command=shift();
+	my $value2=shift();
+	my $value1=eval($command);
+	if($value1 eq $value2){return 0;}
+	print STDERR ">$command\n";
+	print STDERR "'$value1' != '$value2'\n";
 }
 ############################## toNodesAndEdges ##############################
 sub toNodesAndEdges{
@@ -1420,6 +1612,38 @@ sub toNodesAndEdges{
 	}
 	return ($nodes,$edges);
 }
+############################## tripleSelect ##############################
+sub tripleSelect{
+	my $subject=shift();
+	my $predicate=shift();
+	my $object=shift();
+	if(!defined($subject)){$subject="%";}
+	if(!defined($predicate)){$predicate="%";}
+	if(!defined($object)){$object="%";}
+	$subject=~s/\%/.*/g;
+	$predicate=~s/\%/.*/g;
+	$object=~s/\%/.*/g;
+	my @files=listFiles(undef,undef,-1,$dbDir);
+	my @files=narrowDownByPredicate($predicate,@files);
+	my $results={};
+	foreach my $file(@files){
+		my $p=getPredicateFromFile($file);
+		if(!-e $file){next;}
+		my $reader=openFile($file);
+		while(<$reader>){
+			chomp;
+			my ($s,$o)=split(/\t/);
+			if($s!~/^$subject$/){next;}
+			if($o!~/^$object$/){next;}
+			if(!exists($results->{$s})){$results->{$s}={};}
+			if(!exists($results->{$s}->{$p})){$results->{$s}->{$p}=$o;}
+			elsif(ref($results->{$s}->{$p})eq"ARRAY"){push(@{$results->{$s}->{$p}},$o);}
+			else{$results->{$s}->{$p}=[$results->{$s}->{$p},$o];}
+		}
+		close($reader);
+	}
+	return $results;
+}
 ############################## tsvToJson ##############################
 sub tsvToJson{
 	my $reader=shift();
@@ -1437,38 +1661,8 @@ sub tsvToJson{
 	}
 	return wantarray?($json,$linecount):$json;
 }
-############################## testCommand ##############################
-sub testCommand{
-	my $command=shift();
-	my $value2=shift();
-	my $file=shift();
-	my ($writer,$file)=tempfile(UNLINK=>1);
-	close($writer);
-	if(system("$command > $file")){return 1;}
-	my $value1=readText($file);
-	chomp($value1);
-	if($value1 eq $value2){return 0;}
-	print STDERR ">$command\n";
-	print STDERR "$value1\n";
-	print STDERR "$value2\n";
-}
-############################## testSub ##############################
-sub testSub{
-	my $command=shift();
-	my $value2=shift();
-	my $value1=eval($command);
-	if($value1 eq $value2){return 0;}
-	print STDERR ">$command\n";
-	print STDERR "'$value1' != '$value2'\n";
-}
 ############################## test ##############################
 sub test{
-	my $result=system("ssh ah3q\@dgt-ac4 'find allTable.txt'");
-	print "result=$result\n";
-	exit();
-	#setupPredicate("http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage");
-	#setupPredicate("ah3q\@dgt-ac4:allImage");
-	#setupPredicate("geneBodyCoverage:allImage");
 	testSub("getPredicateFromFile(\"$dbDir/A.txt\")","A");
 	testSub("getPredicateFromFile(\"$dbDir/B/A.txt\")","B/A");
 	testSub("getPredicateFromFile(\"$dbDir/B/A.txt.gz\")","B/A");
@@ -1505,7 +1699,7 @@ sub test{
 	testCommand("perl rdf.pl md5 test/db/id.txt","test/db/id.txt\tfile/md5\t131e61dab9612108824858dc497bf713");
 	testCommand("perl rdf.pl filesize test/db/id.txt","test/db/id.txt\tfile/filesize\t20");
 	testCommand("perl rdf.pl seqcount test/db/id.txt","test/db/id.txt\tfile/seqcount\t4");
-	testCommand("perl rdf.pl -d test select ","A\tid\tA1\nB\tid\tB1\nC\tid\tC1\nD\tid\tD1\nA1\tname\tAkira\nB1\tname\tBen\nC1\tname\tChris\nD1\tname\tDavid");
+	testCommand("perl rdf.pl -d test select ","A\tid\tA1\nA1\tname\tAkira\nB\tid\tB1\nB1\tname\tBen\nC\tid\tC1\nC1\tname\tChris\nD\tid\tD1\nD1\tname\tDavid");
 	testCommand("perl rdf.pl -d test select A","A\tid\tA1");
 	testCommand("perl rdf.pl -d test select % id","A\tid\tA1\nB\tid\tB1\nC\tid\tC1\nD\tid\tD1");
 	testCommand("perl rdf.pl -d test select % % B1","B\tid\tB1");
@@ -1514,7 +1708,7 @@ sub test{
 	testCommand("perl rdf.pl -d test select % % A%","A\tid\tA1\nA1\tname\tAkira");
 	testCommand("perl rdf.pl -d test select %1","A1\tname\tAkira\nB1\tname\tBen\nC1\tname\tChris\nD1\tname\tDavid");
 	testCommand("perl rdf.pl -d test delete A%","deleted 2");
-	testCommand("perl rdf.pl -d test select ","B\tid\tB1\nC\tid\tC1\nD\tid\tD1\nB1\tname\tBen\nC1\tname\tChris\nD1\tname\tDavid");
+	testCommand("perl rdf.pl -d test select ","B\tid\tB1\nB1\tname\tBen\nC\tid\tC1\nC1\tname\tChris\nD\tid\tD1\nD1\tname\tDavid");
 	testCommand("perl rdf.pl -d test delete % name","deleted 3");
 	testCommand("perl rdf.pl -d test select ","B\tid\tB1\nC\tid\tC1\nD\tid\tD1");
 	testCommand("perl rdf.pl -d test delete % % %1","deleted 3");
@@ -1571,12 +1765,21 @@ sub test{
 	testCommand("perl rdf.pl -d test/A delete % % %","deleted 1");
 	testCommand("perl rdf.pl -d test/B delete % % %","deleted 1");
 	rmdir("test/A/db");
-	rmdir("test/A/log/error");
-	rmdir("test/A/log");
 	rmdir("test/B/db");
-	rmdir("test/B/log/error");
 	rmdir("test/B/log");
 	rmdir("test/A");
 	rmdir("test/B");
+	testCommand("perl rdf.pl -q -d test insert A B C","");
+	testCommand("perl rdf.pl -d test select","A\tB\tC");
+	testCommand("perl rdf.pl -f tsv -d test select","A\tB\tC");
+	testCommand("perl rdf.pl -d test insert A B D","inserted 1");
+	testCommand("perl rdf.pl -d test -f tsv select","A\tB\tC\nA\tB\tD");
+	testCommand("perl rdf.pl -d test -f json select","{\"A\":{\"B\":[\"C\",\"D\"]}}");
+	testCommand("perl rdf.pl -d test delete % % %","deleted 2");
+	testCommand("perl rdf.pl -q -d test assign A B C","");
+	testCommand("perl rdf.pl -f json -d test select","{\"A\":{\"B\":\"C\"}}");
+	testCommand("perl rdf.pl -d test assign A B C","inserted 0");
+	testCommand("perl rdf.pl -q -d test delete % % %","");
+	rmdir("test/db");
 	rmdir("test");
 }
