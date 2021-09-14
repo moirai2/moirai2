@@ -8,18 +8,21 @@ Input, output, parameter, time, stdout, stderr are recorded in RDF sqlite3 datab
 
 bash2cwl has moved to https://github.com/moirai2/bash2cwl
 
-
 ## Structure
 ```
 moirai2/
 ├── commandeditor.html - HTML for editing command json.
 ├── commandviewer.html - Viewintg a command json.
+├── css/ - stylesheet used by jquery columns.
+├── images/ - images used by jquery columns.
 ├── js/ - Javascript used for MOIRAI2 manipulation through a browser.
+|   ├── ah3q/ - my javascripts fro moirai2
+|   ├── jquery/ - jquery (https://visjs.org) scripts
+|   └── vis/ - vis (https://visjs.org) scripts for network graphs
 ├── moirai2.php - Used for MOIRAI2 manipulation through a browser.
 ├── moirai2.pl - Computes MOIRAI2 commands/network.
 ├── rdf.pl - Script to handle Resource Description Framework (RDF) using SQLite3 database.
-├── README.md - This readme file
-├── bin/ - Stores binary executables (automatically made when running moirai2.pl)
+└── README.md - This readme file
 ```
 
 ## Install
@@ -42,6 +45,37 @@ $ git clone https://github.com/moirai2/moirai2.git project
 ## Usage
 
 * Explaining usage by examples.
+
+### Example0
+```shell
+$ perl moirai2.pl exec ls
+README.md
+commandeditor.html
+commandviewer.html
+css
+images
+js
+moirai
+moirai2.php
+moirai2.pl
+rdf.pl
+```
+* Execute ls command
+
+```shell
+$ perl moirai2.pl exec ls -lt
+total 480
+drwxrwxrwx  8 ah3q  _www      256  9 13 23:30 moirai
+-rw-r--r--@ 1 ah3q  _www    22230  9 13 23:29 README.md
+drwxrwxrwx  6 ah3q  _www      192  9 13 23:13 js
+-rwxrwxrwx@ 1 ah3q  staff  132304  9 13 23:05 moirai2.pl
+-rwxrwxrwx@ 1 ah3q  staff   63474  9 13 22:09 rdf.pl
+-rwxrwxrwx@ 1 ah3q  _www     7753 12 13  2020 moirai2.php
+-rwxr-xr-x@ 1 ah3q  _www     8064 10 23  2020 commandeditor.html
+-rwxr-xr-x@ 1 ah3q  _www     3013 10 23  2020 commandviewer.html
+drwxr-xr-x  4 ah3q  _www      128 10  8  2020 css
+drwxr-xr-x  9 ah3q  _www      288 10  8  2020 images
+```
 
 ### Example1
 ```shell

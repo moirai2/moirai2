@@ -24,10 +24,16 @@ getopts('d:f:g:G:hi:qo:r:s:');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
+$urls->{"daemon/execid"}="https://moirai2.github.io/schema/daemon/execid";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
+$urls->{"daemon/timecompleted"}="https://moirai2.github.io/schema/daemon/timecompleted";
 $urls->{"daemon/timeended"}="https://moirai2.github.io/schema/daemon/timeended";
+$urls->{"daemon/processtime"}="https://moirai2.github.io/schema/daemon/processtime";
+$urls->{"daemon/timeregistered"}="https://moirai2.github.io/schema/daemon/timeregistered";
 $urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
-$urls->{"daemon/timethrown"}="https://moirai2.github.io/schema/daemon/timethrown";
+$urls->{"daemon/workdir"}="https://moirai2.github.io/schema/daemon/workdir";
+my $revUrls={};
+while(my($key,$url)=each(%{$urls})){$revUrls->{$url}=$key;}
 ############################## HELP ##############################
 sub help{
 	print "\n";
@@ -1120,22 +1126,21 @@ sub loadLogToHash{
 	my @array=();
 	foreach my $file(@files){
 		my $hash={};
-		my $s=getSubjectFromFile($file);
-		my $daemonregexp=quotemeta("https://moirai2.github.io/schema/daemon/");
-		my $url=getCommandUrlFromFile($file)."#";
-		if(!defined($url)){next;}
-		my $urlregexp=quotemeta($url);
+		$hash->{"daemon/logfile"}=$file;
 		my $reader=openFile($file);
-		$hash->{"daemon/execid"}=$s;
+		my $url;
+		my $index=0;
 		while(<$reader>){
 			chomp;
-			if(/^========================================/){next;}
+			if(/^\#{40}/){if($index>0){last;}else{$index++;next;}}
 			my ($p,$o)=split(/\t/);
-			if($p eq $urls->{"daemon/timestarted"}){$o=getDate("/",$o)." ".getTime(":",$o)}
-			elsif($p eq $urls->{"daemon/timeended"}){$o=getDate("/",$o)." ".getTime(":",$o)}
-			elsif($p eq $urls->{"daemon/timethrown"}){$o=getDate("/",$o)." ".getTime(":",$o)}
-			if($p=~s/^$daemonregexp//){$p="daemon/$p";}
-			if($p=~s/^$urlregexp//){}
+			if(exists($revUrls->{$p})){$p=$revUrls->{$p};}
+			if($p eq "daemon/command"){$url=quotemeta($o);}
+			elsif($p eq "daemon/timecompleted"){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p eq "daemon/timeended"){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p eq "daemon/timeregistered"){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p eq "daemon/timestarted"){$o=getDate("/",$o)." ".getTime(":",$o)}
+			elsif($p=~/^$url\#(.+)$/){$p=$1;}
 			if(!exists($hash->{$p})){$hash->{$p}=$o;}
 			elsif(ref($hash->{$p})eq"ARRAY"){push(@{$hash->{$p}},$o);}
 			else{$hash->{$p}=[$hash->{$p},$o];}
@@ -1149,18 +1154,11 @@ sub loadLogToHash{
 sub loadDbToArray{
 	my $directory=shift();	
 	my ($nodes,$edges)=toNodesAndEdges($directory);
-	my @queries=();
-	foreach my $from(keys(%{$edges})){
-		my $labelFrom="\$".$nodes->{$from};
-		foreach my $to(keys(%{$edges->{$from}})){
-			my $labelTo="\$".$nodes->{$to};
-			my $pred=$edges->{$from}->{$to};
-			my $query="$labelFrom->$pred->$labelTo";
-			push(@queries,$query);
-		}
-	}
-	my @results=queryResults(@queries);
-	return \@results;
+	my $options={};
+	$options->{"edges"}={"arrows"=>"to"};
+	$options->{"groups"}={};
+	$options->{"groups"}->{"box"}={"shape"=>"box"};
+	return [$nodes,$edges,$options];
 }
 ############################## loadDbToHash ##############################
 sub loadDbToHash{
@@ -1546,71 +1544,35 @@ sub testSub{
 }
 ############################## toNodesAndEdges ##############################
 sub toNodesAndEdges{
-	my $directory=shift();	
+	my $directory=shift();
 	my @files=listFiles(undef,undef,-1,$directory);
-	my $objects={};
-	my $nodes={};
-	my $predicates={};
-	my $nodeindex=1;
+	my $hashs={};
+	my @nodes=();
+	my @edges=();
+	my $nodeIndex=0;
 	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		$predicates->{$p}=$nodeindex;
 		my $reader=openFile($file);
+		my $p=getPredicateFromFile($file);
 		while(<$reader>){
 			chomp;
 			my ($s,$o)=split(/\t/);
-			if($s eq"root"&&!exists($objects->{"root"})){$objects->{"root"}=0;$nodes->{0}="root";}
-			if($o!~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
-				$objects->{$o}=$nodeindex;
-				if(!exists($nodes->{$nodeindex})){
-					if($o=~/^\S+\.\w+$/){$nodes->{$nodeindex}=$p;}
-					else{$nodes->{$nodeindex}=$p;}
-				}
-			}elsif(!exists($nodes->{$nodeindex})){$nodes->{$nodeindex}=$p;}
-		}
-		close($reader);
-		$nodeindex++;
-	}
-	my $subjectIndex=0;
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if(!exists($objects->{$s})){
-				$objects->{$s}=$nodeindex;
-				if(!exists($nodes->{$nodeindex})){
-					if($s=~/^\S+\.\w+$/){$nodes->{$nodeindex}="file$subjectIndex";}
-					else{$nodes->{$nodeindex}="val$subjectIndex";}
-					$subjectIndex++;
-				}
+			if(!exists($hashs->{$s})){
+				$hashs->{$s}=$nodeIndex;
+				push(@nodes,{"id"=>$nodeIndex++,"label"=>$s});
 			}
-		}
-		close($reader);
-		$nodeindex++;
-	}
-	my $edges={};
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if(!exists($objects->{$s})){next;}
-			my $from=$objects->{$s};
-			if(!exists($edges->{$from})){$edges->{$from}={};}
-			if(exists($objects->{$o})){
-				my $to=$objects->{$o};
-				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
-			}elsif($o=~/^[\+\-]?\d+(\.\d*)?([Ee][\+\-]?\d+)?$/){
-				my $to=$predicates->{$p};
-				if(!exists($edges->{$from}->{$to})){$edges->{$from}->{$to}=$p;}
+			if(!exists($hashs->{$o})){
+				$hashs->{$o}=$nodeIndex;
+				push(@nodes,{"id"=>$nodeIndex++,"label"=>$o});
 			}
+			push(@edges,{"from"=>$hashs->{$s},"label"=>$p,"to"=>$hashs->{$o}});
 		}
 		close($reader);
 	}
-	return ($nodes,$edges);
+	foreach my $node(@nodes){
+		my $label=$node->{"label"};
+		if($label=~/^.+\.\w{3,4}$/){$node->{"shape"}="box";}
+	}
+	return (\@nodes,\@edges);
 }
 ############################## tripleSelect ##############################
 sub tripleSelect{
