@@ -15,12 +15,12 @@ use Time::HiRes;
 use Time::Local;
 use Time::localtime;
 ############################## HEADER ##############################
-my($program_name,$program_directory,$program_suffix)=fileparse($0);
-$program_directory=substr($program_directory,0,-1);
+my($program_name,$prgdir,$program_suffix)=fileparse($0);
+$prgdir=substr($prgdir,0,-1);
 my $program_version="2021/09/13";
 ############################## OPTIONS ##############################
-use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s);
-getopts('d:f:g:G:hi:qo:r:s:');
+use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
+getopts('d:f:g:G:hi:qo:r:s:x');
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
@@ -66,11 +66,12 @@ sub help{
 	print "           seqcount  Record sequence count of a file\n";
 	print "\n";
 	print "Options:\n";
-	print "     -d  database directory path (default='rdf')\n";
+	print "     -d  database directory path (default='moirai')\n";
 	print "     -f  input/output format (json,tsv)\n";
 	print "     -h  show help message\n";
 	print "     -q  quiet mode\n";
 	print "     -s  separate delimiter (default='\t')\n";
+	print "     -x  Expand query results (default='limit')\n";
 	print "\n";
 	print "   NOTE:  Use '%' for undefined subject/predicate/object.\n";
 	print "   NOTE:  '%' is wildcard for subject/predicate/object.\n";
@@ -125,11 +126,11 @@ if(defined($opt_h)||scalar(@ARGV)==0){
 	exit();
 }
 my $command=shift(@ARGV);
-my $moiraiDir=(defined($opt_d))?$opt_d:"moirai";
-my $jobDir="$moiraiDir/ctrl/job";
-my $dbDir="$moiraiDir/db";
-my $logDir="$moiraiDir/log";
-my $errorDir="$logDir/error";
+my $moiraidir=(defined($opt_d))?$opt_d:"moirai";
+my $jobdir="$moiraidir/ctrl/job";
+my $dbdir="$moiraidir/db";
+my $logdir="$moiraidir/log";
+my $errordir="$logdir/error";
 my $md5cmd=which('md5sum');
 if(!defined($md5cmd)){$md5cmd=which('md5');}
 if($command eq"test"){test();}
@@ -211,7 +212,7 @@ sub commandDelete{
 		close($reader);
 		$total=deleteJson($json);
 	}
-	if($total>0){utime(undef,undef,$moiraiDir);utime(undef,undef,$dbDir);}
+	if($total>0){utime(undef,undef,$moiraidir);utime(undef,undef,$dbdir);}
 	if(!defined($opt_q)){print "deleted $total\n";}
 }
 sub deleteArgv{
@@ -225,7 +226,7 @@ sub deleteArgv{
 	$subject=~s/\%/.*/g;
 	$predicate=~s/\%/.*/g;
 	$object=~s/\%/.*/g;
-	my @files=listFiles(undef,undef,-1,$dbDir);
+	my @files=listFiles(undef,undef,-1,$dbdir);
 	my @files=narrowDownByPredicate($predicate,@files);
 	my $total=0;
 	foreach my $file(@files){
@@ -285,9 +286,9 @@ sub commandExport{
 	my $target=shift();
 	if(!defined($target)){$target="db";}
 	my $result;
-	if($target eq "db"){$result=loadDbToArray($dbDir);}
-	elsif($target eq "log"){$result=loadLogToHash($logDir);}
-	elsif($target eq "network"){$result=loadDbToVisNetwork($dbDir);}
+	if($target eq "db"){$result=loadDbToArray($dbdir);}
+	elsif($target eq "log"){$result=loadLogToHash($logdir);}
+	elsif($target eq "network"){$result=loadDbToVisNetwork($dbdir);}
 	print jsonEncode($result)."\n";
 }
 ############################## commandFileStats ##############################
@@ -371,10 +372,10 @@ sub commandImport{
 		close($writer2);
 		chmod(0777,$tempfile2);
 		system("sort $tempfile -u > $tempfile2");
-		if(!-e $dbDir){prepareDbDir();}
+		if(!-e $dbdir){prepareDbDir();}
 		system("mv $tempfile2 $file");
 	}
-	if($total>0){utime(undef,undef,$moiraiDir);utime(undef,undef,$dbDir);}
+	if($total>0){utime(undef,undef,$moiraidir);utime(undef,undef,$dbdir);}
 	if(!defined($opt_q)){print "inserted $total\n";}
 }
 ############################## commandInsert ##############################
@@ -390,7 +391,7 @@ sub commandInsert{
 		close($reader);
 		$total=insertJson($json);
 	}
-	if($total>0){utime(undef,undef,$moiraiDir);utime(undef,undef,$dbDir);}
+	if($total>0){utime(undef,undef,$moiraidir);utime(undef,undef,$dbdir);}
 	if(!defined($opt_q)){print "inserted $total\n";}
 }
 sub insertJson{
@@ -422,7 +423,7 @@ sub insertJson{
 			close($writer2);
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
-			if(!-e $dbDir){prepareDbDir();}
+			if(!-e $dbdir){prepareDbDir();}
 			system("mv $tempfile2 $file");
 		}
 		$total+=$inserted;
@@ -458,7 +459,7 @@ sub commandPrompt{
 		while(my($key,$val)=each(%{$userdefined})){$query=~s/\$$key/$val/g;}
 		checkInputOutput($query);
 		if(checkRdfQuery($query)){
-			my @hashs=queryResults($query);
+			my @hashs=queryResults($opt_x,$query);
 			my $temp={};
 			foreach my $hash(@hashs){foreach my $key(keys(%{$hash})){$temp->{$key}=1;}}
 			my @keys=keys(%{$temp});
@@ -515,10 +516,11 @@ sub commandPrompt{
 }
 ############################## commandQuery ##############################
 sub commandQuery{
+	my $delim=defined($opt_s)?$opt_s:",";
 	my @queries=();
 	foreach my $argv(@ARGV){push(@queries,split(',',$argv));}
 	if(scalar(@queries)==0){while(<STDIN>){chomp;push(@queries,split(','));}}
-	my @results=queryResults(@queries);
+	my @results=queryResults($opt_x,@queries);
 	if(!defined($opt_f)){$opt_f="tsv";}
 	if($opt_f eq "json"){print jsonEncode(\@results)."\n";}
 	elsif($opt_f eq "tsv"){
@@ -532,7 +534,8 @@ sub commandQuery{
 				my $key=$variables[$i];
 				my $value=$res->{$key};
 				if($i>0){$line.="\t";}
-				$line.=$value;
+				if(ref($value)eq"ARRAY"){$line.=join($delim,@{$value});}
+				else{$line.=$value;}
 			}
 			print "$line\n";
 		}
@@ -570,7 +573,7 @@ sub commandSubmit{
 	$rdf->{$id}={};
 	foreach my $key(keys(%{$json})){$rdf->{$id}->{$key}=$json->{$key};}
 	my $total=insertJson($rdf);
-	if($total>0){utime(undef,undef,$moiraiDir);}
+	if($total>0){utime(undef,undef,$moiraidir);}
 	if(!defined($opt_q)){print "inserted $total\n";}
 }
 ############################## commandUpdate ##############################
@@ -586,7 +589,7 @@ sub commandUpdate{
 		close($reader);
 		$total=updateJson($json);
 	}
-	if($total>0){utime(undef,undef,$moiraiDir);utime(undef,undef,$dbDir);}
+	if($total>0){utime(undef,undef,$moiraidir);utime(undef,undef,$dbdir);}
 	if(!defined($opt_q)){print "updated $total\n";}
 }
 sub updateJson{
@@ -629,7 +632,7 @@ sub updateJson{
 			close($writer2);
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
-			if(!-e $dbDir){prepareDbDir();}
+			if(!-e $dbdir){prepareDbDir();}
 			system("mv $tempfile2 $file");
 		}
 		$total+=$updated;
@@ -643,7 +646,7 @@ sub commandConfig{
 	if(!defined($file)){
 		print STDERR "\n";
 		print STDERR "ERROR: Please specify config file\n";
-		print STDERR "perl rdf.pl config FILE\n";
+		print STDERR "perl $prgdir/rdf.pl config FILE\n";
 		print STDERR "\n";
 		exit(1);
 	}
@@ -663,7 +666,7 @@ sub commandConfig{
 		print STDERR ">$file\n";
 		for(my $i=0;$i<scalar(@keys);$i++){print $numbers->{$keys[$i]}."\n";}
 		print STDERR "\n";
-		print STDERR "perl rdf.pl config FILE";
+		print STDERR "perl $prgdir/rdf.pl config FILE";
 		for(my $i=0;$i<$nargs;$i++){print " ARG".($i+1);}
 		print STDERR "\n";
 		print STDERR "\n";
@@ -853,14 +856,14 @@ sub getDatetime{my $time=shift;return getDate("",$time).getTime("",$time);}
 sub getFileFromExecid{
 	my $execid=shift();
 	my $dirname=substr($execid,1,8);
-	if(-e "$errorDir/$execid.txt"){return "$errorDir/$execid.txt";}
-	elsif(-e "$logDir/$dirname/$execid.txt"){return "$logDir/$dirname/$execid.txt";}
-	elsif(-e "$logDir/$dirname.tgz"){return "$logDir/$dirname.tgz";}
+	if(-e "$errordir/$execid.txt"){return "$errordir/$execid.txt";}
+	elsif(-e "$logdir/$dirname/$execid.txt"){return "$logdir/$dirname/$execid.txt";}
+	elsif(-e "$logdir/$dirname.tgz"){return "$logdir/$dirname.tgz";}
 }
 ############################## getFileFromPredicate ##############################
 sub getFileFromPredicate{
 	my $predicate=shift();
-	my $dir=$dbDir;
+	my $dir=$dbdir;
 	if($predicate=~/^(https?):\/\/(.+)$/){$predicate="$1/$2";}
 	elsif($predicate=~/^(.+)\@(.+)\:(.+)/){$predicate="ssh/$1/$2/$3";}
 	elsif($predicate=~/^(.+)\:(.+)$/){$dir="$1/db";$predicate=$2;}
@@ -888,7 +891,7 @@ sub getPredicateFromFile{
 	my $path=shift();
 	my $dirname=dirname($path);
 	my $basename=basename($path);
-	if($dirname=~/^$dbDir\/(.+)$/){$basename="$1/$basename";}
+	if($dirname=~/^$dbdir\/(.+)$/){$basename="$1/$basename";}
 	elsif($dirname=~/^\//){$basename="$dirname/$basename";}
 	elsif($dirname=~/^(.+)\/db\/(.+)$/){$basename="$1:$2/$basename";}
 	if($basename=~/^(https?)\/(.+)$/){$basename="$1://$2";}
@@ -1219,7 +1222,7 @@ sub loadDbToVisNetwork{
 }
 ############################## loadLogs ##############################
 sub loadLogs{
-	my @files=listFiles(".txt\$",undef,-1,$jobDir);
+	my @files=listFiles(".txt\$",undef,-1,$jobdir);
 	my $hash={};
 	foreach my $file(@files){
 		my $basename=basename($file,".txt");
@@ -1295,10 +1298,10 @@ sub openFile{
 }
 ############################## prepareDbDir ##############################
 sub prepareDbDir{
-	mkdir($moiraiDir);
-	chmod(0777,$moiraiDir);
-	mkdir($dbDir);
-	chmod(0777,$dbDir);
+	mkdir($moiraidir);
+	chmod(0777,$moiraidir);
+	mkdir($dbdir);
+	chmod(0777,$dbdir);
 }
 ############################## printTable ##############################
 sub printTable{
@@ -1357,6 +1360,7 @@ sub printTripleInTSVFormat{
 ############################## queryResults ##############################
 sub queryResults{
 	my @queries=@_;
+	my $expand=shift(@queries);
 	my $values={};
 	foreach my $query(@queries){
 		my ($s,$p,$o)=split(/\-\>/,$query);
@@ -1367,26 +1371,42 @@ sub queryResults{
 	for(my $i=0;$i<scalar(@queries);$i++){
 		my $query=$queries[$i];
 		if($i==0){@results=@{$values->{$query};};next;}
-		my $array=$values->{$query};
 		my @temp=();
-		foreach my $h(@results){
-			foreach my $h2(@{$array}){
+		my $founds={};
+		my @array=@{$values->{$query}};
+		foreach my $h1(@results){
+			my $found=0;
+			for(my $j=0;$j<scalar(@array);$j++){
+				my $h2=$array[$j];
+				my @keys=sharedKeys($h1,$h2);
 				my $error=0;
-				my $found=0;
-				foreach my $k(keys(%{$h})){
-					if(!exists($h2->{$k})){next;}
-					$found++;
-					if($h->{$k}ne$h2->{$k}){$error++;}
-				}
-				if($error>0){next;}
+				my $match=0;
+				foreach my $k(@keys){if($h1->{$k}ne$h2->{$k}){$error=1;last;}$match++;}
+				if($error==1){next;}
+				if($match==0){next;}
 				my $hash={};
-				if($found>0){
-					foreach my $k(keys(%{$h})){$hash->{$k}=$h->{$k};}
-					foreach my $k(keys(%{$h2})){if(!exists($h->{$k})){$hash->{$k}=$h2->{$k};}}
-				}else{
-					foreach my $k(keys(%{$h})){$hash->{$k}=$h->{$k};}
-					foreach my $k(keys(%{$h2})){$hash->{$k}=$h2->{$k};}
-				}
+				foreach my $k(keys(%{$h1})){$hash->{$k}=$h1->{$k};}
+				foreach my $k(keys(%{$h2})){if(!exists($h1->{$k})){$hash->{$k}=$h2->{$k};}}
+				push(@temp,$hash);
+				$found=1;
+				$founds->{$j}=1;
+			}
+			if($found==0&&defined($expand)){
+				my $h2=$values->{$query}->[0];
+				my $hash={};
+				foreach my $k(keys(%{$h1})){$hash->{$k}=$h1->{$k};}
+				foreach my $k(keys(%{$h2})){if(!exists($h1->{$k})){$hash->{$k}="";}}
+				push(@temp,$hash);
+			}
+		}
+		if(defined($expand)){
+			for(my $j=0;$j<scalar(@array);$j++){
+				if($founds->{$j}){next;}
+				my $h1=$results[0];
+				my $h2=$array[$j];
+				my $hash={};
+				foreach my $k(keys(%{$h2})){$hash->{$k}=$h2->{$k};}
+				foreach my $k(keys(%{$h1})){if(!exists($h2->{$k})){$hash->{$k}="";}}
 				push(@temp,$hash);
 			}
 		}
@@ -1403,28 +1423,14 @@ sub queryVariables{
 	my @subVars=();
 	my @preVars=();
 	my @objVars=();
-	if($subject=~/\$(\w+)/){
-		while($subject=~/\$(\w+)/){
-			push(@subVars,$1);
-			$subject=~s/\$(\w+)/(.+)/;
-		}
-		$subject="$subject";
-	}
-	if($predicate=~/\$(\w+)/){
-		while($predicate=~/\$(\w+)/){
-			push(@preVars,$1);
-			$predicate=~s/\$(\w+)/(.+)/;
-		}
-		$predicate="$predicate";
-	}
-	if($object=~/\$(\w+)/){
-		while($object=~/\$(\w+)/){
-			push(@objVars,$1);
-			$object=~s/\$(\w+)/(.+)/;
-		}
-		$object="$object";
-	}
-	my $dir=$dbDir;
+	my $joinSubject;
+	my $joinObject;
+	if($subject=~/^\(\$(\{\w+\}|\w+)\)$/){if($1=~/\{(\w+)\}/){$1=$1;}push(@subVars,$1);$joinSubject=1;$subject="(.+)";}
+	if($object=~/^\(\$(\{\w+\}|\w+)\)$/){if($1=~/\{(\w+)\}/){$1=$1;}push(@objVars,$1);$joinObject=1;$object="(.+)";}
+	while($subject=~/\$(\{\w+\}|\w+)/){if($1=~/\{(\w+)\}/){$1=$1;}push(@subVars,$1);$subject=~s/\$(\{\w+\}|\w+)/(.+)/;}
+	while($predicate=~/\$(\{\w+\}|\w+)/){if($1=~/\{(\w+)\}/){$1=$1;}push(@preVars,$1);$predicate=~s/\$(\{\w+\}|\w+)/(.+)/;}
+	while($object=~/\$(\{\w+\}|\w+)/){if($1=~/\{(\w+)\}/){$1=$1;}push(@objVars,$1);$object=~s/\$(\{\w+\}|\w+)/(.+)/;}
+	my $dir=$dbdir;
 	if($predicate=~/^(\S+)\:(\S+)$/){# dir2:dirname/basename.txt
 		$dir="$1/db";
 		$predicate=$2;
@@ -1434,30 +1440,92 @@ sub queryVariables{
 	my @files=listFiles(undef,undef,-1,$dir);
 	my @files=narrowDownByPredicate($predicate,@files);
 	my @array=();
-	foreach my $file(@files){
-		my $p=getPredicateFromFile($file);
-		my $reader=openFile($file);
-		while(<$reader>){
-			chomp;
-			my ($s,$o)=split(/\t/);
-			if($s!~/^$subject$/){next;}
-			if($o!~/^$object$/){next;}
-			my $h={};
-			if(scalar(@subVars)>0){
-				my @results=$s=~/^$subject$/;
-				for(my $i=0;$i<scalar(@subVars);$i++){$h->{$subVars[$i]}=$results[$i];}
+	if(defined($joinSubject)){
+		foreach my $file(@files){
+			my $hash={};
+			my $p=getPredicateFromFile($file);
+			my $reader=openFile($file);
+			while(<$reader>){
+				chomp;
+				my ($s,$o)=split(/\t/);
+				if(!exists($hash->{$o})){$hash->{$o}=$s;}
+				elsif(ref($hash->{$o})eq"ARRAY"){push(@{$hash->{$o}},$s);}
+				else{$hash->{$o}=[$hash->{$o},$s];}
 			}
-			if(scalar(@preVars)>0){
-				my @results=$p=~/^$predicate$/;
-				for(my $i=0;$i<scalar(@preVars);$i++){$h->{$preVars[$i]}=$results[$i];}
+			close($reader);
+			while(my ($o,$s)=each(%{$hash})){
+				if($o!~/^$object$/){next;}
+				my $h={};
+				if(scalar(@subVars)>0){
+					for(my $i=0;$i<scalar(@subVars);$i++){$h->{$subVars[$i]}=$s;}
+				}
+				if(scalar(@preVars)>0){
+					my @results=$p=~/^$predicate$/;
+					for(my $i=0;$i<scalar(@preVars);$i++){$h->{$preVars[$i]}=$results[$i];}
+				}
+				if(scalar(@objVars)>0){
+					my @results=$o=~/^$object$/;
+					for(my $i=0;$i<scalar(@objVars);$i++){$h->{$objVars[$i]}=$results[$i];}
+				}
+				if(scalar(keys(%{$h}))>0){push(@array,$h);}
 			}
-			if(scalar(@objVars)>0){
-				my @results=$o=~/^$object$/;
-				for(my $i=0;$i<scalar(@objVars);$i++){$h->{$objVars[$i]}=$results[$i];}
-			}
-			if(scalar(keys(%{$h}))>0){push(@array,$h);}
 		}
-		close($reader);
+	}elsif(defined($joinObject)){
+		foreach my $file(@files){
+			my $hash={};
+			my $p=getPredicateFromFile($file);
+			my $reader=openFile($file);
+			while(<$reader>){
+				chomp;
+				my ($s,$o)=split(/\t/);
+				if(!exists($hash->{$s})){$hash->{$s}=$o;}
+				elsif(ref($hash->{$s})eq"ARRAY"){push(@{$hash->{$s}},$o);}
+				else{$hash->{$s}=[$hash->{$s},$o];}
+			}
+			close($reader);
+			while(my ($s,$o)=each(%{$hash})){
+				if($s!~/^$subject$/){next;}
+				my $h={};
+				if(scalar(@subVars)>0){
+					my @results=$s=~/^$subject$/;
+					for(my $i=0;$i<scalar(@subVars);$i++){$h->{$subVars[$i]}=$results[$i];}
+				}
+				if(scalar(@preVars)>0){
+					my @results=$p=~/^$predicate$/;
+					for(my $i=0;$i<scalar(@preVars);$i++){$h->{$preVars[$i]}=$results[$i];}
+				}
+				if(scalar(@objVars)>0){
+					for(my $i=0;$i<scalar(@objVars);$i++){$h->{$objVars[$i]}=$o;}
+				}
+				if(scalar(keys(%{$h}))>0){push(@array,$h);}
+			}
+		}
+	}else{
+		foreach my $file(@files){
+			my $p=getPredicateFromFile($file);
+			my $reader=openFile($file);
+			while(<$reader>){
+				chomp;
+				my ($s,$o)=split(/\t/);
+				if($s!~/^$subject$/){next;}
+				if($o!~/^$object$/){next;}
+				my $h={};
+				if(scalar(@subVars)>0){
+					my @results=$s=~/^$subject$/;
+					for(my $i=0;$i<scalar(@subVars);$i++){$h->{$subVars[$i]}=$results[$i];}
+				}
+				if(scalar(@preVars)>0){
+					my @results=$p=~/^$predicate$/;
+					for(my $i=0;$i<scalar(@preVars);$i++){$h->{$preVars[$i]}=$results[$i];}
+				}
+				if(scalar(@objVars)>0){
+					my @results=$o=~/^$object$/;
+					for(my $i=0;$i<scalar(@objVars);$i++){$h->{$objVars[$i]}=$results[$i];}
+				}
+				if(scalar(keys(%{$h}))>0){push(@array,$h);}
+			}
+			close($reader);
+		}
 	}
 	return @array;
 }
@@ -1505,6 +1573,14 @@ sub setupPredicate{
 	}else{
 		return $path;
 	}
+}
+############################## sharedKeys ##############################
+sub sharedKeys{
+	my $h1=shift();
+	my $h2=shift();
+	my @keys=();
+	foreach my $key(keys(%{$h1})){if(exists($h2->{$key})){push(@keys,$key);}}
+	return @keys;
 }
 ############################## sizeFiles ##############################
 sub sizeFiles{
@@ -1585,7 +1661,7 @@ sub tripleSelect{
 	$subject=~s/\%/.*/g;
 	$predicate=~s/\%/.*/g;
 	$object=~s/\%/.*/g;
-	my @files=listFiles(undef,undef,-1,$dbDir);
+	my @files=listFiles(undef,undef,-1,$dbdir);
 	my @files=narrowDownByPredicate($predicate,@files);
 	my $results={};
 	foreach my $file(@files){
@@ -1625,31 +1701,31 @@ sub tsvToJson{
 }
 ############################## test ##############################
 sub test{
-	testSub("getPredicateFromFile(\"$dbDir/A.txt\")","A");
-	testSub("getPredicateFromFile(\"$dbDir/B/A.txt\")","B/A");
-	testSub("getPredicateFromFile(\"$dbDir/B/A.txt.gz\")","B/A");
-	testSub("getPredicateFromFile(\"$dbDir/B/A.txt.bz2\")","B/A");
+	testSub("getPredicateFromFile(\"$dbdir/A.txt\")","A");
+	testSub("getPredicateFromFile(\"$dbdir/B/A.txt\")","B/A");
+	testSub("getPredicateFromFile(\"$dbdir/B/A.txt.gz\")","B/A");
+	testSub("getPredicateFromFile(\"$dbdir/B/A.txt.bz2\")","B/A");
 	testSub("getPredicateFromFile(\"/A/B/C/D/E.txt\")","/A/B/C/D/E");
 	testSub("getPredicateFromFile(\"test2/db/B/A.txt\")","test2:B/A");
-	testSub("getPredicateFromFile(\"$dbDir/https/moirai2.github.io/schema/daemon/bash.txt\")","https://moirai2.github.io/schema/daemon/bash");
-	testSub("getPredicateFromFile(\"$dbDir/http/localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage.txt\")","http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage");
-	testSub("getPredicateFromFile(\"$dbDir/ssh/ah3q/dgt-ac4/A/B/C.txt\")","ah3q\@dgt-ac4:A/B/C");
-	testSub("getPredicateFromFile(\"$dbDir/ssh/ah3q/dgt-ac4/A/B/C.txt.bz2\")","ah3q\@dgt-ac4:A/B/C");
-	testSub("getFileFromPredicate(\"A/B%\")","$dbDir");
-	testSub("getFileFromPredicate(\"A\")","$dbDir/A.txt");
-	testSub("getFileFromPredicate(\"A/B\")","$dbDir/A/B.txt");
-	createFile("$dbDir/A/B.txt","A\tA1");
-	system("gzip $dbDir/A/B.txt");
-	testSub("getFileFromPredicate(\"A/B\")","$dbDir/A/B.txt.gz");
-	system("rm $dbDir/A/B.txt.gz");
-	testSub("getFileFromPredicate(\"A/B#CDF\")","$dbDir/A/B.txt");
-	testSub("getFileFromPredicate(\"A/B.json\")","$dbDir/A/B.txt");
-	testSub("getFileFromPredicate(\"A/B.json#D\")","$dbDir/A/B.txt");
+	testSub("getPredicateFromFile(\"$dbdir/https/moirai2.github.io/schema/daemon/bash.txt\")","https://moirai2.github.io/schema/daemon/bash");
+	testSub("getPredicateFromFile(\"$dbdir/http/localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage.txt\")","http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage");
+	testSub("getPredicateFromFile(\"$dbdir/ssh/ah3q/dgt-ac4/A/B/C.txt\")","ah3q\@dgt-ac4:A/B/C");
+	testSub("getPredicateFromFile(\"$dbdir/ssh/ah3q/dgt-ac4/A/B/C.txt.bz2\")","ah3q\@dgt-ac4:A/B/C");
+	testSub("getFileFromPredicate(\"A/B%\")","$dbdir");
+	testSub("getFileFromPredicate(\"A\")","$dbdir/A.txt");
+	testSub("getFileFromPredicate(\"A/B\")","$dbdir/A/B.txt");
+	createFile("$dbdir/A/B.txt","A\tA1");
+	system("gzip $dbdir/A/B.txt");
+	testSub("getFileFromPredicate(\"A/B\")","$dbdir/A/B.txt.gz");
+	system("rm $dbdir/A/B.txt.gz");
+	testSub("getFileFromPredicate(\"A/B#CDF\")","$dbdir/A/B.txt");
+	testSub("getFileFromPredicate(\"A/B.json\")","$dbdir/A/B.txt");
+	testSub("getFileFromPredicate(\"A/B.json#D\")","$dbdir/A/B.txt");
 	testSub("getFileFromPredicate(\"test2:A/B\")","test2/db/A/B.txt");
-	testSub("getFileFromPredicate(\"http://A/B\")","$dbDir/http/A/B.txt");
-	testSub("getFileFromPredicate(\"https://A/B/C/D\")","$dbDir/https/A/B/C/D.txt");
-	testSub("getFileFromPredicate(\"http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage\")","$dbDir/http/localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage.txt");
-	testSub("getFileFromPredicate(\"ah3q\\\@dgt-ac4:A/B\")","$dbDir/ssh/ah3q/dgt-ac4/A/B.txt");
+	testSub("getFileFromPredicate(\"http://A/B\")","$dbdir/http/A/B.txt");
+	testSub("getFileFromPredicate(\"https://A/B/C/D\")","$dbdir/https/A/B/C/D.txt");
+	testSub("getFileFromPredicate(\"http://localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage\")","$dbdir/http/localhost/~ah3q/gitlab/moirai2dgt/geneBodyCoverage/db/allImage.txt");
+	testSub("getFileFromPredicate(\"ah3q\\\@dgt-ac4:A/B\")","$dbdir/ssh/ah3q/dgt-ac4/A/B.txt");
 	rmdir("moirai/db/A/");
 	rmdir("moirai/db/");
 	rmdir("moirai/");
@@ -1657,91 +1733,101 @@ sub test{
 	mkdir("test/db");
 	createFile("test/db/id.txt","A\tA1","B\tB1","C\tC1","D\tD1");
 	createFile("test/db/name.txt","A1\tAkira","B1\tBen","C1\tChris","D1\tDavid");
-	testCommand("perl rdf.pl linecount test/db/id.txt","test/db/id.txt\tfile/linecount\t4");
-	testCommand("perl rdf.pl md5 test/db/id.txt","test/db/id.txt\tfile/md5\t131e61dab9612108824858dc497bf713");
-	testCommand("perl rdf.pl filesize test/db/id.txt","test/db/id.txt\tfile/filesize\t20");
-	testCommand("perl rdf.pl seqcount test/db/id.txt","test/db/id.txt\tfile/seqcount\t4");
-	testCommand("perl rdf.pl -d test select ","A\tid\tA1\nA1\tname\tAkira\nB\tid\tB1\nB1\tname\tBen\nC\tid\tC1\nC1\tname\tChris\nD\tid\tD1\nD1\tname\tDavid");
-	testCommand("perl rdf.pl -d test select A","A\tid\tA1");
-	testCommand("perl rdf.pl -d test select % id","A\tid\tA1\nB\tid\tB1\nC\tid\tC1\nD\tid\tD1");
-	testCommand("perl rdf.pl -d test select % % B1","B\tid\tB1");
-	testCommand("perl rdf.pl -d test select A%","A\tid\tA1\nA1\tname\tAkira");
-	testCommand("perl rdf.pl -d test select A% n%","A1\tname\tAkira");
-	testCommand("perl rdf.pl -d test select % % A%","A\tid\tA1\nA1\tname\tAkira");
-	testCommand("perl rdf.pl -d test select %1","A1\tname\tAkira\nB1\tname\tBen\nC1\tname\tChris\nD1\tname\tDavid");
-	testCommand("perl rdf.pl -d test delete A%","deleted 2");
-	testCommand("perl rdf.pl -d test select ","B\tid\tB1\nB1\tname\tBen\nC\tid\tC1\nC1\tname\tChris\nD\tid\tD1\nD1\tname\tDavid");
-	testCommand("perl rdf.pl -d test delete % name","deleted 3");
-	testCommand("perl rdf.pl -d test select ","B\tid\tB1\nC\tid\tC1\nD\tid\tD1");
-	testCommand("perl rdf.pl -d test delete % % %1","deleted 3");
-	testCommand("perl rdf.pl -d test insert T name Tsunami","inserted 1");
-	testCommand("perl rdf.pl -d test select T","T\tname\tTsunami");
-	testCommand("perl rdf.pl -d test insert A name Akira","inserted 1");
-	testCommand("perl rdf.pl -d test select","A\tname\tAkira\nT\tname\tTsunami");
-	testCommand("perl rdf.pl -d test update A name Alice","updated 1");
-	testCommand("perl rdf.pl -d test select","A\tname\tAlice\nT\tname\tTsunami");
+	testCommand("perl $prgdir/rdf.pl linecount test/db/id.txt","test/db/id.txt\tfile/linecount\t4");
+	testCommand("perl $prgdir/rdf.pl md5 test/db/id.txt","test/db/id.txt\tfile/md5\t131e61dab9612108824858dc497bf713");
+	testCommand("perl $prgdir/rdf.pl filesize test/db/id.txt","test/db/id.txt\tfile/filesize\t20");
+	testCommand("perl $prgdir/rdf.pl seqcount test/db/id.txt","test/db/id.txt\tfile/seqcount\t4");
+	testCommand("perl $prgdir/rdf.pl -d test select ","A\tid\tA1\nA1\tname\tAkira\nB\tid\tB1\nB1\tname\tBen\nC\tid\tC1\nC1\tname\tChris\nD\tid\tD1\nD1\tname\tDavid");
+	testCommand("perl $prgdir/rdf.pl -d test select A","A\tid\tA1");
+	testCommand("perl $prgdir/rdf.pl -d test select % id","A\tid\tA1\nB\tid\tB1\nC\tid\tC1\nD\tid\tD1");
+	testCommand("perl $prgdir/rdf.pl -d test select % % B1","B\tid\tB1");
+	testCommand("perl $prgdir/rdf.pl -d test select A%","A\tid\tA1\nA1\tname\tAkira");
+	testCommand("perl $prgdir/rdf.pl -d test select A% n%","A1\tname\tAkira");
+	testCommand("perl $prgdir/rdf.pl -d test select % % A%","A\tid\tA1\nA1\tname\tAkira");
+	testCommand("perl $prgdir/rdf.pl -d test select %1","A1\tname\tAkira\nB1\tname\tBen\nC1\tname\tChris\nD1\tname\tDavid");
+	testCommand("perl $prgdir/rdf.pl -d test delete A%","deleted 2");
+	testCommand("perl $prgdir/rdf.pl -d test select ","B\tid\tB1\nB1\tname\tBen\nC\tid\tC1\nC1\tname\tChris\nD\tid\tD1\nD1\tname\tDavid");
+	testCommand("perl $prgdir/rdf.pl -d test delete % name","deleted 3");
+	testCommand("perl $prgdir/rdf.pl -d test select ","B\tid\tB1\nC\tid\tC1\nD\tid\tD1");
+	testCommand("perl $prgdir/rdf.pl -d test delete % % %1","deleted 3");
+	testCommand("perl $prgdir/rdf.pl -d test insert T name Tsunami","inserted 1");
+	testCommand("perl $prgdir/rdf.pl -d test select T","T\tname\tTsunami");
+	testCommand("perl $prgdir/rdf.pl -d test insert A name Akira","inserted 1");
+	testCommand("perl $prgdir/rdf.pl -d test select","A\tname\tAkira\nT\tname\tTsunami");
+	testCommand("perl $prgdir/rdf.pl -d test update A name Alice","updated 1");
+	testCommand("perl $prgdir/rdf.pl -d test select","A\tname\tAlice\nT\tname\tTsunami");
 	createFile("test/import.txt","A\tid\tA2","B\tid\tB2","C\tid\tC2","D\tid\tD2","A\tid\tA1","B\tid\tB1","C\tid\tC1","D\tid\tD1");
-	testCommand("perl rdf.pl -d test import < test/import.txt","inserted 8");
-	testCommand("perl rdf.pl -d test select % id","A\tid\tA1\nA\tid\tA2\nB\tid\tB1\nB\tid\tB2\nC\tid\tC1\nC\tid\tC2\nD\tid\tD1\nD\tid\tD2");
+	testCommand("perl $prgdir/rdf.pl -d test import < test/import.txt","inserted 8");
+	testCommand("perl $prgdir/rdf.pl -d test select % id","A\tid\tA1\nA\tid\tA2\nB\tid\tB1\nB\tid\tB2\nC\tid\tC1\nC\tid\tC2\nD\tid\tD1\nD\tid\tD2");
 	createFile("test/update.txt","A\tid\tA3","B\tid\tB3");
-	testCommand("perl rdf.pl -d test update < test/update.txt","updated 2");
-	testCommand("perl rdf.pl -d test select A id","A\tid\tA3");
-	testCommand("perl rdf.pl -d test select B id","B\tid\tB3");
+	testCommand("perl $prgdir/rdf.pl -d test update < test/update.txt","updated 2");
+	testCommand("perl $prgdir/rdf.pl -d test select A id","A\tid\tA3");
+	testCommand("perl $prgdir/rdf.pl -d test select B id","B\tid\tB3");
 	createFile("test/update.json","{\"A\":{\"name\":\"Akira\"},\"B\":{\"name\":\"Bob\"}}");
-	testCommand("perl rdf.pl -d test -f json update < test/update.json","updated 2");
-	testCommand("perl rdf.pl -d test select % name","A\tname\tAkira\nB\tname\tBob\nT\tname\tTsunami");
-	testCommand("perl rdf.pl -d test delete < test/update.txt","deleted 2");
-	testCommand("perl rdf.pl -d test select % id","C\tid\tC1\nC\tid\tC2\nD\tid\tD1\nD\tid\tD2");
-	testCommand("perl rdf.pl -d test -f json delete < test/update.json","deleted 2");
-	testCommand("perl rdf.pl -d test select % name","T\tname\tTsunami");
-	testCommand("perl rdf.pl -d test delete % % %","deleted 5");
-	testCommand("perl rdf.pl -d test -f json insert < test/update.json","inserted 2");
-	testCommand("perl rdf.pl -d test insert < test/import.txt","inserted 8");
-	testCommand("echo \"A\tB\nC\tD\n\"|perl rdf.pl -d test submit","inserted 2");
-	testCommand("echo \"{'E':'F','G':'H'}\n\"|perl rdf.pl -d test -f json submit","inserted 2");
-	testCommand("perl rdf.pl -d test delete % % %","deleted 14");
-	testCommand("echo \"A\tB\tC\nC\tD\tE\nC\tF\tG\"|perl rdf.pl -d test import","inserted 3");
-	testCommand("perl rdf.pl -d test query '\$a->B->\$c'","a\tc\nA\tC");
-	testCommand("perl rdf.pl -d test -f json  query '\$a->B->\$c'","[{\"a\":\"A\",\"c\":\"C\"}]");
-	testCommand("perl rdf.pl -d test query '\$a->B->\$c' '\$c->D->\$e'","a\tc\te\nA\tC\tE");
-	testCommand("perl rdf.pl -d test -f json  query '\$a->B->\$c' '\$c->D->\$e'","[{\"a\":\"A\",\"c\":\"C\",\"e\":\"E\"}]");
-	testCommand("echo \"C\tD\tH\"|perl rdf.pl -d test insert","inserted 1");
-	testCommand("perl rdf.pl -d test query '\$a->B->\$c' '\$c->D->\$e'","a\tc\te\nA\tC\tE\nA\tC\tH");
-	testCommand("perl rdf.pl -d test -f json  query '\$a->B->\$c' '\$c->D->\$e'","[{\"a\":\"A\",\"c\":\"C\",\"e\":\"E\"},{\"a\":\"A\",\"c\":\"C\",\"e\":\"H\"}]");
-	testCommand("perl rdf.pl -d test query '\$a->B->\$c' '\$c->D->\$e' '\$c->F->\$g'","a\tc\te\tg\nA\tC\tE\tG\nA\tC\tH\tG");
-	testCommand("perl rdf.pl -d test -f json  query '\$a->B->\$c' '\$c->D->\$e' '\$c->F->\$g'","[{\"a\":\"A\",\"c\":\"C\",\"e\":\"E\",\"g\":\"G\"},{\"a\":\"A\",\"c\":\"C\",\"e\":\"H\",\"g\":\"G\"}]");
-	testCommand("perl rdf.pl -d test delete % % %","deleted 4");
+	testCommand("perl $prgdir/rdf.pl -d test -f json update < test/update.json","updated 2");
+	testCommand("perl $prgdir/rdf.pl -d test select % name","A\tname\tAkira\nB\tname\tBob\nT\tname\tTsunami");
+	testCommand("perl $prgdir/rdf.pl -d test delete < test/update.txt","deleted 2");
+	testCommand("perl $prgdir/rdf.pl -d test select % id","C\tid\tC1\nC\tid\tC2\nD\tid\tD1\nD\tid\tD2");
+	testCommand("perl $prgdir/rdf.pl -d test -f json delete < test/update.json","deleted 2");
+	testCommand("perl $prgdir/rdf.pl -d test select % name","T\tname\tTsunami");
+	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 5");
+	testCommand("perl $prgdir/rdf.pl -d test -f json insert < test/update.json","inserted 2");
+	testCommand("perl $prgdir/rdf.pl -d test insert < test/import.txt","inserted 8");
+	testCommand("echo \"A\tB\nC\tD\n\"|perl $prgdir/rdf.pl -d test submit","inserted 2");
+	testCommand("echo \"{'E':'F','G':'H'}\n\"|perl $prgdir/rdf.pl -d test -f json submit","inserted 2");
+	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 14");
+	testCommand("echo \"A\tB\tC\nC\tD\tE\nC\tF\tG\"|perl $prgdir/rdf.pl -d test import","inserted 3");
+	testCommand("perl $prgdir/rdf.pl -d test query '\$a->B->\$c'","a\tc\nA\tC");
+	testCommand("perl $prgdir/rdf.pl -d test -f json  query '\$a->B->\$c'","[{\"a\":\"A\",\"c\":\"C\"}]");
+	testCommand("perl $prgdir/rdf.pl -d test query '\$a->B->\$c' '\$c->D->\$e'","a\tc\te\nA\tC\tE");
+	testCommand("perl $prgdir/rdf.pl -d test -f json  query '\$a->B->\$c' '\$c->D->\$e'","[{\"a\":\"A\",\"c\":\"C\",\"e\":\"E\"}]");
+	testCommand("echo \"C\tD\tH\"|perl $prgdir/rdf.pl -d test insert","inserted 1");
+	testCommand("perl $prgdir/rdf.pl -d test query '\$a->B->\$c' '\$c->D->\$e'","a\tc\te\nA\tC\tE\nA\tC\tH");
+	testCommand("perl $prgdir/rdf.pl -d test -f json  query '\$a->B->\$c' '\$c->D->\$e'","[{\"a\":\"A\",\"c\":\"C\",\"e\":\"E\"},{\"a\":\"A\",\"c\":\"C\",\"e\":\"H\"}]");
+	testCommand("perl $prgdir/rdf.pl -d test query '\$a->B->\$c' '\$c->D->\$e' '\$c->F->\$g'","a\tc\te\tg\nA\tC\tE\tG\nA\tC\tH\tG");
+	testCommand("perl $prgdir/rdf.pl -d test -f json  query '\$a->B->\$c' '\$c->D->\$e' '\$c->F->\$g'","[{\"a\":\"A\",\"c\":\"C\",\"e\":\"E\",\"g\":\"G\"},{\"a\":\"A\",\"c\":\"C\",\"e\":\"H\",\"g\":\"G\"}]");
+	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 4");
 	unlink("test/update.txt");
 	unlink("test/update.json");
 	unlink("test/import.txt");
 	rmdir("test/db");
 	rmdir("test/log/error");
 	rmdir("test/log");
-	testCommand("perl rdf.pl -d test/A insert id0 name Tsunami","inserted 1");
-	testCommand("perl rdf.pl -d test/B insert id0 country Japan","inserted 1");
-	testCommand("perl rdf.pl -d test/A query '\$id->name->\$name'","id\tname\nid0\tTsunami");
-	testCommand("perl rdf.pl -d test/B query '\$id->country->\$country'","country\tid\nJapan\tid0");
-	testCommand("perl rdf.pl -d test/A query '\$id->name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
-	testCommand("perl rdf.pl -d test/A query '\$id->test/A:name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
-	testCommand("perl rdf.pl query '\$id->test/A:name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
-	testCommand("perl rdf.pl -d test/A delete % % %","deleted 1");
-	testCommand("perl rdf.pl -d test/B delete % % %","deleted 1");
+	testCommand("perl $prgdir/rdf.pl -d test/A insert id0 name Tsunami","inserted 1");
+	testCommand("perl $prgdir/rdf.pl -d test/B insert id0 country Japan","inserted 1");
+	testCommand("perl $prgdir/rdf.pl -d test/A query '\$id->name->\$name'","id\tname\nid0\tTsunami");
+	testCommand("perl $prgdir/rdf.pl -d test/B query '\$id->country->\$country'","country\tid\nJapan\tid0");
+	testCommand("perl $prgdir/rdf.pl -d test/A query '\$id->name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
+	testCommand("perl $prgdir/rdf.pl -d test/A query '\$id->test/A:name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
+	testCommand("perl $prgdir/rdf.pl query '\$id->test/A:name->\$name,\$id->test/B:country->\$country'","country\tid\tname\nJapan\tid0\tTsunami");
+	testCommand("perl $prgdir/rdf.pl -d test/A delete % % %","deleted 1");
+	testCommand("perl $prgdir/rdf.pl -d test/B delete % % %","deleted 1");
 	rmdir("test/A/db");
 	rmdir("test/B/db");
 	rmdir("test/B/log");
 	rmdir("test/A");
 	rmdir("test/B");
-	testCommand("perl rdf.pl -q -d test insert A B C","");
-	testCommand("perl rdf.pl -d test select","A\tB\tC");
-	testCommand("perl rdf.pl -f tsv -d test select","A\tB\tC");
-	testCommand("perl rdf.pl -d test insert A B D","inserted 1");
-	testCommand("perl rdf.pl -d test -f tsv select","A\tB\tC\nA\tB\tD");
-	testCommand("perl rdf.pl -d test -f json select","{\"A\":{\"B\":[\"C\",\"D\"]}}");
-	testCommand("perl rdf.pl -d test delete % % %","deleted 2");
-	testCommand("perl rdf.pl -q -d test assign A B C","");
-	testCommand("perl rdf.pl -f json -d test select","{\"A\":{\"B\":\"C\"}}");
-	testCommand("perl rdf.pl -d test assign A B C","inserted 0");
-	testCommand("perl rdf.pl -q -d test delete % % %","");
+	testCommand("perl $prgdir/rdf.pl -q -d test insert A B C","");
+	testCommand("perl $prgdir/rdf.pl -d test select","A\tB\tC");
+	testCommand("perl $prgdir/rdf.pl -f tsv -d test select","A\tB\tC");
+	testCommand("perl $prgdir/rdf.pl -d test insert A B D","inserted 1");
+	testCommand("perl $prgdir/rdf.pl -d test -f tsv select","A\tB\tC\nA\tB\tD");
+	testCommand("perl $prgdir/rdf.pl -d test -f json select","{\"A\":{\"B\":[\"C\",\"D\"]}}");
+	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 2");
+	testCommand("perl $prgdir/rdf.pl -q -d test assign A B C","");
+	testCommand("perl $prgdir/rdf.pl -f json -d test select","{\"A\":{\"B\":\"C\"}}");
+	testCommand("perl $prgdir/rdf.pl -d test assign A B C","inserted 0");
+	testCommand("perl $prgdir/rdf.pl -q -d test delete % % %","");
+	createFile("test/import.txt","A\tB\tC","X\tB\tY","C\tD\tE","C\tD\tH","C\tD\tI","F\tD\tG");
+	testCommand("perl $prgdir/rdf.pl -d test insert < test/import.txt","inserted 6");
+	testCommand("perl $prgdir/rdf.pl -d test query '\$a->B->\$c,\$c->D->\$e'","a\tc\te\nA\tC\tE\nA\tC\tH\nA\tC\tI");
+	testCommand("perl $prgdir/rdf.pl -d test query '\$a->B->\$c,\$c->D->(\$e)'","a\tc\te\nA\tC\tE,H,I");
+	testCommand("perl $prgdir/rdf.pl -d test query '(\$a)->B->\$c,\$c->D->(\$e)'","a\tc\te\nA\tC\tE,H,I");
+	testCommand("perl $prgdir/rdf.pl -x -d test query '\$a->B->\$c,\$c->D->\$e'","a\tc\te\nA\tC\tE\nA\tC\tH\nA\tC\tI\nX\tY\t\n\tF\tG");
+	testCommand("perl $prgdir/rdf.pl -x -d test query '\$a->B->\$c,\$c->D->(\$e)'","a\tc\te\nA\tC\tE,H,I\nX\tY\t\n\tF\tG");
+	unlink("test/import.txt");
+	unlink("test/db/B.txt");
+	unlink("test/db/D.txt");
 	rmdir("test/db");
 	rmdir("test");
 }

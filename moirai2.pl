@@ -1255,12 +1255,12 @@ sub commandProcess{
 	if(defined($opt_Q)){$commands->{$cmdurl}->{$urls->{"daemon/qjob/opt"}}=$opt_Q;}
 	if(defined($opt_r)){$commands->{$cmdurl}->{$urls->{"daemon/return"}}=removeDollar($opt_r);}
 	if(defined($opt_f)){$commands->{$cmdurl}->{$urls->{"daemon/filestats"}}=handleValues($opt_f);}
-	if(defined($opt_l)){
-		my $line="#Command: ".basename($command->{$urls->{"daemon/command"}});
-		if(scalar(@inputs)>0){$line.=" \$".join(" \$",@inputs);}
-		if(scalar(@outputs)>0){$line.=" \$".join(" \$",@outputs);}
-		print STDERR "$line\n";
-	}
+	#if(defined($opt_l)){
+	#	my $line="#Command: ".basename($command->{$urls->{"daemon/command"}});
+	#	if(scalar(@inputs)>0){$line.=" \$".join(" \$",@inputs);}
+	#	if(scalar(@outputs)>0){$line.=" \$".join(" \$",@outputs);}
+	#	print STDERR "$line\n";
+	#}
 	foreach my $input(@inputs){
 		if(scalar(@arguments)==0){last;}
 		if(exists($userdefined->{$input})){next;}
@@ -1424,6 +1424,7 @@ sub completeProcess{
 		close($reader);
 	}
 	while(my ($key,$val)=each(%{$logs})){$triples->{$key}=$val;}
+	if(defined($opt_l)){print STDERR "#Completing: $execid with '$status' status\n";}
 	#statusfile
 	my $timestarted;
 	my $timeended;
@@ -3112,7 +3113,7 @@ sub rsyncDirectory{
 	my $fromDir=shift();
 	my $toDir=shift();
 	my $command="rsync -r $fromDir $toDir";
-	if(defined($opt_l)){print STDERR "$command\n";}
+	if(defined($opt_l)){print STDERR "#rsync: $fromDir => $toDir\n";}
 	system($command);
 }
 ############################## tarArchiveDirectory ##############################
