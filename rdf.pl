@@ -127,6 +127,8 @@ if(defined($opt_h)||scalar(@ARGV)==0){
 }
 my $command=shift(@ARGV);
 my $moiraidir=(defined($opt_d))?$opt_d:"moirai";
+my $ctrldir="$moiraidir/ctrl";
+my $submitdir="$ctrldir/submit";
 my $jobdir="$moiraidir/ctrl/job";
 my $dbdir="$moiraidir/db";
 my $logdir="$moiraidir/log";
@@ -144,6 +146,7 @@ elsif($command eq"import"){commandImport(@ARGV);}
 elsif($command eq"insert"){commandInsert(@ARGV);}
 elsif($command eq"linecount"){commandLinecount(@ARGV);}
 elsif($command eq"md5"){commandMd5(@ARGV);}
+elsif($command eq "progress"){commandProgress(@ARGV);}
 elsif($command eq"prompt"){commandPrompt(@ARGV);}
 elsif($command eq"query"){commandQuery(@ARGV);}
 elsif($command eq"select"){commandSelect(@ARGV);}
@@ -563,16 +566,30 @@ sub commandSeqcount{
 }
 ############################## commandSubmit ##############################
 sub commandSubmit{
-	my $total=0;
+	my @files=@_;
 	if(!defined($opt_f)){$opt_f="tsv";}
-	my $reader=IO::File->new("-");
-	my $json=($opt_f eq "tsv")?readHash($reader):readJson($reader);
-	close($reader);
-	my $id="w".getDatetime();
 	my $rdf={};
-	$rdf->{$id}={};
-	foreach my $key(keys(%{$json})){$rdf->{$id}->{$key}=$json->{$key};}
-	my $total=insertJson($rdf);
+	$rdf->{"daemon"}={};
+	foreach my $file(@files){
+		my $reader=IO::File->new($file);
+		my $id=basename($file,".txt");
+		my $json=($opt_f eq "tsv")?readHash($reader):readJson($reader);
+		close($reader);
+		$rdf->{$id}={};
+		$rdf->{"daemon"}->{"wrkid"}=$id;
+		foreach my $key(keys(%{$json})){$rdf->{$id}->{$key}=$json->{$key};}
+	}
+	if(scalar(@files)==0){
+		my $reader=IO::File->new("-");
+		my $json=($opt_f eq "tsv")?readHash($reader):readJson($reader);
+		close($reader);
+		sleep(1);
+		my $id=getNewWrkid();
+		$rdf->{$id}={};
+		$rdf->{"daemon"}->{"wrkid"}=$id;
+		foreach my $key(keys(%{$json})){$rdf->{$id}->{$key}=$json->{$key};}
+	}
+	my $total+=insertJson($rdf);
 	if($total>0){utime(undef,undef,$moiraidir);}
 	if(!defined($opt_q)){print "inserted $total\n";}
 }
@@ -852,6 +869,19 @@ sub getDate{
 }
 ############################## getDatetime ##############################
 sub getDatetime{my $time=shift;return getDate("",$time).getTime("",$time);}
+############################## getFiles ##############################
+sub getFiles{
+	my $directory=shift();
+	my @files=();
+	opendir(DIR,$directory);
+	foreach my $file(readdir(DIR)){
+		if($file=~/^\./){next;}
+		if($file eq ""){next;}
+		push(@files,"$directory/$file");
+	}
+	closedir(DIR);
+	return @files;
+}
 ############################## getFileFromExecid ##############################
 sub getFileFromExecid{
 	my $execid=shift();
@@ -885,6 +915,17 @@ sub getHttpContent{
 	my $res=$agent->request($request);
 	if($res->is_success){return $res->content;}
 	elsif($res->is_error){print $res;}
+}
+############################## getNewWrkid ##############################
+sub getNewWrkid{
+	my $id="w".getDatetime();
+	my $results=tripleSelect("daemon","wrkid",$id);
+	while(scalar(keys(%{$results}))>0){
+		sleep(1);
+		$id="w".getDatetime();
+		$results=tripleSelect("daemon","wrkid",$id);
+	}
+	return $id;
 }
 ############################## getPredicateFromFile ##############################
 sub getPredicateFromFile{
@@ -1357,6 +1398,37 @@ sub printTripleInTSVFormat{
 		}
 	}
 }
+############################## commandProgress ##############################
+sub commandProgress{
+	my @logFiles=listFiles("txt",undef,undef,"$moiraidir/ctrl/job");
+	my $logs=readLogs(@logFiles);
+	my @submitFiles=getFiles($submitdir);
+	foreach my $file(@submitFiles){
+		my $basename=basename($file,".txt");
+		my $hash={};
+		my @stats=stat($file);
+		my $modtime=$stats[9];
+		$hash->{"time"}=getDate("/",$modtime)." ".getTime(":",$modtime);
+		$hash->{"execute"}="submitted";
+		$hash->{"wrkid"}=$basename;
+		open(IN,$file);
+		while(<IN>){
+			chomp;
+			my ($key,$val)=split(/\t/);
+			if(!exists($hash->{$key})){$hash->{$key}=$val;}
+			elsif(ref($hash->{$key}) eq "ARRAY"){push(@{$hash->{$key}},$val);}
+			else{$hash->{$key}=[$hash->{$key},$val];}
+		}
+		close(IN);
+		$logs->{$basename}=$hash;
+	}
+	my @json=();
+	foreach my $id(sort{$a cmp $b}keys(%{$logs})){
+		my $hash=$logs->{$id};
+		push(@json,$hash);
+	}
+	print jsonEncode(\@json)."\n";
+}
 ############################## queryResults ##############################
 sub queryResults{
 	my @queries=@_;
@@ -1383,7 +1455,7 @@ sub queryResults{
 				my $match=0;
 				foreach my $k(@keys){if($h1->{$k}ne$h2->{$k}){$error=1;last;}$match++;}
 				if($error==1){next;}
-				if($match==0){next;}
+				#if($match==0){next;}#There is a chance where no variable matches...
 				my $hash={};
 				foreach my $k(keys(%{$h1})){$hash->{$k}=$h1->{$k};}
 				foreach my $k(keys(%{$h2})){if(!exists($h1->{$k})){$hash->{$k}=$h2->{$k};}}
@@ -1547,6 +1619,31 @@ sub readJson{
 	my $json="";
 	while(<$reader>){chomp;s/\r//g;$json.=$_;}
 	return jsonDecode($json);
+}
+############################## readLogs ##############################
+sub readLogs{
+	my @logFiles=@_;
+	my $hash={};
+	foreach my $logFile(@logFiles){
+		my $basename=basename($logFile,".txt");
+		$hash->{$basename}={};
+		$hash->{$basename}->{"logfile"}=$logFile;
+		open(IN,$logFile);
+		while(<IN>){
+			chomp;
+			my ($key,$val)=split(/\t/);
+			if($key=~/https\:\/\/moirai2\.github\.io\/schema\/daemon\/(.+)$/){
+				$key=$1;
+				if($key eq "timeregistered"){$key="time";$val=getDate("/",$val)." ".getTime(":",$val);}
+				if($key eq "timestarted"){$key="time";$val=getDate("/",$val)." ".getTime(":",$val)}
+				if($key eq "timeended"){$key="time";$val=getDate("/",$val)." ".getTime(":",$val)}
+				$hash->{$basename}->{$key}=$val;
+			}
+		}
+		if(!defined($hash->{$basename}->{"workid"})){$hash->{$basename}->{"workid"}=$basename;}
+		close(IN);
+	}
+	return $hash;
 }
 ############################## readText ##############################
 sub readText{
@@ -1773,9 +1870,9 @@ sub test{
 	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 5");
 	testCommand("perl $prgdir/rdf.pl -d test -f json insert < test/update.json","inserted 2");
 	testCommand("perl $prgdir/rdf.pl -d test insert < test/import.txt","inserted 8");
-	testCommand("echo \"A\tB\nC\tD\n\"|perl $prgdir/rdf.pl -d test submit","inserted 2");
-	testCommand("echo \"{'E':'F','G':'H'}\n\"|perl $prgdir/rdf.pl -d test -f json submit","inserted 2");
-	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 14");
+	testCommand("echo \"A\tB\nC\tD\n\"|perl $prgdir/rdf.pl -d test submit","inserted 3");
+	testCommand("echo \"{'E':'F','G':'H'}\n\"|perl $prgdir/rdf.pl -d test -f json submit","inserted 3");
+	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 16");
 	testCommand("echo \"A\tB\tC\nC\tD\tE\nC\tF\tG\"|perl $prgdir/rdf.pl -d test import","inserted 3");
 	testCommand("perl $prgdir/rdf.pl -d test query '\$a->B->\$c'","a\tc\nA\tC");
 	testCommand("perl $prgdir/rdf.pl -d test -f json  query '\$a->B->\$c'","[{\"a\":\"A\",\"c\":\"C\"}]");

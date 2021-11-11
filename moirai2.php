@@ -12,7 +12,8 @@ if($command=="submit"){
 	if(!file_exists($moiraidir)){mkdir($moiraidir);chmod($moiraidir,0777);}
 	if(!file_exists("$moiraidir/ctrl")){mkdir("$moiraidir/ctrl");chmod("$moiraidir/ctrl",0777);}
 	if(!file_exists("$moiraidir/ctrl/submit")){mkdir("$moiraidir/ctrl/submit");chmod("$moiraidir/ctrl/submit",0777);}
-	rename($tsv,"$moiraidir/ctrl/submit/".basename($tsv).".txt");
+	$path=createFile("$moiraidir/ctrl/submit");
+	rename($tsv,$path);
 //############################## insert.php ##############################
 }else if($command=="insert"){
 	$db=filterDatabasePath($_POST["rdfdb"]);
@@ -45,6 +46,12 @@ if($command=="submit"){
 	if($json==null)exit(1);
 	exec("perl rdf.pl -d $db -f json select < $json",$array);
 	unlink($json);
+	foreach($array as $line){echo "$line\n";}
+//############################## progress.php ##############################
+}else if($command=="progress"){
+	$db=filterDatabasePath($_POST["rdfdb"]);
+	if($db==null)exit(1);
+	exec("perl rdf.pl -d $db progress",$array);
 	foreach($array as $line){echo "$line\n";}
 //############################## query.php ##############################
 }else if($command=="query"){
@@ -138,7 +145,7 @@ if($command=="submit"){
 	$downloadName="download.zip";
 	$result=$zip->open($zipFilepath,ZIPARCHIVE::CREATE|ZIPARCHIVE::OVERWRITE);
 	if($result!==true){exit();}
-	foreach(list_file($directory)as $file){
+	foreach(listFiles($directory)as $file){
 		$filename=basename($file);
 		$dirname=dirname($file);
 		if($dirname!=""&&$dirname!=".")$zip->addEmptyDir($dirname);
@@ -153,8 +160,8 @@ if($command=="submit"){
 //############################## default ##############################
 }else{
 }
-// ############################## list_file ##############################
-function list_file($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
+// ############################## listFiles ##############################
+function listFiles($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
 	if($array==NULL)$array=array();
 	if(is_file($path)){
 		if(!preg_match("/$suffix$/",$path))return $array;
@@ -176,7 +183,7 @@ function list_file($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
 				if(preg_match("/$suffix$/",$basename))array_push($array,$name);
 			}else if(is_dir($name)){
 				if($add_directory)array_push($array,"$name/");
-				if($recursive!=0)$array=list_file($name,$recursive-1,$add_directory,$suffix,$array);
+				if($recursive!=0)$array=listFiles($name,$recursive-1,$add_directory,$suffix,$array);
 			}
 		}
 	}
@@ -184,6 +191,12 @@ function list_file($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
 }
 //############################## filterDatabasePath ##############################
 function filterDatabasePath($db){return preg_replace("/[^a-zA-Z0-9\.\_]+/","",$db);}
+//############################## createFile ##############################
+function createFile($directory){
+	$path="$directory/w".date("YmdHis").".txt";
+	while(file_exists($path)){sleep(1);$path="$directory/".date("YmdHis").".txt";}
+	return $path;
+}
 //############################## tmpData ##############################
 function tmpData($data){
 	if($data==null)return;
