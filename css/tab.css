@@ -1,0 +1,28 @@
+.tab-area {
+  display: flex;
+  justify-content: space-around;
+  background-color: #222e3e;
+  cursor: pointer;
+}
+.tab {
+  width: 300px;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  color: white;
+  border-right: 1px solid #50637b;
+  border-left: 1px solid #222e3e;
+}
+.tab.active {
+  background-color: #ccc;
+  color: #222e3e;
+  border: none;
+}
+.content {
+  display: none;
+}
+.content.show {
+  margin-top: 5px;
+  display: block;
+}
+h1 {text-align:center}

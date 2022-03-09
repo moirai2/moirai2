@@ -1,0 +1,17 @@
+version: '3'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    ports:
+     - "5000:5000"
+    volumes:
+      - ./flask/code:/code
+  redis:
+    image: "redis"
+    ports:
+     - "6379:6379"
+    volumes:
+      - ./flask/data:/data
+    command: redis-server --appendonly yes
