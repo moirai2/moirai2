@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$instanceid","https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.txt\"","aws ec2 describe-instances --instance-ids $instanceid > $output"],"https://moirai2.github.io/schema/daemon/output":"$output"}

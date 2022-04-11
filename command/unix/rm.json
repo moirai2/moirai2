@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$file","https://moirai2.github.io/schema/daemon/bash":"rm $file"}

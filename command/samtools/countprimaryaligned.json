@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["flag=$(samtools view -c -f 1 $input)","if [ $flag -eq 0 ]","then","count=$(samtools view -F 0x504 $input | wc -l)","else","count=$(samtools view -f 0x42 -F 0x504 $input | wc -l)","fi"],"https://moirai2.github.io/schema/daemon/output":"$count"}

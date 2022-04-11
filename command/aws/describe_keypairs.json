@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$keyname","https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.txt\"","aws ec2 describe-key-pairs --key-name $keyname > $output"],"https://moirai2.github.io/schema/daemon/output":"$output"}

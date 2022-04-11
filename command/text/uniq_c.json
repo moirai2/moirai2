@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/uniq.txt\"","uniq -c $input > $output"],"https://moirai2.github.io/schema/daemon/output":"$output"}

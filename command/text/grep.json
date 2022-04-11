@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":["$pattern","$input"],"https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.txt\"","grep $pattern < $input > $output||true"],"https://moirai2.github.io/schema/daemon/output":"$output"}

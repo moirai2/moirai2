@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$keyname","https://moirai2.github.io/schema/daemon/bash":["pem=\"$workdir/$keyname.pem\"","aws ec2 create-key-pair --key-name $keyname --query \"KeyMaterial\" --output text > $pem","chmod 400 $pem"],"https://moirai2.github.io/schema/daemon/output":"$pem"}

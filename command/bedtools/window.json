@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":["$window","$input",{"$leftwindow":1000},{"$rightwindow":1000}],"https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.bed\"","bedtools window -a $window -b $input -l $leftwindow -r $rightwindow > $output"],"https://moirai2.github.io/schema/daemon/output":"$output"}

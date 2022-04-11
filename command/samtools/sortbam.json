@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/sort.bam\"","samtools sort -o $output $input 2>/dev/null"],"https://moirai2.github.io/schema/daemon/output":"$output"}

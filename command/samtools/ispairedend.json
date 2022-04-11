@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$bam","https://moirai2.github.io/schema/daemon/bash":["ispairedend=$(samtools view -h $bam|head -n 10000|samtools view -S -c -f 1 '-')","if [ $ispairedend -gt 0 ];then","ispairedend=1","else","ispairedend=0","fi"],"https://moirai2.github.io/schema/daemon/output":"$ispairedend"}

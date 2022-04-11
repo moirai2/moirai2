@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":["$input","$motif"],"https://moirai2.github.io/schema/daemon/bash":["outdir=$workdir/out","count=$outdir/site_counts.txt","html=$outdir/centrimo.html","txt=$outdir/centrimo.txt","centrimo -o $outdir $input $motif"],"https://moirai2.github.io/schema/daemon/output":["$count","$html","$txt"]}

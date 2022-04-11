@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/bash":"systemname=$(uname -s)","https://moirai2.github.io/schema/daemon/return":"$systemname"}

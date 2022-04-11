@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.bed.gz\"","bedtools bamtobed -i $input | gzip -c > $output"],"https://moirai2.github.io/schema/daemon/output":"$output"}

@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":["$directory","$installer"],"https://moirai2.github.io/schema/daemon/bash":["bash $installer -f -b -p $directory","$conda=$directory/bin/conda","$activate=$directory/bin/activate"],"https://moirai2.github.io/schema/daemon/output":["$conda","$activate"]}

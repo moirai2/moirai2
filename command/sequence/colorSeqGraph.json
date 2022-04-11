@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["temp=$tmpdir/temp.uniq","output=$tmpdir/output.png","uniqSeq $input|sort>$temp","colorSeq $temp|Graph.sh PIXEL -c base -W 800 -H 600 > $output","rm $temp","rm $workdir/$stderrfile"],"https://moirai2.github.io/schema/daemon/output":"$output"}

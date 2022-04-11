@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/bash":["ls $input > $output"],"https://moirai2.github.io/schema/daemon/input":["$input"],"https://moirai2.github.io/schema/daemon/output":["$output"]}

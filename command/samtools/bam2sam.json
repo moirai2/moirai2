@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.sam\"","samtools view -h $input > $output"],"https://moirai2.github.io/schema/daemon/docker":"moirai2/samtools","https://moirai2.github.io/schema/daemon/output":"$output"}

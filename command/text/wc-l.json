@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["count=$(wc -l<$input|perl -pe '$_=~s/^\\s+|\\s+$//g')"],"https://moirai2.github.io/schema/daemon/output":"$count"}

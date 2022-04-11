@@ -391,6 +391,7 @@ sub addNodeInstance{
 	my $name="$openStackMoiraiId-node-".getDatetime();
 	my $sshDir=$ENV{"HOME"}."/.ssh";
 	transferAuthorizedKeys("$sshDir/id_rsa.pub","$sshDir/authorized_keys");
+	waitForAllInstanceToComplete();
 	$nodeInstance=createInstance($nodeFlavor,$nodeImage,$keyPair,$nodeSecurityGroup,$nodeNetwork,$nodePort,$name,$serverPassword);
 	my $ip=getIpFromInstance($name);
 	if(!checkServerIsUpByPing($ip)){exit(1);}
@@ -2938,6 +2939,29 @@ sub waitUntillImageStatusIsXXXXX{
 		sleep(30);
 	}
 	return;
+}
+############################## waitForAllInstanceToComplete ##############################
+sub waitForAllInstanceToComplete{
+	if(!defined($opt_q)){
+		STDOUT->autoflush(1);
+		print ">Waiting for openstack to complete build or shutoff.";
+	}
+	while(1){
+		my $hit=0;
+		my $servers=listServers();
+		foreach my $server(@{$servers}){
+			if($server->{"Status"}=~/build/i){$hit=1;last;}
+			elsif($server->{"Status"}=~/shutoff/i){$hit=1;last;}
+		}
+		if($hit==0){last;}
+		if(!defined($opt_q)){print ".";}
+		sleep(30);
+	}
+	if(!defined($opt_q)){
+		print "  OK\n";
+		STDOUT->autoflush(0);
+	}
+	return 1;
 }
 ############################## waitUntillInstanceStatusIsXXXXX ##############################
 sub waitUntillInstanceIsActive{return waitUntillInstanceStatusIsXXXXX(shift(),"active");}

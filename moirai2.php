@@ -2,13 +2,12 @@
 $command=$_GET["command"];
 //############################## submit.php ##############################
 if($command=="submit"){
-	foreach($_POST as $key=>$value){$params[$key]=$value;}
-	$moiraidir=filterDatabasePath($params["rdfdb"]);
-	if($moiraidir==null)exit(1);
-	unset($params["rdfdb"]);
-	$tsv=tmpData($params);
+	$db=filterDatabasePath($_POST["rdfdb"]);
+	if($db==null)exit(1);
+	$tsv=tmpData($_POST);
 	chmod($tsv,0777);
 	if($tsv==null)exit(1);
+	$moiraidir=".moirai2";
 	if(!file_exists($moiraidir)){mkdir($moiraidir);chmod($moiraidir,0777);}
 	if(!file_exists("$moiraidir/ctrl")){mkdir("$moiraidir/ctrl");chmod("$moiraidir/ctrl",0777);}
 	if(!file_exists("$moiraidir/ctrl/submit")){mkdir("$moiraidir/ctrl/submit");chmod("$moiraidir/ctrl/submit",0777);}
@@ -20,6 +19,7 @@ if($command=="submit"){
 	if($db==null)exit(1);
 	$file=tmpData($_POST["data"]);
 	if($file==null)exit(1);
+	print_r("perl rdf.pl -q -d $db -f json insert < $file");
 	system("perl rdf.pl -q -d $db -f json insert < $file");
 	unlink($file);
 //############################## delete.php ##############################
@@ -61,7 +61,8 @@ if($command=="submit"){
 	if($json==null)exit(1);
 	exec("perl rdf.pl -d $db -f json query < $json",$array);
 	unlink($json);
-	foreach($array as $line){echo "$line\n";}
+	if(empty($array))echo "[]";
+	else foreach($array as $line){echo "$line\n";}
 //############################## symlink.php ##############################
 }else if($command=="symlink"){
 	$url=(isset($_POST["url"])&&strlen($_POST["url"])>0)?htmlspecialchars($_POST["url"]):NULL;
@@ -193,8 +194,8 @@ function listFiles($path,$recursive=-1,$add_directory=0,$suffix="",$array=NULL){
 function filterDatabasePath($db){return preg_replace("/[^a-zA-Z0-9\.\_]+/","",$db);}
 //############################## createFile ##############################
 function createFile($directory){
-	$path="$directory/w".date("YmdHis").".txt";
-	while(file_exists($path)){sleep(1);$path="$directory/".date("YmdHis").".txt";}
+	$path="$directory/s".date("YmdHis").".txt";
+	while(file_exists($path)){sleep(1);$path="$directory/s".date("YmdHis").".txt";}
 	return $path;
 }
 //############################## tmpData ##############################
@@ -211,6 +212,7 @@ function tmpData($data){
 		fwrite($writer,$data);
 	}
 	fclose($writer);
+	chmod($filepath,0777);
 	return $filepath;
 }
 ?>

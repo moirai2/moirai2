@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$keyname","https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.txt\"","aws ec2 delete-key-pair --key-name $keyname"],"https://moirai2.github.io/schema/daemon/output":"$output"}

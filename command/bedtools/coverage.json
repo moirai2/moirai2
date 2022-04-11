@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":["$input1","$input2"],"https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/output.txt\"","bedtools coverage -a $input1 -b $input2 > $output"],"https://moirai2.github.io/schema/daemon/output":"$output"}

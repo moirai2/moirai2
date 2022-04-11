@@ -1,0 +1,2 @@
+{"https://moirai2.github.io/schema/daemon/select":"$input","https://moirai2.github.io/schema/daemon/bash":["fastq=\"$workdir/output.fq\"","samtools view -S $input | tofastq.pl > $output"],"https://moirai2.github.io/schema/daemon/script":{"https://moirai2.github.io/schema/daemon/script/name":"tofastq.pl","https://moirai2.github.io/schema/daemon/script/code":["#!/usr/bin/perl","while(<STDIN>){","my @token=split(/\\t/);","print \"@\".$token[0].\"\\n\".$token[9].\"\\n+\\n\".$token[10].\"\\n\";","}"]},
+"https://moirai2.github.io/schema/daemon/output":"$output"}

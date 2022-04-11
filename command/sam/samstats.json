@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$bam","https://moirai2.github.io/schema/daemon/bash":["bam=`perl -e 'use Cwd;print Cwd::abs_path($ARGV[0]).\"\\n\"' $bam`","ln -s $bam $workdir/.","filename=`basename $bam`","html=\"$workdir/$filename.html\"","samstat $workdir/$filename > /dev/null","rm $workdir/$filename"],"https://moirai2.github.io/schema/daemon/output":"$html"}

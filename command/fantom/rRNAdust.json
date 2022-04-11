@@ -1,0 +1,11 @@
+{
+    "https://moirai2.github.io/schema/daemon/input":["$input","$artifact"],
+    "https://moirai2.github.io/schema/daemon/bash":[
+        "output=$tmpdir/output.fa",
+        "removed=$tmpdir/removed.fa",
+        "rRNAdust -s -a $removed $artifact $input > $output",
+        "rm $workdir/$stderrfile"
+    ],
+    "https://moirai2.github.io/schema/daemon/output":["$removed","$output"],
+    "https://moirai2.github.io/schema/daemon/seqcount":["$input","$removed","$output"]
+}

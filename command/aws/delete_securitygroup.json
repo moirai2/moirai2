@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$groupname","https://moirai2.github.io/schema/daemon/bash":"aws ec2 delete-security-group --group-name $groupname"}

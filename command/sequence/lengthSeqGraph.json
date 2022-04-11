@@ -1,0 +1,2 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["output=$tmpdir/output.png",
+"lengthSeq $input| Graph.sh BAR -v -s -c '#DF1F1F' -R 'count' -C 'sequence length' -t 'sequence length distribution' -W 800 -H 600 > $output","rm $workdir/$stderrfile"],"https://moirai2.github.io/schema/daemon/output":"$output"}

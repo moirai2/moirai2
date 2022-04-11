@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/docker":"ubuntu","https://moirai2.github.io/schema/daemon/bash":"unamea=$(uname -a)","https://moirai2.github.io/schema/daemon/output":"$unamea"}

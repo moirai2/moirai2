@@ -1,0 +1,31 @@
+<!doctype html>
+<head>
+    <title>{{command["path"]}}</title>
+    <link rel="stylesheet" type=text/css href="/static/css/classic.css">
+</head>
+<body>
+    <h2 class="heading03">{{command["path"]}}</h2>
+    <div>
+        <table>
+            <tr><th>Input</th></th><td><ul>
+                {% for input in command["input"] %}
+                <li>{{input}}</li>
+                {% endfor %}
+            </ul></td></tr>
+            <tr><th>Output</th><td><ul>
+                {% for output in command["output"] %}
+                <li>{{output}}</li>
+                {% endfor %}
+            </ul></td></tr>
+            <tr><th>Bash</th><td>
+                {% for line in command["bash"] %}
+                {{line}}<br>
+                {% endfor %}
+            </td></tr>
+        </table>
+    </div>
+    <form action="/run/{{command['path']}}" method="POST">
+        <button type='submit'>submit</button>
+    </form>
+</body>
+</html>

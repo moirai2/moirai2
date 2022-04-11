@@ -1,0 +1,25 @@
+{
+    "https://moirai2.github.io/schema/daemon/input":["$input","$reference"],
+    "https://moirai2.github.io/schema/daemon/bash":[
+        "seedFile=$tmpdir/delve.seed",
+        "model=$tmpdir/delve.model",
+        "samFile=$tmpdir/delve.sam",
+        "bamFile=$tmpdir/delve.bam",
+        "sortFile=$tmpdir/sort",
+        "filterFile=$tmpdir/filter.bam",
+        "output=$tmpdir/output.bam",
+        "delve seed -l 12 -s 8 -o $seedFile -t 8 $input $reference",
+        "delve align -u 1 -o $samFile -m $model -t 8 $seedFile $reference",
+        "rm $seefFile",
+        "samtools view -bSo $bamFile $samFile",
+        "rm $samFile",
+        "samtools sort $bamFile $sortFile",
+        "rm $bamFile",
+        "aln_filter -c 85 $sortFile.bam > $filterFile",
+        "rm $sortFile.bam",
+        "samtools view -q 20 -F 868 -u -bSo $output $filterFile",
+        "rm $filterFile"
+    ],
+    "https://moirai2.github.io/schema/daemon/output":["$output","$model"],
+    "https://moirai2.github.io/schema/daemon/seqcount":["$input","$output"]
+}

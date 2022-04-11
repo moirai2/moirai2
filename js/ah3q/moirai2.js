@@ -34,10 +34,10 @@ moirai2.prototype.submitJob=function(json){
 }
 moirai2.prototype.checkProgress=function(method){
 	var self=this;
-	var json={rdfdb:self.rdfdb};
-	var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=progress",data:json});
-	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
-	post.done(function(data){if(method!=null)method(data);});
+	//var json={rdfdb:self.rdfdb};
+	//var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=progress",data:json});
+	//post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
+	//post.done(function(data){if(method!=null)method(data);});
 }
 //######################################## Drag and Drop ########################################
 moirai2.prototype.initialize=function(id){

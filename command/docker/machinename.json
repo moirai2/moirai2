@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/docker":"ubuntu","https://moirai2.github.io/schema/daemon/bash":"machinename=$(uname -m)","https://moirai2.github.io/schema/daemon/output":"$machinename"}

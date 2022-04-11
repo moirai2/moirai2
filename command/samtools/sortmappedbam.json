@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["tmpfile=\"$workdir/tmp.bam\"","output=\"$workdir/sort.bam\"","samtools view -F 0x4 -bo $tmpfile $input","samtools sort -o $output $tmpfile 2>/dev/null","rm $tmpfile"],"https://moirai2.github.io/schema/daemon/output":"$output"}

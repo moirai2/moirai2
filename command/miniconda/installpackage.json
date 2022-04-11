@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/select":["$condapath","$condaenv","$package"],"https://moirai2.github.io/schema/daemon/bash":["$condapath install -y -n $condaenv $package"],"https://moirai2.github.io/schema/daemon/delete":"$condapath->installpackage->$package","https://moirai2.github.io/schema/daemon/output":"$package"}

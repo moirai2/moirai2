@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$geoid","https://moirai2.github.io/schema/daemon/bash":["studyid=`esearch -db gds -query $geoid | elink -target sra | efetch -db sra | xtract -pattern EXPERIMENT -element STUDY_REF@accession | uniq`","sleep 2"],"https://moirai2.github.io/schema/daemon/output":"$studyid","https://moirai2.github.io/schema/daemon/singlethread":true}

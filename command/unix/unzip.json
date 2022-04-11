@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":"$zip","https://moirai2.github.io/schema/daemon/bash":["if [ ${zip: -3} == '.gz' ]; then","output=`basename $zip .gz`","gzip -cd $zip > $workdir/$output","elif [ ${zip: -4} == '.bz2' ]; then","output=`basename $zip .bz2`","bzip2 -cd $zip > $workdir/$output","fi"],"https://moirai2.github.io/schema/daemon/output":"$output"}

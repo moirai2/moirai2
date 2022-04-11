@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/select":"$condapath","https://moirai2.github.io/schema/daemon/bash":["condainfo=\"$workdir/info.json\"","$condapath info --json > $condainfo"],"https://moirai2.github.io/schema/daemon/output":"$condainfo"}

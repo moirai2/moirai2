@@ -1,0 +1,2 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["output=$tmpdir/output.png",
+"baseSeq $input| Graph.sh COMPOSITE -v -s -c base -R 'sequence count' -C 'base index' -t 'base distribution' -W 800 -H 600 > $output","rm $workdir/stderr.txt"],"https://moirai2.github.io/schema/daemon/output":"$output"}

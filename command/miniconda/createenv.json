@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":["$condapath","$condaenv"],"https://moirai2.github.io/schema/daemon/bash":["$condapath create -y -n $condaenv"],"https://moirai2.github.io/schema/daemon/delete":"$condapath->createenv->$condaenv","https://moirai2.github.io/schema/daemon/insert":"$condapath->condaenv->$condaenv"}

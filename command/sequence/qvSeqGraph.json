@@ -1,0 +1,2 @@
+{"https://moirai2.github.io/schema/daemon/input":"$input","https://moirai2.github.io/schema/daemon/bash":["output=$tmpdir/output.png",
+"qvSeq $input| Graph.sh COMPOSITE -v -s -c qv -R 'sequence count' -C 'QV index' -t 'QV distribution' -W 800 -H 600 > $output","rm $workdir/$stderrfile"],"https://moirai2.github.io/schema/daemon/output":"$output"}

@@ -1,0 +1,1 @@
+{"https://moirai2.github.io/schema/daemon/input":["$input","reference"],"https://moirai2.github.io/schema/daemon/bash":["alnfile=\"$workdir/temp.aln\"","output=\"$workdir/output.sam\"","bwa aln $reference $input > $alnfile","bwa samse $reference $alnfile $input > $output"],"https://moirai2.github.io/schema/daemon/output":"$output"}
