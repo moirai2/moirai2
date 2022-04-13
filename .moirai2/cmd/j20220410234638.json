@@ -1,1 +1,0 @@
-{"https://moirai2.github.io/schema/daemon/bash":["output=(`ls .moirai2/ctrl`);"],"https://moirai2.github.io/schema/daemon/output":["$output"],"https://moirai2.github.io/schema/daemon/return":"output","https://moirai2.github.io/schema/daemon/sleeptime":"1"}

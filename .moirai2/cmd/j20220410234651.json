@@ -1,1 +1,0 @@
-{"https://moirai2.github.io/schema/daemon/bash":["sort -u $in1 > $out1"],"https://moirai2.github.io/schema/daemon/input":["$in1"],"https://moirai2.github.io/schema/daemon/output":["$out1"],"https://moirai2.github.io/schema/daemon/return":"out1","https://moirai2.github.io/schema/daemon/sleeptime":"1","https://moirai2.github.io/schema/daemon/suffix":{"in1":".txt","out1":".txt"}}

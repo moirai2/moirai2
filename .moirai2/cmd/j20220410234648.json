@@ -1,1 +1,0 @@
-{"https://moirai2.github.io/schema/daemon/bash":["sort -u $input > $output;"],"https://moirai2.github.io/schema/daemon/input":["$input"],"https://moirai2.github.io/schema/daemon/output":["$output"],"https://moirai2.github.io/schema/daemon/return":"output","https://moirai2.github.io/schema/daemon/sleeptime":"1"}

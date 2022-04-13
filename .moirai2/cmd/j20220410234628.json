@@ -1,1 +1,0 @@
-{"https://moirai2.github.io/schema/daemon/bash":["mkdir -p test/$dirname"],"https://moirai2.github.io/schema/daemon/input":["$dirname","$id"],"https://moirai2.github.io/schema/daemon/sleeptime":"1"}
