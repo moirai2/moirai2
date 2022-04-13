@@ -1,8 +1,0 @@
-############################## 2022/03/16 12:29:17 ##############################
->openstack token issue -f json
-############################## 2022/03/16 12:29:21 ##############################
->scp /var/folders/12/f5vg17pn5c76pg7wccd147kw0000gp/T/saSDIAk5x6/openstack.pl ubuntu@172.18.91.78:/local/home/ubuntu/.openstack/72btTZfmiD6v1y4gnPvq/openstack.pl
-############################## 2022/03/16 18:03:10 ##############################
->openstack token issue -f json
-############################## 2022/03/16 18:03:13 ##############################
->openstack server list -f json
