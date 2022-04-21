@@ -1,0 +1,79 @@
+<table>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418151803.json">.moirai2/cmd/j20220418151803.json</a></th></td>
+<tr><th>cmds</th><td>wc -l $in1 > $out1</td></tr>
+<tr><th>input</th><td>$in1 (suffix=.txt)</td></tr>
+<tr><th>output</th><td>$out1 (suffix=.txt)</td></tr>
+<tr><th>return</th><td>$stdout</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230214.json">.moirai2/cmd/j20220418230214.json</a></th></td>
+<tr><th>cmds</th><td>sort $file</td></tr>
+<tr><th>input</th><td>$file</td></tr>
+<tr><th>output</th><td></td></tr>
+<tr><th>return</th><td>$stdout</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230353.json">.moirai2/cmd/j20220418230353.json</a></th></td>
+<tr><th>cmds</th><td>sort $file|uniq -c>$output</td></tr>
+<tr><th>input</th><td>$file</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230412.json">.moirai2/cmd/j20220418230412.json</a></th></td>
+<tr><th>cmds</th><td>mkdir -p test/$dirname</td></tr>
+<tr><th>input</th><td>$dirname<br>$id</td></tr>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230419.json">.moirai2/cmd/j20220418230419.json</a></th></td>
+<tr><th>cmds</th><td>ls .moirai2/ctrl</td></tr>
+<tr><th>output</th><td></td></tr>
+<tr><th>return</th><td>$stdout</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230422.json">.moirai2/cmd/j20220418230422.json</a></th></td>
+<tr><th>cmds</th><td>output=(`ls .moirai2/ctrl`);</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230425.json">.moirai2/cmd/j20220418230425.json</a></th></td>
+<tr><th>cmds</th><td>ls -lt > $output</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230429.json">.moirai2/cmd/j20220418230429.json</a></th></td>
+<tr><th>cmds</th><td>output=(`ls .moirai2/ctrl`);</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$stdout</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230432.json">.moirai2/cmd/j20220418230432.json</a></th></td>
+<tr><th>cmds</th><td>sort -u $input > $output;</td></tr>
+<tr><th>input</th><td>$input</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230436.json">.moirai2/cmd/j20220418230436.json</a></th></td>
+<tr><th>cmds</th><td>sort -u $in1 > $out1</td></tr>
+<tr><th>input</th><td>$in1 (suffix=.txt)</td></tr>
+<tr><th>output</th><td>$out1 (suffix=.txt)</td></tr>
+<tr><th>return</th><td>$out1</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230439.json">.moirai2/cmd/j20220418230439.json</a></th></td>
+<tr><th>cmds</th><td>sort $input | uniq -c > $output</td></tr>
+<tr><th>input</th><td>$id<br>$input</td></tr>
+<tr><th>output</th><td>$output (suffix=.txt)</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230443.json">.moirai2/cmd/j20220418230443.json</a></th></td>
+<tr><th>cmds</th><td>sort $input | uniq -c > $output</td></tr>
+<tr><th>input</th><td>$input</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230447.json">.moirai2/cmd/j20220418230447.json</a></th></td>
+<tr><th>cmds</th><td>echo 'Hello World' > $output</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230450.json">.moirai2/cmd/j20220418230450.json</a></th></td>
+<tr><th>cmds</th><td>ls $input > $output</td></tr>
+<tr><th>input</th><td>$input</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230459.json">.moirai2/cmd/j20220418230459.json</a></th></td>
+<tr><th>cmds</th><td>echo "Hello $message">$output</td></tr>
+<tr><th>input</th><td>$message</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230509.json">.moirai2/cmd/j20220418230509.json</a></th></td>
+<tr><th>cmds</th><td>echo "Hello $message">$output</td></tr>
+<tr><th>input</th><td>$id<br>$message</td></tr>
+<tr><th>output</th><td>$output</td></tr>
+<tr><th>return</th><td>$output</td>
+<tr><th colspan=2><a href=".moirai2/cmd/j20220418230514.json">.moirai2/cmd/j20220418230514.json</a></th></td>
+<tr><th>cmds</th><td>echo "$input1 $input2 $name"</td></tr>
+<tr><th>input</th><td>$input1<br>$input2<br>$name</td></tr>
+<tr><th>output</th><td>$stdout</td></tr>
+<tr><th>return</th><td>$stdout</td>
+</table>

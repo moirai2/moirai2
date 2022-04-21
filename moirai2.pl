@@ -10,10 +10,10 @@ use Time::localtime;
 my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
-my $program_version="2022/04/13";
+my $program_version="2022/04/21";
 ############################## OPTIONS ##############################
-use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_l $opt_m $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_s $opt_S $opt_u $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
-getopts('a:b:c:d:D:E:f:F:g:G:hHi:I:lm:o:O:pq:Q:r:s:S:uv:V:w:xX:Z:');
+use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_s $opt_S $opt_u $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
+getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:o:O:pq:Q:r:s:S:uv:V:w:xX:Z:');
 ############################## HELP ##############################
 sub help{
 	print "\n";
@@ -34,7 +34,10 @@ sub help{
 	print "              html  Create a HTML representation of triple database\n";
 	print "           history  List up executed commands\n";
 	print "                ls  Create triples from directories/files and show or store them in triple database\n";
+	print "               log  Print out logs information of processes\n";
 	print "              open  Open .moirai2 directory (for Mac only)\n";
+	print "         newdaemon  Setup a new daemon specified server\n";
+	print "         openstack  Use openstack.pl to create new instance to process jobs\n";
 	print "          sortsubs  For reorganizing this script(test commands)\n";
 	print "            submit  Submit job with command URL and parameters specified in STDIN\n";
 	print "              test  For development purpose (test commands)\n";
@@ -48,6 +51,8 @@ sub help{
 	if(defined($opt_H)){
 		print "############################## Updates ##############################\n";
 		print "\n";
+		print "2022/04/20  Fixing small bugs on remote server functionality\n";
+		print "2022/04/14  Daemon system completed\n";
 		print "2022/03/23  rsync workdir with server to upload/download input/output files\n";
 		print "2022/03/22  Modifying PHP and JS scripts to modified system\n";
 		print "2022/03/21  Refactoring/simplification of main system\n";
@@ -112,6 +117,7 @@ $urls->{"daemon/command/option"}="https://moirai2.github.io/schema/daemon/comman
 $urls->{"daemon/container"}="https://moirai2.github.io/schema/daemon/container";
 $urls->{"daemon/container/image"}="https://moirai2.github.io/schema/daemon/container/image";
 $urls->{"daemon/container/flavor"}="https://moirai2.github.io/schema/daemon/container/flavor";
+$urls->{"daemon/default"}="https://moirai2.github.io/schema/daemon/default";
 $urls->{"daemon/description"}="https://moirai2.github.io/schema/daemon/description";
 $urls->{"daemon/execid"}="https://moirai2.github.io/schema/daemon/execid";
 $urls->{"daemon/execute"}="https://moirai2.github.io/schema/daemon/execute";
@@ -152,23 +158,25 @@ $urls->{"daemon/timeregistered"}="https://moirai2.github.io/schema/daemon/timere
 $urls->{"daemon/timestarted"}="https://moirai2.github.io/schema/daemon/timestarted";
 $urls->{"daemon/unzip"}="https://moirai2.github.io/schema/daemon/unzip";
 $urls->{"daemon/userdefined"}="https://moirai2.github.io/schema/daemon/userdefined";
-$urls->{"daemon/volume"}="https://moirai2.github.io/schema/daemon/volume";
 $urls->{"daemon/workdir"}="https://moirai2.github.io/schema/daemon/workdir";
 $urls->{"daemon/workflow"}="https://moirai2.github.io/schema/daemon/workflow";
 $urls->{"daemon/workid"}="https://moirai2.github.io/schema/daemon/workid";
 $urls->{"daemon/workflow/urls"}="https://moirai2.github.io/schema/daemon/workflow/urls";
-############################## MAIN ##############################
-my $mode=shift(@ARGV);
-my $cmdpaths={};
-my $sleeptime=defined($opt_s)?$opt_s:60;
-my $maximumJob=defined($opt_m)?$opt_m:5;
-my $md5cmd=which('md5sum',$cmdpaths);
-if(!defined($md5cmd)){$md5cmd=which('md5',$cmdpaths);}
-my $hostname=`hostname`;chomp($hostname);
+############################## MAIN ##############################Z
 #xxxDir is absoute path, xxxdir is relative path
 my $rootDir=absolutePath(".");
 my $homeDir=absolutePath(`echo ~`);
+my $hostname=`hostname`;chomp($hostname);
 my $dbdir=defined($opt_d)?checkDatabaseDirectory($opt_d):".";
+my $prgmode=shift(@ARGV);
+my $sleeptime=defined($opt_s)?$opt_s:60;
+my $maximumJob=defined($opt_m)?$opt_m:5;
+my $cmdpaths={};
+my $rdfcmd=which('rdf.pl',$cmdpaths);
+my $rdfcmd=which('rdf2.pl',$cmdpaths);
+my $oscmd=which('openstack.pl',$cmdpaths);
+my $md5cmd=which('md5sum',$cmdpaths);
+if(!defined($md5cmd)){$md5cmd=which('md5',$cmdpaths);}
 my $moiraidir=".moirai2";
 my $bindir="$moiraidir/bin";
 my $logdir="$moiraidir/log";
@@ -203,19 +211,23 @@ mkdir($submitdir);#chmod(0777,$submitdir);
 mkdir($throwdir);#chmod(0777,$throwdir);
 mkdir($crontabdir);#chmod(0777,$crontabdir);
 ##### handle commands #####
-if(defined($opt_h)){helpMenu($mode);}
-elsif($mode=~/^open$/i){openCommand(@ARGV);}
-elsif($mode=~/^daemon$/i){runDaemon(@ARGV);}
-elsif($mode=~/^html$/i){createHtml(@ARGV);}
-elsif($mode=~/^history$/i){historyCommand(@ARGV);}
-elsif($mode=~/^(clean|clear)$/i){cleanMoiraiLogs(@ARGV);}
-elsif($mode=~/^test$/i){test(@ARGV);}
-elsif($mode=~/^sortsubs$/i){sortSubs(@ARGV);}
-elsif($mode=~/^ls$/i){ls(@ARGV);}
-else{moiraiMain($mode);}
+if(defined($opt_h)){helpMenu($prgmode);}
+elsif($prgmode=~/^(clean|clear)$/i){cleanMoiraiLogs(@ARGV);}
+elsif($prgmode=~/^check$/i){checkMoirai2IsRunning(@ARGV);}
+elsif($prgmode=~/^daemon$/i){runDaemon(@ARGV);}
+elsif($prgmode=~/^html$/i){createHtml(@ARGV);}
+elsif($prgmode=~/^history$/i){historyCommand(@ARGV);}
+elsif($prgmode=~/^log$/i){logCommand(@ARGV);}
+elsif($prgmode=~/^ls$/i){ls(@ARGV);}
+elsif($prgmode=~/^open$/i){openCommand(@ARGV);}
+elsif($prgmode=~/^openstack$/i){openstackCommand(@ARGV);}
+elsif($prgmode=~/^sortsubs$/i){sortSubs(@ARGV);}
+elsif($prgmode=~/^test$/i){test(@ARGV);}
+else{moiraiMain($prgmode);}
 ############################## absolutePath ##############################
 sub absolutePath {
 	my $path=shift();
+	chomp($path);
 	my $directory=dirname($path);
 	my $filename=basename($path);
 	my $path=Cwd::abs_path($directory)."/$filename";
@@ -273,7 +285,6 @@ sub assignOptionsToCommand{
 	if(defined($opt_f)){$command->{$urls->{"daemon/file/stats"}}=handleKeys($opt_f);}
 	if(defined($opt_E)){$command->{$urls->{"daemon/error/stderr/ignore"}}=handleKeys($opt_E);}
 	if(defined($opt_O)){$command->{$urls->{"daemon/error/stdout/ignore"}}=handleKeys($opt_O);}
-	if(defined($opt_v)){$command->{$urls->{"daemon/volume"}}=handleKeys($opt_v);}
 	loadCommandFromURLSub($command);
 }
 ############################## basenames ##############################
@@ -448,6 +459,8 @@ sub bashCommand{
 		print OUT "mkdir -p /tmp/\$execid\n";
 		print OUT "ln -s /tmp/\$execid \$tmpdir\n";
 	}
+	print OUT "record ".$urls->{"daemon/execid"}." $execid\n";
+	print OUT "record ".$urls->{"daemon/command"}." $url\n";
 	if(scalar(@inputvars)>0){
 		foreach my $input(@inputvars){
 			print OUT "if [[ \"\$(declare -p $input)\" =~ \"declare -a\" ]]; then\n";
@@ -770,19 +783,30 @@ sub checkInputOutput{
 	}
 	return $triple;
 }
+############################## checkMoirai2IsRunning ##############################
+sub checkMoirai2IsRunning{
+	my @paths=@_;
+	if(scalar(@paths)==0){
+		my $username=`whoami`;chomp($username);
+		my @lines=`ps -fu $username`;
+		my $found=0;
+		foreach my $line(@lines){if($line=~/moirai2.pl.+check/){$found=1;}}
+		print STDERR "found=$found\n";
+	}
+}
 ############################## checkProcessStatus ##############################
 sub checkProcessStatus{
 	my $process=shift();
 	my $lastUpdate=$process->{$urls->{"daemon/process/lastupdate"}};
 	my $lastStatus=$process->{$urls->{"daemon/execute"}};
 	my $workdir=$process->{$urls->{"daemon/workdir"}};
-	if(!defined($workdir)){
-		#This happens when process is running on different server
+	if(ref($lastStatus)eq"ARRAY"){$lastStatus=$lastStatus->[scalar(@{$lastStatus})-1];}
+	if(!defined($workdir)){#This happens when process is running on different server
 		my $execid=$process->{$urls->{"daemon/execid"}};
 		$workdir="$moiraidir/$execid";
 	}
 	my $statusfile="$workdir/status.txt";
-	if(!-e $statusfile){return;}
+	if(!fileExists($statusfile)){return;}
 	my $timestamp=checkTimestamp($statusfile);
 	if(!defined($timestamp)){return;}
 	if(!defined($lastUpdate)||$timestamp>$lastUpdate){
@@ -794,10 +818,10 @@ sub checkProcessStatus{
 			$currentStatus=$key;
 		}
 		close($reader);
-		if($currentStatus eq $lastStatus){return;}
 		$process->{$urls->{"daemon/process/lastupdate"}}=$timestamp;
 		$process->{$urls->{"daemon/execute"}}=$currentStatus;
-		return $currentStatus;
+		if($currentStatus eq $lastStatus){return;}
+		else{return $currentStatus;}
 	}else{
 		return;
 	}
@@ -836,15 +860,27 @@ sub checkTimestamp {
 ############################## cleanMoiraiLogs ##############################
 sub cleanMoiraiLogs{
 	my @arguments=@_;
+	my $hash={};
+	foreach my $arg(@arguments){
+		if($arg=~/^bin$/){$hash->{"bin"}=1;}
+		if($arg=~/^cmd$/){$hash->{"cmd"}=1;}
+		if($arg=~/^crontab$/){$hash->{"crontab"}=1;}
+		if($arg=~/^all$/){$hash->{"bin"}=1;$hash->{"cmd"}=1;$hash->{"crontab"}=1;}
+	}
+	foreach my $file(getFiles("$ctrldir/delete")){system("rm $file");}
 	foreach my $file(getFiles("$ctrldir/insert")){system("rm $file");}
 	foreach my $file(getFiles("$ctrldir/job")){system("rm $file");}
 	foreach my $file(getFiles("$ctrldir/process")){system("rm $file");}
 	foreach my $file(getFiles("$ctrldir/submit")){system("rm $file");}
-	foreach my $file(getFiles("$moiraidir/cmd")){system("rm $file");}
+	foreach my $file(getFiles("$ctrldir/update")){system("rm $file");}
+	foreach my $file(getFiles("$moiraidir/throw")){system("rm $file");}
 	foreach my $file(getFiles("$logdir/error")){system("rm $file");}
 	foreach my $dir(getDirs($moiraidir,"\\d{14}")){system("rm -r $dir");}
 	foreach my $dir(getDirs($logdir,"\\d{8}")){system("rm -r $dir");}
 	if(-e "$logdir.lock"){unlink("$logdir.lock");}
+	if(exists($hash->{"bin"})){foreach my $file(getFiles("$moiraidir/bin")){system("rm $file");}}
+	if(exists($hash->{"cmd"})){foreach my $file(getFiles("$moiraidir/cmd")){system("rm $file");}}
+	if(exists($hash->{"crontab"})){foreach my $file(getFiles("$moiraidir/crontab")){system("rm $file");}}
 }
 ############################## compareFiles ##############################
 sub compareFiles{
@@ -909,20 +945,29 @@ sub completeProcess{
 		my $serverpath=$process->{$urls->{"daemon/serverpath"}};
 		my $fromdir=$srcdir;
 		my $todir="$serverpath/.moirai2/";
+		my $statusFrom="$srcdir/status.txt";
+		my $statusTo="$serverpath/.moirai2/$dirname/status.txt";
+		my ($tmpwriter,$tmpfile)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
+		close($tmpwriter);
+		system("mv $statusFrom $tmpfile");
+		system("touch $statusFrom");
 		rsyncDirectory($fromdir,$todir);
 		uploadOutputs($command,$process);
+		scpFileIfNecessary($tmpfile,$statusTo);
+		# Moirai daemon looks for a string "completed" in a status file and proceed to completion.
+		# If output files are huge, there is a chance complete process is executed before uploads are completed.
+		# To avoid this, we temporary move the status file to /tmp directory and upload all files beforehand.
+		# After completion, status file will be uploaded to the server.
+		# Moirai daemon at the server might look for status file, so "touch" is used to create empty file.
 	}
 	#processfile
 	my $outputfile="$logdir/$dirname/$execid.txt";
 	mkdir(dirname($outputfile));
-	my $newprocess={};
 	my $timeregistered;
-	my $execid;
 	my $reader=openFile($processfile);
 	while(<$reader>){
-		chomp;my ($key,$val)=split(/\t/);$newprocess->{$key}=$val;
+		chomp;my ($key,$val)=split(/\t/);
 		if($key eq $urls->{"daemon/timeregistered"}){$timeregistered=$val;}
-		if($key eq $urls->{"daemon/execid"}){$execid=$val;}
 	}
 	close($reader);
 	if(defined($opt_l)){print "#Completing: $execid with '$status' status\n";}
@@ -939,6 +984,7 @@ sub completeProcess{
 	$bashfile="$workdir/run.sh";
 	#statusfile
 	my $log=loadProcessFile($logfile);
+	$log->{$urls->{"daemon/timeregistered"}}=$timeregistered;
 	my $timestarted;
 	my $timeended;
 	$reader=openFile($statusfile);
@@ -952,23 +998,23 @@ sub completeProcess{
 	close($reader);
 	$log->{$urls->{"daemon/processtime"}}=$timeended-$timestarted;
 	#write logfile
-	my ($logwriter,$logoutput)=tempfile();
+	my ($logwriter,$logoutput)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	print $logwriter "######################################## $execid ########################################\n";
 	foreach my $key(sort{$a cmp $b}keys(%{$log})){
 		if(ref($log->{$key})eq"ARRAY"){foreach my $val(@{$log->{$key}}){print $logwriter "$key\t$val\n";}}
 		else{print $logwriter "$key\t".$log->{$key}."\n";}
 	}
-	print $logwriter "######################################## status ########################################\n";
+	#print $logwriter "######################################## status ########################################\n";
 	#statusfile
-	my $reader=openFile($statusfile);
-	print $logwriter "registered\t$timeregistered\n";
-	while(<$reader>){chomp;print $logwriter "$_\n";}
-	close($reader);
+	#my $reader=openFile($statusfile);
+	#print $logwriter "registered\t$timeregistered\n";
+	#while(<$reader>){chomp;print $logwriter "$_\n";}
+	#close($reader);
 	#stdoutfile
 	$reader=openFile($stdoutfile);
-	my ($insertwriter,$insertfile)=tempfile();
-	my ($deletewriter,$deletefile)=tempfile();
-	my ($updatewriter,$updatefile)=tempfile();
+	my ($insertwriter,$insertfile)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
+	my ($deletewriter,$deletefile)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
+	my ($updatewriter,$updatefile)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	my $stdoutcount=0;
 	my $insertcount=0;
 	my $deletecount=0;
@@ -1077,7 +1123,7 @@ sub controlProcess{
 		if(!defined($status)){next;}
 		if($status eq "completed"||$status eq "error"){
 			completeProcess($process,$commands,$status);
-			delete($processes->{$execid});
+			if($prgmode=~/^daemon$/){delete($processes->{$execid});}
 			$completed++;
 		}else{writeLogFile($execid,$urls->{"daemon/execute"}."\t$status");}
 	}
@@ -1129,6 +1175,164 @@ sub createFile{
 }
 ############################## createHtml ##############################
 sub createHtml{
+	my @arguments=@_;
+	my $menu=shift(@arguments);
+	if($menu=~/^command$/i){
+		my $commands={};
+		foreach my $url(@arguments){if($url=~/\.json$/){loadCommandFromURL($url,$commands);}}
+		my @lines=();
+		push(@lines,"<table>");
+		foreach my $url(@arguments){push(@lines,createHtmlCommand($commands->{$url}));}
+		push(@lines,"</table>");
+		foreach my $line(@lines){print "$line\n";}
+	}elsif($menu=~/^form$/i){
+		my $url=shift(@arguments);
+		my @lines=();
+		my $command=loadCommandFromURL($url);
+		push(@lines,createHtmlForm($command));
+		foreach my $line(@lines){print "$line\n";}
+	}elsif($menu=~/^function$/i){
+		my $url=shift(@arguments);
+		my @lines=();
+		my $command=loadCommandFromURL($url);
+		push(@lines,createHtmlFunction($command));
+		foreach my $line(@lines){print "$line\n";}
+	}elsif($menu=~/^database$/i){
+		createHtmlDatabase(@arguments);
+	}
+}
+sub createHtmlFunction{
+	my $command=shift();
+	my @lines=();
+	my $url=$command->{$urls->{"daemon/command"}};
+	my $suffix=$command->{$urls->{"daemon/suffix"}};
+	my @lines=();
+	push(@lines,"<script>");
+	push(@lines,"var moirai=new moirai2();");
+	push(@lines,"\$(document).ready(function() {");
+	push(@lines,"moirai.commandResults(\"$url\",function(json){\$('#result').columns({");
+	push(@lines,"data:json,");
+	push(@lines,"size:25,");
+	push(@lines,"schema: [");
+	if(exists($command->{$urls->{"daemon/input"}})){
+		my $input=$command->{$urls->{"daemon/input"}};
+		foreach my $in(@{$input}){
+			if(exists($suffix->{$in})){push(@lines,"{\"header\": \"$in\", \"key\": \"$in\", \"template\": '<a href=\"{{$in}}\">{{$in}}</a>'},");}
+			else{push(@lines,"{\"header\": \"$in\", \"key\": \"$in\"},");}
+		}
+	}
+	if(exists($command->{$urls->{"daemon/output"}})){
+		my $output=$command->{$urls->{"daemon/output"}};
+		foreach my $out(@{$output}){
+			if(exists($suffix->{$out})){push(@lines,"{\"header\": \"$out\", \"key\": \"$out\", \"template\": '<a href=\"{{$out}}\">{{$out}}</a>'},");}
+			else{push(@lines,"{\"header\": \"$out\", \"key\": \"$out\"},");}
+		}
+	}
+	push(@lines,"]");
+	push(@lines,"});});");
+	push(@lines,"progress();");
+	push(@lines,"});");
+	push(@lines,"function progress(){");
+	push(@lines,"moirai.checkProgress(function(json){\$('#progress').columns({");
+	push(@lines,"data:json,");
+	push(@lines,"size:10,");
+	push(@lines,"schema: [");
+	push(@lines,"{\"header\": \"status\", \"key\": \"execute\"},");
+	push(@lines,"{\"header\": \"time\", \"key\": \"time\"},");
+	push(@lines,"{\"header\": \"logfile\", \"key\": \"logfile\",\"template\": '<a href=\"{{logfile}}\">{{logfile}}</a>'},");
+	push(@lines,"]");
+	push(@lines,"});});");
+	push(@lines,"}");
+	push(@lines,"function submitJob(){");
+	push(@lines,"moirai.submitJob({");
+	push(@lines,"\"url\":\"$url\",");
+	if(exists($command->{$urls->{"daemon/input"}})){
+		my $input=$command->{$urls->{"daemon/input"}};
+		foreach my $in(@{$input}){push(@lines,"\"$in\":\$(\"#$in\").val(),");}
+	}
+	push(@lines,"});");
+	push(@lines,"}");
+	return @lines;
+}
+sub createHtmlForm{
+	my $command=shift();
+	my @lines=();
+	my $defaults=$command->{$urls->{"daemon/default"}};
+	if(exists($command->{$urls->{"daemon/command"}})){
+		my $url=$command->{$urls->{"daemon/command"}};
+		push(@lines,"<tr><th colspan=3><a href=\"$url\">$url</a></th></td>");
+	}
+	if(exists($command->{$urls->{"daemon/bash"}})){
+		my $cmds=$command->{$urls->{"daemon/bash"}};
+		my $line="";
+		foreach my $cmd(@{$cmds}){
+			if($line ne ""){$line.="<br>";}
+			$line.=$cmd;
+		}
+		push(@lines,"<tr><th>command</th><td colspan=2>$line</td></tr>");
+	}
+	if(exists($command->{$urls->{"daemon/input"}})){
+		my $input=$command->{$urls->{"daemon/input"}};
+		my $index=0;
+		foreach my $in(@{$input}){
+			my $line;
+			if($index==0){$line="<tr><th rowspan=".scalar(@{$input}).">in</th>";}
+			else{$line="<tr>";}
+			$line.="<th>\$$in</th><td><input id=\"$in\" type=\"text\" size=50";
+			if(exists($defaults->{$in})){$line.=" default=\"".$defaults->{$in}."\"";}
+			$line.="></td></tr>";
+			push(@lines,$line);
+			$index++;
+		}
+	}
+	push(@lines,"<input type=\"button\" onClick=\"submitJob()\" value=\"Submit\"/></input>");
+	return @lines;
+}
+sub createHtmlCommand{
+	my $command=shift();
+	my $url=shift();
+	my @lines=();
+	my $suffixs=$command->{$urls->{"daemon/suffix"}};
+	if(exists($command->{$urls->{"daemon/command"}})){
+		my $url=$command->{$urls->{"daemon/command"}};
+		push(@lines,"<tr><th colspan=2><a href=\"$url\">$url</a></th></td>");
+	}
+	if(exists($command->{$urls->{"daemon/bash"}})){
+		my $cmds=$command->{$urls->{"daemon/bash"}};
+		my $line="";
+		foreach my $cmd(@{$cmds}){
+			if($line ne ""){$line.="<br>";}
+			$line.=$cmd;
+		}
+		push(@lines,"<tr><th>cmds</th><td>$line</td></tr>");
+	}
+	if(exists($command->{$urls->{"daemon/input"}})){
+		my $input=$command->{$urls->{"daemon/input"}};
+		my $line="";
+		foreach my $in(@{$input}){
+			if($line ne ""){$line.="<br>";}
+			$line.="\$$in";
+			if(exists($suffixs->{$in})){$line.=" (suffix=".$suffixs->{$in}.")";}
+		}
+		push(@lines,"<tr><th>input</th><td>$line</td></tr>");
+	}
+	if(exists($command->{$urls->{"daemon/output"}})){
+		my $output=$command->{$urls->{"daemon/output"}};
+		my $line="";
+		foreach my $out(@{$output}){
+			if($line ne ""){$line.="<br>";}
+			$line.="\$$out";
+			if(exists($suffixs->{$out})){$line.=" (suffix=".$suffixs->{$out}.")";}
+		}
+		push(@lines,"<tr><th>output</th><td>$line</td></tr>");
+	}
+	if(exists($command->{$urls->{"daemon/return"}})){
+		my $return=$command->{$urls->{"daemon/return"}};
+		push(@lines,"<tr><th>return</th><td>\$$return</td>");
+	}
+	return @lines;
+}
+sub createHtmlDatabase{
 	print "<html>\n";
 	print "<head>\n";
 	print "<title>moirai</title>\n";
@@ -1195,14 +1399,14 @@ sub createHtml{
 }
 ############################## createJson ##############################
 sub createJson{
-	my @commands=@_;
-	my $inputs=shift(@commands);
-	my $outputs=shift(@commands);
-	my $suffixs=shift(@commands);
+	my $inputs=shift();
+	my $outputs=shift();
+	my $suffixs=shift();
+	my $commands=shift();
 	if(scalar(keys(%{$suffixs}))==0){$suffixs=undef;}
 	my ($writer,$file)=tempfile(DIR=>"/tmp",SUFFIX=>".json");
 	print $writer "{";
-	print $writer "\"".$urls->{"daemon/bash"}."\":".jsonEncode(\@commands);
+	print $writer "\"".$urls->{"daemon/bash"}."\":".jsonEncode($commands);
 	if(scalar(@{$inputs})>0){print $writer ",\"".$urls->{"daemon/input"}."\":[\"".join("\",\"",@{$inputs})."\"]";}
 	if(scalar(@{$outputs})>0){print $writer ",\"".$urls->{"daemon/output"}."\":[\"".join("\",\"",@{$outputs})."\"]";}
 	if(defined($opt_a)){print $writer ",\"".$urls->{"daemon/remotepath"}."\":\"".handleServer($opt_a)."\"";}
@@ -1220,7 +1424,6 @@ sub createJson{
 	if(defined($opt_s)){print $writer ",\"".$urls->{"daemon/sleeptime"}."\":\"$opt_s\"";}
 	my $scripts=handleArray($opt_S);
 	if(scalar(@{$scripts}>0)){print $writer ",".encodeScripts(@{$scripts});}
-	if(defined($opt_v)){print $writer ",\"".$urls->{"daemon/volume"}."\":\"$opt_v\"";}
 	if(defined($opt_V)){print $writer ",\"".$urls->{"daemon/container/flavor"}."\":\"$opt_V\"";}
 	if(defined($suffixs)){print $writer ",\"".$urls->{"daemon/suffix"}."\":".jsonEncode($suffixs);}
 	print $writer "}";
@@ -1415,6 +1618,15 @@ sub fileExists{
 	elsif(-e $path){return 1;}
 	return;
 }
+############################## fileExistsInDirectory ##############################
+sub fileExistsInDirectory{
+	my $directory=shift();
+	opendir(DIR,$directory);
+	foreach my $file(readdir(DIR)){
+		if($file=~/^\./){next;}
+		else{return 1;}
+	}
+}
 ############################## fileStats ##############################
 sub fileStats{
 	my $path=shift();
@@ -1458,7 +1670,6 @@ sub getBash{
 		elsif($line=~/^#\$\s?-q\s+?(.+)$/){$command->{$urls->{"daemon/qjob"}}=$1;}
 		elsif($line=~/^#\$\s?-Q\s+?(.+)$/){$command->{$urls->{"daemon/qjob/opt"}}=$1;}
 		elsif($line=~/^#\$\s?-r\s+?(.+)$/){$command->{$urls->{"daemon/return"}}=$1;}
-		elsif($line=~/^#\$\s?-v\s+?(.+)$/){$command->{$urls->{"daemon/volume"}}=$1;}
 		elsif($line=~/^#\$\s?-X\s+?(.+)$/){$command->{$urls->{"daemon/suffix"}}=handleSuffix($1);}
 		elsif($line=~/^#\$\s?(.+)\=(.+)$/){
 			if(!exists($command->{$urls->{"daemon/userdefined"}})){$command->{$urls->{"daemon/userdefined"}}={};}
@@ -1477,7 +1688,7 @@ sub getBash{
 ############################## getContentMd5 ##############################
 sub getContentMd5{
 	my $content=shift();
-	my ($writer,$temp)=tempfile();
+	my ($writer,$temp)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	print $writer "$content";
 	close($writer);
 	my $md5=`$md5cmd<$temp`;
@@ -1602,7 +1813,6 @@ sub getHistory{
 				if($1 eq $execid){$flag=1;next;}
 				elsif($1 eq "stderr"){$flag=2;next;}
 				elsif($1 eq "stdout"){$flag=3;next;}
-				elsif($1 eq "log"){$flag=4;next;}
 				else{$flag=0;last;}
 			}
 			if($flag==1){
@@ -1643,25 +1853,36 @@ sub getHttpContent{
 }
 ############################## getInputsOutputsFromCommand ##############################
 sub getInputsOutputsFromCommand{
-	my $cmdline=shift();
 	my $userdefined=shift();
 	my $inputKeys=shift();
 	my $outputKeys=shift();
 	my $suffixs=shift();
+	my $cmdlines=shift();
 	my @inputs=();
 	my @outputs=();
+	my $files={};
 	my $variables={};
-	foreach my $variable(@{$inputKeys}){
-		$variables->{$variable}="input";
+	my @outlines=();
+	if(!defined($inputKeys)){$inputKeys={};}
+	if(!defined($outputKeys)){$outputKeys={};}
+	if(!defined($suffixs)){$suffixs={};}
+	foreach my $variable(@{$inputKeys}){$variables->{$variable}="input";}
+	foreach my $variable(@{$outputKeys}){$variables->{$variable}="output";}
+	foreach my $cmdline(@{$cmdlines}){
+		push(@outlines,$cmdline);
+		while($cmdline=~/([\w\_\/\.]+\.(\w{2,4}))($|\s)/g){
+			my $file=$1;
+			if(!exists($files->{$file})){$files->{$file}=1;}
+		}
+		foreach my $file(keys(%{$files})){if($cmdline=~/\s*\>\s*$file/){$files->{$file}="output";}}
+		while($cmdline=~/\$([\w\_]+)/g){
+			my $variable=$1;
+			if(!exists($variables->{$variable})){$variables->{$variable}=1;}
+		}
+		foreach my $variable(keys(%{$variables})){
+			if($cmdline=~/\s*\>\s*\$$variable/){$variables->{$variable}="output";}
+		}
 	}
-	foreach my $variable(@{$outputKeys}){
-		$variables->{$variable}="output";
-	}
-	while($cmdline=~/\$([\w\_]+)/g){
-		my $variable=$1;
-		if(!exists($variables->{$variable})){$variables->{$variable}=1;}
-	}
-	foreach my $variable(keys(%{$variables})){if($cmdline=~/\s*\>\s*\$$variable/){$variables->{$variable}="output";}}
 	foreach my $variable(sort{$a cmp $b}keys(%{$variables})){
 		if($variables->{$variable}!=1){next;}
 		print "\$$variable is [I]nput/[O]utput? ";
@@ -1673,13 +1894,6 @@ sub getInputsOutputsFromCommand{
 			print "\$$variable is [I]nput/[O]utput? ";
 		}
 	}
-	if(!defined($suffixs)){$suffixs={};}
-	my $files={};
-	while($cmdline=~/([\w\_\/\.]+\.(\w{2,4}))($|\s)/g){
-		my $file=$1;
-		if(!exists($files->{$file})){$files->{$file}=1;}
-	}
-	foreach my $file(keys(%{$files})){if($cmdline=~/\s*\>\s*$file/){$files->{$file}="output";}}
 	foreach my $file(sort{$a cmp $b}keys(%{$files})){
 		if($files->{$file}!=1){next;}
 		print "$file is [I]nput/[O]utput? ";
@@ -1695,14 +1909,14 @@ sub getInputsOutputsFromCommand{
 		my $name;
 		if($type eq "input"){
 			$name="in".(scalar(@inputs)+1);
-			push(@inputs,$name);
+			$variables->{$name}=$type;
 			if($file=~/(\.\w{3,4})$/){$suffixs->{$name}=$1;}
 		}elsif($type eq "output"){
 			$name="out".(scalar(@outputs)+1);
-			push(@outputs,$name);
+			$variables->{$name}=$type;
 			if($file=~/(\.\w{3,4})$/){$suffixs->{$name}=$1;}
 		}else{next;}
-		$cmdline=~s/$file/\$$name/g;
+		foreach my $line(@outlines){$line=~s/$file/\$$name/g;}
 		$userdefined->{$name}=$file;
 	}
 	#Specify text=>variable before variable
@@ -1712,7 +1926,7 @@ sub getInputsOutputsFromCommand{
 	}
 	push(@{$inputKeys},@inputs);
 	push(@{$outputKeys},@outputs);
-	return ($cmdline,$inputKeys,$outputKeys,$suffixs);
+	return ($inputKeys,$outputKeys,$suffixs,\@outlines);
 }
 ############################## getJobFiles ##############################
 sub getJobFiles{
@@ -2015,23 +2229,12 @@ sub helpMenu{
 	elsif($command=~/^html$/i){helpHtml();}
 	elsif($command=~/^history$/i){helpHistory();}
 	elsif($command=~/^ls$/i){helpLs();}
+	elsif($command=~/^openstack$/i){helpOpenstack();}
 	elsif($command=~/^sortsubs$/i){helpSortSubs();}
 	elsif($command=~/^test$/i){helpTest();}
 	elsif($command=~/\.json$/){printCommand($command);}
 	elsif($command=~/\.(ba)?sh$/){printCommand($command);}
 	else{help();}
-}
-sub helpDaemon{
-	print "\n";
-	print "Program: Runs an automate bash script with moirai2 'command' lines.\n";
-	print "\n";
-	print "Usage: perl $program_name\n";
-	print "\n";
-	print "Options: -a  (A)ccess server (default='local').\n";
-	print "         -d  RDF database directory (default='.').\n";
-	print "\n";
-	print "Note:  '-a' enables daemon to run on user specified server and checks this server\n";
-	print "\n";
 }
 sub helpBuild{
 	print "\n";
@@ -2057,10 +2260,11 @@ sub helpCommand{
 	print "    COMMAND  Bash command lines to execute.\n";
 	print "        EOS  Assign command lines with Unix's heredoc.\n";
 	print "\n";
-	print "Options: -a  (A)ccess server and compute (default=local computer).\n";
+	print "Options:\n";
+	print "         -a  (A)ccess remote server for computation\n";
 	print "         -b  Specify (b)oolean options when running a command line (example -a:\$optionA,-b:\$optionB).\n\n";
 	print "         -c  Use (c)ontainer image for execution [docker|singularity].\n";
-	print "         -d  Moirai (d)atabase directory (default='.').\n";
+	print "         -d  RDF (d)atabase directory (default='.').\n";
 	print "         -D  Delim character used to split sub->pre->obj file\n";
 	print "         -E  Ignore STD(E)RR if specific regexp is found.\n";
 	print "         -f  Record (f)ilestats[linecount/seqcount/md5/filesize/utime] of input/output files.\n";
@@ -2069,6 +2273,7 @@ sub helpCommand{
 	print "         -H  Show update (h)istory.\n";
 	print "         -i  (I)nput query for select from database in '\$sub->\$pred->\$obj' format.\n";
 	print "         -I  (I)mage of OpenStack instance.\n";
+	print "         -j  Job server to get jobs from.\n";
 	print "         -l  Show (l)ogs from moirai.pl.\n";
 	print "         -m  (M)ax number of jobs to throw (default='5').\n";
 	print "         -o  (O)utput query for insert to database in '\$sub->\$pred->\$obj' format.\n";
@@ -2079,7 +2284,6 @@ sub helpCommand{
 	print "         -r  Print (r)eturn value (in exec mode, stdout is default).\n";
 	print "         -s  Loop (s)econd (default='10').\n";
 	print "         -S  Implement/import (s)cript code to a command json file.\n";
-	print "         -v  (V)olume to rsync with the server.\n";
 	print "         -V  Fla(v)or of Openstack instance to create.\n";
 	print "         -u  Run in (U)ser mode where input parameters are prompted.\n";
 	print "         -w  Don't (w)ait.\n";
@@ -2109,6 +2313,45 @@ sub helpCommand{
 	print "  - Query database with 'A->input->\$input' and store new triple 'A->output->\$output'.\n";
 	print "\n";
 }
+sub helpDaemon{
+	print "\n";
+	print "Program: Construct and process jobs with moirai2 command scripts.\n";
+	print "\n";
+	print "Usage: perl $program_name MODE\n";
+	print "\n";
+	print "MODE:\n";
+	print "    crontab  Submit jobs constructed from command files under .moirai2/crontab/\n";
+	print "     submit  Submit jobs constructed from submit files under .moirai2/ctrl/submit/\n";
+	print "    process  Process jobs under .moirai2/ctrl/job/\n";
+	print "\n";
+	print "Options:\n";
+	print "         -a  (A)ccess remote server and process jobs there instead of using local.\n";
+	print "         -b  (B)uild daemon on specified server instead of local.\n";
+	print "         -d  RDF (d)atabase directory (default='.').\n";
+	print "         -h  Show (h)elp message.\n";
+	print "         -H  Show update (h)istory.\n";
+	print "         -j  Retrieve jobs from a (j)ob server instead of retrieving from a local.\n";
+	print "         -l  Show (l)ogs from moirai.pl.\n";
+	print "         -m  (M)ax number of jobs to throw (default='5').\n";
+	print "         -r  Number of time to (r)epeat loop (default=-1='infinite').\n";
+	print "         -s  Loop (s)econd (default='10').\n";
+	print "\n";
+	print "Note:\n";
+	print " perl $program_name crontab submit (server)\n";
+	print " perl $program_name -j USER\@SERVER:DIR process (remote)\n";
+	print " 'crontab' and 'submit' only throw jobs and does not 'process' jobs.\n";
+	print " Functionality is separated to enable remote computation.\n";
+	print " For example, use command above to set up a server which only create jobs,\n";
+	print " and use command below on node to process jobs created by the server.\n";
+	print "\n";
+	print " perl $program_name crontab submit process\n";
+	print " This will 'process' jobs along with 'crontab' and 'submit',\n";
+	print "\n";
+	print " perl $program_name -a USER\@SERVER:DIR  process\n";
+	print " This will process jobs using remote server specified with '-a'\n";
+	print " Make sure you have SSH access to the remote server.\n";
+	print "\n";
+}
 sub helpExec{
 	print "\n";
 	print "############################## helpExec ##############################\n";
@@ -2119,9 +2362,10 @@ sub helpExec{
 	print "\n";
 	print "       CMD  One line command like 'ls'.\n";
 	print "\n";
-	print "Options: -a  (A)ccess server and compute (default=local computer).\n";
+	print "Options:\n";
+	print "         -a  (A)ccess remote server for computation.\n";
 	print "         -c  Use (c)ontainer image for execution [docker|singularity].\n";
-	print "         -d  Moirai (d)atabase directory (default='.').\n";
+	print "         -d  RDF (d)atabase directory (default='.').\n";
 	print "         -D  Delim character used to split sub->pre->obj file\n";
 	print "         -f  Record (f)ilestats[linecount/seqcount/md5/filesize/utime] of input/output files.\n";
 	print "         -F  If specified output (f)ile is empty, record as error.\n";
@@ -2138,7 +2382,6 @@ sub helpExec{
 	print "         -r  Print (r)eturn value (in exec mode, stdout is default).\n";
 	print "         -s  Loop (s)econd (default='10').\n";
 	print "         -S  Implement/import (s)cript code to a command json file.\n";
-	print "         -v  (V)olume to rsync with the server.\n";
 	print "         -V  Fla(v)or of Openstack instance to create.\n";
 	print "         -u  Run in (U)ser mode where input parameters are prompted.\n";
 	print "         -w  Don't (w)ait.\n";
@@ -2169,6 +2412,13 @@ sub helpExec{
 	print "  - List directory and store results in \$output array\n";
 	print "\n";
 }
+sub helpHistory{
+	print "\n";
+	print "Program: Similar to unix's history.\n";
+	print "\n";
+	print "Usage: perl $program_name test\n";
+	print "\n";
+}
 sub helpHtml{
 	print "\n";
 	print "############################## HELP ##############################\n";
@@ -2179,7 +2429,8 @@ sub helpHtml{
 	print "\n";
 	print "       HTML  HTML page displaying information of the database\n";
 	print "\n";
-	print "Options: -d  Moirai (d)atabase directory (default='.').\n";
+	print "Options:\n";
+	print "         -d  RDF (d)atabase directory (default='.').\n";
 	print "\n";
 }
 sub helpLs{
@@ -2192,7 +2443,8 @@ sub helpLs{
 	print "\n";
 	print "        DIR  Directory to search for (if not specified, DIR='.').\n";
 	print "\n";
-	print "Options: -d  RDF database directory (default='.').\n";
+	print "Options:\n";
+	print "         -d  RDF (d)atabase directory (default='.').\n";
 	print "         -D  Delim character (None alphabe/number characters+'_')\n";
 	print "         -g  grep specific string\n";
 	print "         -G  ungrep specific string\n";
@@ -2236,11 +2488,22 @@ sub helpLs{
 	print "  - Store file paths under image/ with specified RDF format.\n";
 	print "\n";
 }
-sub helpTest{
+sub helpRsync{
 	print "\n";
-	print "Program: Runs moirai2 test commands for refactoring process.\n";
+	print "Program: Rsync directories.\n";
 	print "\n";
-	print "Usage: perl $program_name test\n";
+	print "Usage: perl $program_name rsync DIR\n";
+	print "\n";
+	print "Options:\n";
+	print "         -a  Copy directories to a remove server.\n";
+	print "         -j  Copy directories from a job server.\n";
+	print "\n";
+}
+sub helpOpenstack{
+	print "\n";
+	print "Program: Openstack.\n";
+	print "\n";
+	print "Usage: perl $program_name openstack\n";
 	print "\n";
 }
 sub helpSortsubs{
@@ -2250,9 +2513,9 @@ sub helpSortsubs{
 	print "Usage: perl $program_name sortsubs\n";
 	print "\n";
 }
-sub helpHistory{
+sub helpTest{
 	print "\n";
-	print "Program: Similar to unix's history.\n";
+	print "Program: Runs moirai2 test commands for refactoring process.\n";
 	print "\n";
 	print "Usage: perl $program_name test\n";
 	print "\n";
@@ -2699,6 +2962,7 @@ sub loadExecutes{
 		$executes->{$url}->{$id}={};
 		$executes->{$url}->{$id}->{"cmdurl"}=$url;
 		$executes->{$url}->{$id}->{"execid"}=$id;
+		$executes->{$url}->{$id}->{"jobfile"}=$file;
 		while(my ($key,$val)=each(%{$hash})){
 			if($key=~/^$url#(.+)$/){
 				$key=$1;
@@ -2764,6 +3028,12 @@ sub loadSubmit{
 	unlink($path);
 	return ($rdfdb,$command,$hash);
 }
+############################## logCommand ##############################
+sub logCommand{
+	my @urls=@_;
+	my $history=getHistory();
+	printTable($history);
+}
 ############################## ls ##############################
 sub ls{
 	my ($arguments,$userdefined)=handleArguments(@ARGV);
@@ -2812,7 +3082,7 @@ sub ls{
 		}
 	}
 	if(!defined($opt_x)&&checkInputOutput($opt_o)){
-		my ($writer,$temp)=tempfile();
+		my ($writer,$temp)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 		foreach my $line(@lines){print $writer "$line\n";}
 		close($writer);
 		if(defined($opt_l)){system("perl $prgdir/rdf.pl -d $dbdir import < $temp");}
@@ -2898,38 +3168,34 @@ sub moiraiCreateCommand{
 	my $inputKeys=shift();
 	my $outputKeys=shift();
 	my $suffixs=shift();
-	my $arguments=shift();
+	my $cmdlines=shift();
 	my $userdefined=shift();
 	my $cmdurl;
 	if($mode=~/^command$/i){
-		my @lines=();
-		while(<STDIN>){chomp;push(@lines,$_);}
 		my ($inputs,$outputs)=setupInputOutput($insertKeys,$queryResults,$inputKeys,$outputKeys);
 		if(!defined($opt_q)){$sleeptime=1;$opt_s=1;}#When running with qsub, return in 1 second
-		$cmdurl=createJson($inputs,$outputs,$suffixs,@lines);
+		$cmdurl=createJson($inputs,$outputs,$suffixs,$cmdlines);
 	}elsif($mode=~/^build$/i){
-		my @lines=();
-		while(<STDIN>){chomp;push(@lines,$_);}
 		my ($inputs,$outputs)=setupInputOutput($insertKeys,$queryResults,$inputKeys,$outputKeys);
-		$cmdurl=createJson($inputs,$outputs,$suffixs,@lines);
+		$cmdurl=createJson($inputs,$outputs,$suffixs,$cmdlines);
 		print "$cmdurl\n";
 		exit(0);
 	}elsif($mode=~/^exec$/i){
-		if(scalar(@{$arguments})==0){print STDERR "ERROR: Please specify command line\n";exit(1);}
-		my $cmdLine=join(" ",@{$arguments});
-		($cmdLine,$inputKeys,$outputKeys,$suffixs)=getInputsOutputsFromCommand($cmdLine,$userdefined,$inputKeys,$outputKeys,$suffixs);
-		@{$arguments}=();
+		($inputKeys,$outputKeys,$suffixs,$cmdlines)=getInputsOutputsFromCommand($userdefined,$inputKeys,$outputKeys,$suffixs,$cmdlines);
 		my ($inputs,$outputs)=setupInputOutput($insertKeys,$queryResults,$inputKeys,$outputKeys);
 		if(!defined($opt_r)){$opt_r="\$stdout";}
 		if(!defined($opt_a)){$sleeptime=1;$opt_s=1;}#To get the result as soon as command is completed.
-		$cmdurl=createJson($inputs,$outputs,$suffixs,$cmdLine);
+		$cmdurl=createJson($inputs,$outputs,$suffixs,$cmdlines);
 	}elsif($mode=~/\.json$/){
 		$cmdurl=$mode;
 		my $command=loadCommandFromURL($cmdurl,$commands);
 		my ($inputs,$outputs)=setupInputOutput($insertKeys,$queryResults,$inputKeys,$outputKeys);
 		assignOptionsToCommand($command,$inputs,$outputs,$suffixs);
 	}elsif($mode=~/\.(ba)?sh$/){
-		$cmdurl=$mode;
+		my @lines=retrieveInfoFromBash($mode,$userdefined);
+		my ($inputs,$outputs)=setupInputOutput($insertKeys,$queryResults,$inputKeys,$outputKeys);
+		if(!defined($opt_q)){$sleeptime=1;$opt_s=1;}#When running with qsub, return in 1 second
+		$cmdurl=createJson($inputs,$outputs,$suffixs,@lines);
 		my $command=loadCommandFromURL($cmdurl,$commands);
 		my ($inputs,$outputs)=setupInputOutput($insertKeys,$queryResults,$inputKeys,$outputKeys);
 		if(exists($command->{$urls->{"daemon/userdefined"}})){
@@ -2972,8 +3238,8 @@ sub moiraiFinally{
 sub moiraiInputProcess{
 	my $userdefined=shift();
 	my $queryResults;
-	my $queryKeys;
-	my $inputKeys;
+	my $queryKeys=[];
+	my $inputKeys=[];
 	my $suffixs={};
 	if(defined($opt_X)){$suffixs=handleSuffix($opt_X);}
 	if(defined($opt_i)){
@@ -3005,19 +3271,24 @@ sub moiraiMain{
 	my $mode=shift();
 	my $submitvar;
 	my ($arguments,$userdefined)=handleArguments(@ARGV);
+	my @cmdlines=();
 	if($mode=~/^submit$/i){($dbdir,$mode,$submitvar)=loadSubmit(@ARGV);}
-	if($mode=~/\.(ba)?sh$/){retrieveOptionsFromBash($mode);}
-	if(defined($opt_q)){if($opt_q eq "qsub"){$opt_q="sge";}elsif($opt_q eq "squeue"){$opt_q="slurm";}}
-	if(defined($opt_a)&&defined($opt_v)){
-		my $volumes=handleArray($opt_v);
-		my $remotepath=handleServer($opt_a);
-		my ($username,$servername,$remotedir)=splitServerPath($remotepath);
-		foreach my $volume(@{$volumes}){
-			my $fromDir="$rootDir/$volume";
-			my $toDir="$remotedir/$volume";
-			rsyncDirectory("$fromDir/","$username\@$servername:$toDir/");
-		}
+	if($mode=~/\.(ba)?sh$/){
+		if(!-e $mode){print STDERR "#ERROR Bash file not found\n";exit(1);}
+		@cmdlines=retrieveInfoFromBash($mode,$userdefined);
+		$mode="command";
+	}elsif($mode=~/^build$/i){
+		while(<STDIN>){chomp;push(@cmdlines,$_);}
+	}elsif($mode=~/^command$/i){
+		while(<STDIN>){chomp;push(@cmdlines,$_);}
+	}elsif($mode=~/^exec$/i){
+		if(scalar(@{$arguments})==0){print STDERR "ERROR: Please specify command line\n";exit(1);}
+		my $cmdline=join(" ",@{$arguments});
+		push(@cmdlines,$cmdline);
+		$arguments=[];
 	}
+	if(defined($opt_v)){rsyncProcess(handleArray($opt_v));}
+	if(defined($opt_q)){if($opt_q eq "qsub"){$opt_q="sge";}elsif($opt_q eq "squeue"){$opt_q="slurm";}}
 	my $commands={};
 	controlWorkflow();#handle insert/update/delete
 	my ($queryResults,$queryKeys,$inputKeys,$suffixs)=moiraiInputProcess($userdefined);
@@ -3028,7 +3299,7 @@ sub moiraiMain{
 		$queryKeys=\@array;
 	}
 	my ($insertKeys,$outputKeys)=moiraiOutputProcess($queryResults,$queryKeys,$inputKeys,$userdefined,$suffixs);
-	my $cmdurl=moiraiCreateCommand($mode,$commands,$insertKeys,$queryResults,$inputKeys,$outputKeys,$suffixs,$arguments,$userdefined);
+	my $cmdurl=moiraiCreateCommand($mode,$commands,$insertKeys,$queryResults,$inputKeys,$outputKeys,$suffixs,\@cmdlines,$userdefined);
 	my @execids=moiraiPrepare($cmdurl,$commands,$queryResults,$userdefined,$queryKeys,$insertKeys,@{$arguments});
 	if(defined($opt_x)){exit(0);}
 	my $processes=moiraiRunExecute($commands,@execids);
@@ -3177,7 +3448,7 @@ sub moiraiRunExecute{
 		if($jobs_running==0&&$job_remaining==0){controlWorkflow($processes,$commands);last;}
 		if($job_remaining==0){sleep($sleeptime);next;}
 		my $jobSlot=$maximumJob-$jobs_running;
-		while(jobOfferStart($jobdir)){if(defined($opt_l)){"#repeat\n"}}
+		while(jobOfferStart($jobdir)){if(defined($opt_l)){"#Waiting for job slot\n"}}
 		my @jobfiles=getJobFiles($jobdir,$jobSlot,$ids);
 		jobOfferEnd($jobdir);
 		loadExecutes($commands,$executes,$execurls,@jobfiles);
@@ -3205,6 +3476,12 @@ sub openFile{
 		elsif($path=~/\.bam$/){return IO::File->new("samtools view $path|");}
 		else{return IO::File->new($path);}
 	}
+}
+############################## openstackCommand ##############################
+sub openstackCommand{
+	my @arguments=@_;
+	if(!-e "$prgdir/openstack.pl"){print STDERR "ERROR: $prgdir/openstack.pl not found\n";exit(1);}
+
 }
 ############################## printCommand ##############################
 sub printCommand{
@@ -3492,21 +3769,11 @@ sub replaceStringWithHash{
 	foreach my $key(@keys){my $value=$hash->{$key};$key="\\\$$key";$string=~s/$key/$value/g;}
 	return $string;
 }
-############################## retrieveKeysFromQueries ##############################
-sub retrieveKeysFromQueries{
-	my $line=shift();
-	my @queries=ref($line)eq"ARRAY"?@{$line}:split(/,/,$line);
-	my $temp={};
-	foreach my $query(@queries){
-		my @keys=ref($query)eq"ARRAY"?@{$query}:split(/->/,$query);
-		foreach my $key(@keys){while($key=~/\$(\w+)/g){$temp->{$1}=1;}}
-	}
-	my @keys=sort{$a cmp $b}keys(%{$temp});
-	return \@keys;
-}
-############################## retrieveOptionsFromBash ##############################
-sub retrieveOptionsFromBash{
+############################## retrieveInfoFromBash ##############################
+sub retrieveInfoFromBash{
 	my $path=shift();
+	my $userdefined=shift();
+	my @lines=();
 	my $reader=openFile($path);
 	while(<$reader>){
 		chomp;
@@ -3535,16 +3802,31 @@ sub retrieveOptionsFromBash{
 		elsif(/^#\$\s?-s\s+?(.+)$/){if(!defined($opt_s)){$opt_s=$1;}}
 		elsif(/^#\$\s?-S\s+?(.+)$/){if(!defined($opt_S)){$opt_S=$1;}}
 		#elsif(/^#\$\s?-u/){if(!defined($opt_u)){$opt_u=1;}}
-		elsif(/^#\$\s?-v\s+?(.+)$/){if(!defined($opt_v)){$opt_v=$1;}}
 		elsif(/^#\$\s?-V\s+?(.+)$/){if(!defined($opt_V)){$opt_V=$1;}}
 		elsif(/^#\$\s?-w\s+?(.+)$/){if(!defined($opt_w)){$opt_w=$1;}}
 		#elsif(/^#\$\s?-u/){if(!defined($opt_x)){$opt_x=1;}}
 		elsif(/^#\$\s?-x/){if(!defined($opt_X)){$opt_X=$1;}}
+		elsif(/^#\$\s?-Z\s+?(.+)$/){if(!defined($opt_Z)){$opt_Z=$1;}}
+		elsif(/^#\$\s?(.+)\=(.+)$/){if(!exists($userdefined->{$1})){$userdefined->{$1}=$2;}}
+		else{push(@lines,$_);}
 	}
 	close($reader);
 	$dbdir=defined($opt_d)?checkDatabaseDirectory($opt_d):".";
 	$sleeptime=defined($opt_s)?$opt_s:60;
 	$maximumJob=defined($opt_m)?$opt_m:5;
+	return @lines;
+}
+############################## retrieveKeysFromQueries ##############################
+sub retrieveKeysFromQueries{
+	my $line=shift();
+	my @queries=ref($line)eq"ARRAY"?@{$line}:split(/,/,$line);
+	my $temp={};
+	foreach my $query(@queries){
+		my @keys=ref($query)eq"ARRAY"?@{$query}:split(/->/,$query);
+		foreach my $key(@keys){while($key=~/\$(\w+)/g){$temp->{$1}=1;}}
+	}
+	my @keys=sort{$a cmp $b}keys(%{$temp});
+	return \@keys;
 }
 ############################## returnError ##############################
 sub returnError{
@@ -3602,12 +3884,30 @@ sub returnResult{
 sub rsyncDirectory{
 	my $fromDir=shift();
 	my $toDir=shift();
+	# rsyncDirectory("from/","to"); # A directory "from" will be copied
+	# rsyncDirectory("from","to"); # Filed under directory "from" will be copied
 	# -r copy  recursively (-a is better?)
 	# --copy-links  replace symbolic links with actual files/dirs
 	# --keep-dirlinks  don't replace target's symbolic link directory with actual directory
 	my $command="rsync -r --copy-links --keep-dirlinks $fromDir $toDir";
 	if(defined($opt_l)){print "#Rsync: $fromDir => $toDir\n";}
 	return system($command);
+}
+############################## rsyncProcess ##############################
+sub rsyncProcess{
+	my $directories=shift();
+	if(!defined($opt_a)&&!defined($opt_j)){
+		print STDERR "#ERROR:  Please specify Server information with '-a' or '-s'\n";
+		exit(1);
+	}
+	if(defined($opt_j)){#Copy directory from server
+		my $fromServer=handleServer($opt_j);
+		foreach my $directory(@{$directories}){rsyncDirectory("$fromServer/$directory","$rootDir");}
+	}
+	if(defined($opt_a)){#Copy directory too remote
+		my $toServer=handleServer($opt_a);
+		foreach my $directory(@{$directories}){rsyncDirectory("$rootDir/$directory",$toServer);}
+	}
 }
 ############################## runDaemon ##############################
 sub runDaemon{
@@ -3616,19 +3916,47 @@ sub runDaemon{
 	my $cronMode;
 	my $processMode;
 	foreach my $argument(@arguments){
-		if($argument=~/^submit$/i){$submitMode=1;}
 		if($argument=~/^crontab$/i){$cronMode=1;}
 		if($argument=~/^process$/i){$processMode=1;}
+		if($argument=~/^submit$/i){$submitMode=1;}
+		if($argument=~/^all$/i){$submitMode=1;$cronMode=1;$processMode=1;}
 	}
-	if(defined($opt_l)){print "#Running daemon\n";}
+	if(defined($opt_b)){
+		my $serverpath=handleServer($opt_b);
+		my ($username,$servername,$serverdir)=splitServerPath($serverpath);
+		my $command="perl moirai2.pl";
+		if(defined($opt_a)){$command.=" -a $opt_a";}
+		if(defined($opt_d)){$command.=" -d $opt_d";}
+		if(defined($opt_j)){$command.=" -j $opt_j";}
+		if(defined($opt_l)){$command.=" -l";}
+		if(defined($opt_m)){$command.=" -m $opt_m";}
+		if(defined($opt_r)){$command.=" -r";}
+		if(defined($opt_s)){$command.=" -s $opt_s";}
+		$command.=" daemon";
+		if(defined($cronMode)){$command.=" crontab";}
+		if(defined($submitMode)){$command.=" submit";}
+		if(defined($processMode)){$command.=" process";}
+		scpFileIfNecessary("moirai2.pl","$serverpath/moirai2.pl");
+		$command="ssh $username\@$servername 'cd $serverdir;nohup $command &>/dev/null &'";
+		if(defined($opt_l)){print ">$command\n";}
+		system($command);
+		exit();
+	}
 	my $commands={};
 	my $processes=reloadProcesses($commands);
 	my $runCount=defined($opt_r)?$opt_r:undef;
-	my $serverpath;
-	if(defined($opt_a)){
-		$serverpath=handleServer($opt_a);
-		my $jobdir.="$serverpath/.moirai2/ctrl/job";
-		if(!dirExists($jobdir)){print STDERR "#ERROR  No jobdir found '$jobdir'\n";exit(1);}
+	my $jobserver;
+	if(defined($opt_j)){
+		$jobserver=handleServer($opt_j);
+		my $jobdir.="$jobserver/.moirai2/ctrl/job";
+		if(!dirExists($jobdir)){print STDERR "#ERROR No jobdir found '$jobdir'\n";exit(1);}
+	}
+	if(defined($opt_l)){
+		print "#Running moirai2 daemon:\n";
+		if(defined($submitMode)){print "#  - Look for new job sumitted on '$submitdir' directory.\n" }
+		if(defined($cronMode)){print "#  - Automatically execute crontab specified at '$crontabdir' directory.\n" }
+		if(defined($processMode)){print "#  - Process jobs found at '$jobdir' directory.\n" }
+		if(defined($jobserver)){print "#  - Jobs will retrieved from '$jobserver' server.\n" }
 	}
 	my $executes={};
 	my $execurls=[];
@@ -3675,7 +4003,7 @@ sub runDaemon{
 						touchFile($lockfile);
 						system($cmdline);
 					}else{
-						my ($writer,$script)=tempfile();
+						my ($writer,$script)=tempfile(DIR=>"/tmp",SUFFIX=>".sh");
 						print $writer "bash $cmdurl\n";
 						print $writer "touch $unlockfile\n";
 						close($writer);
@@ -3689,15 +4017,31 @@ sub runDaemon{
 			my $jobs_running=getNumberOfJobsRunning();
 			my $jobSlot=$maximumJob-$jobs_running;
 			if($jobSlot<=0){sleep($sleeptime);next;}
-			if(defined($serverpath)){loadServerJobs($processes,$serverpath,$commands,$jobSlot);}
-			while(jobOfferStart($jobdir)){if(defined($opt_l)){"#repeat\n"}}
+			while(jobOfferStart($jobdir)){if(defined($opt_l)){"#Waiting for job slot\n"}}
 			my @jobFiles=getJobFiles($jobdir,$jobSlot);
 			jobOfferEnd($jobdir);
 			loadExecutes($commands,$executes,$execurls,@jobFiles);
 			mainProcess($execurls,$commands,$executes,$processes,$jobSlot);
 		}
+		if(defined($jobserver)){
+			my $jobs_running=getNumberOfJobsRunning();
+			my $jobSlot=$maximumJob-$jobs_running;
+			if($jobSlot<=0){sleep($sleeptime);next;}
+			loadServerJobs($processes,$jobserver,$commands,$jobSlot);
+		}
 		if(defined($runCount)){$runCount--;if($runCount<0){last;}}
 		else{sleep($sleeptime);}
+	}
+	#Wait until job is completed when daemon's loop count is defined
+	if(defined($opt_r)){
+		while(true){
+			controlWorkflow($processes,$commands);
+			my $jobs_running=getNumberOfJobsRunning();
+			if($jobs_running>=$maximumJob){sleep($sleeptime);next;}
+			my $job_remaining=getNumberOfJobsRemaining();
+			if($jobs_running==0&&$job_remaining==0){controlWorkflow($processes,$commands);last;}
+			if($job_remaining==0){sleep($sleeptime);}
+		}
 	}
 	if(defined($opt_l)){STDOUT->autoflush(0);}
 	foreach my $cmdurl(keys(%{$commands})){
@@ -3730,7 +4074,7 @@ sub scpFileIfNecessary{
 	my $to=shift();
 	my $timeFrom=checkTimestamp($from);
 	my $timeTo=checkTimestamp($to);
-	if(!defined($timeTo)||$timeFrom>$timeTo){system("scp $from $to 2>&1 1>/dev/null");}
+	if(!defined($timeTo)||$timeFrom>$timeTo){system("scp -r $from $to 2>&1 1>/dev/null");}
 }
 ############################## scriptCodeForBash ##############################
 sub scriptCodeForBash{
@@ -3848,7 +4192,7 @@ sub sortSubs{
 	}
 	close($reader);
 	if(defined($name)){$blocks->{$name}=$block;push(@orders,$name);}
-	my ($writer,$file)=tempfile();
+	my ($writer,$file)=tempfile(DIR=>"/tmp",SUFFIX=>".pl");
 	foreach my $line(@headers){print $writer "$line\n";}
 	foreach my $key(sort{$a cmp $b}@orders){foreach my $line(@{$blocks->{$key}}){print $writer "$line\n";}}
 	close($writer);
@@ -3882,7 +4226,8 @@ sub test{
 	my @arguments=@_;
 	my $hash={};
 	if(scalar(@arguments)>0){foreach my $arg(@arguments){$hash->{$arg}=1;}}
-	else{for(my $i=0;$i<=5;$i++){$hash->{$i}=1;}}
+	else{for(my $i=0;$i<=6;$i++){$hash->{$i}=1;}}
+	if(fileExistsInDirectory("test")){system("rm -r test/*");}
 	mkdir("test");
 	if(exists($hash->{0})){test0();}
 	if(exists($hash->{1})){test1();}
@@ -3891,10 +4236,21 @@ sub test{
 	if(exists($hash->{4})){test4();}
 	if(exists($hash->{5})){test5();}
 	if(exists($hash->{6})){test6();}
+	if(exists($hash->{7})){test7();}
 	rmdir("test");
 }
-#Testing sub functions
+#Test test
 sub test0{
+	#Testing exec2
+	createFile("test/hello.txt","A","B","C","A");
+	testCommand("perl $prgdir/moirai2.pl -r output -i input -o output exec 'sort -u \$input > \$output;' input=test/hello.txt output=test/output.txt","test/output.txt");
+	testCommand("cat test/output.txt","A\nB\nC");
+	unlink("test/output.txt");
+	testCommand("echo i|perl $prgdir/moirai2.pl -r out1 exec 'sort -u test/hello.txt > test/output2.txt' > /dev/null","test/hello.txt is [I]nput/[O]utput? test/output2.txt");
+	testCommand("cat test/output2.txt","A\nB\nC");
+}
+#Testing sub functions
+sub test1{
 	testSub("handleInputOutput(\"\\\$input\")",["input"]);
 	testSub("handleInputOutput(\"\\\$input1,\\\$input2\")",["input1","input2"]);
 	testSubs("handleInputOutput(\"\\\$input1->input->\\\$input2\")",["input1","input2"],[["\$input1","input","\$input2"]],undef,undef);
@@ -3912,7 +4268,7 @@ sub test0{
 	testSubs("handleInputOutput(\"{'\\\$input':{'default':'something','suffix':'.txt'}}\")",["input"],undef,{"input"=>"something"},{"input"=>".txt"});
 }
 #Testing basic json functionality
-sub test1{
+sub test2{
 	#testing input/output 1
 	createFile("test/Akira.txt","A","B","C","D","A","D","B");
 	testCommand("perl $prgdir/rdf.pl -d test insert root file test/Akira.txt","inserted 1");
@@ -3962,7 +4318,7 @@ sub test1{
 	unlink("test/name.txt");
 }
 #Testing exec and bash functionality
-sub test2{
+sub test3{
 	#Testing exec1
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 exec 'ls $moiraidir/ctrl'","delete","insert","job","process","submit","update");
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -r '\$output' exec 'output=(`ls $moiraidir/ctrl`);'","delete insert job process submit update");
@@ -3981,7 +4337,7 @@ sub test2{
 	unlink("test/hello.txt");
 	unlink("test/output2.txt");
 	#Testing bash functionality
-	createFile("test/test.sh","#\$-i \$id->input->\$input\n#\$-o \$id->output->\$output.txt\nsort \$input | uniq -c > \$output");
+	createFile("test/test.sh","#\$-i \$id->input->\$input","#\$-o \$id->output->\$output.txt","sort \$input | uniq -c > \$output");
 	createFile("test/input.txt","A","B","D","C","F","E","G","A","A","A");
 	testCommand("perl $prgdir/rdf.pl -d test/db insert idA input test/input.txt","inserted 1");
 	testCommand("perl $prgdir/moirai2.pl -d test/db -s 1 -r '\$output' test/test.sh output=test/uniq.txt","test/uniq.txt");
@@ -4002,13 +4358,15 @@ sub test2{
 	unlink("test/test.sh");
 	unlink("test/input.txt");
 	unlink("test/input.out.txt");
+	createFile("test/test.sh","#\$-o output","echo 'Hello World' > \$output");
+	testCommand("perl $prgdir/moirai2.pl -r output test/test.sh output=test/output.txt","test/output.txt");
+	unlink("test/test.sh");
+	unlink("test/output.txt");
 }
 #Testing build and ls functionality
-sub test3{
+sub test4{
 	# Testing build
-	open(OUT,">test/1.sh");
-	print OUT "ls \$input > \$output";
-	close(OUT);
+	createFile("test/1.sh","ls \$input > \$output");
 	testCommand("perl $prgdir/moirai2.pl -d test -i '\$input' -o '\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":[\"ls \$input > \$output\"],\"https://moirai2.github.io/schema/daemon/input\":[\"\$input\"],\"https://moirai2.github.io/schema/daemon/output\":[\"\$output\"]}");
 	testCommand("perl $prgdir/moirai2.pl -d test -i 'root->directory->\$input' -o 'root->content->\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":[\"ls \$input > \$output\"],\"https://moirai2.github.io/schema/daemon/input\":[\"\$input\"],\"https://moirai2.github.io/schema/daemon/output\":[\"\$output\"]}");
 	unlink("test/1.sh");
@@ -4020,10 +4378,10 @@ sub test3{
 	testCommand("perl $prgdir/moirai2.pl -d test ls test/dir","test/dir/A.txt","test/dir/B.gif","test/dir/C.txt");
 	testCommand("perl $prgdir/moirai2.pl -d test -o '\$filename' ls test/dir","A.txt","B.gif","C.txt");
 	testCommand("perl $prgdir/moirai2.pl -d test -o '\$suffix' ls test/dir","txt","gif","txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -o 'root->file->\$path' ls test/dir","root\tfile\ttest/dir/A.txt","root\tfile\ttest/dir/B.gif","root\tfile\ttest/dir/C.txt");
+	testCommand("perl $prgdir/moirai2.pl -d test -x -o 'root->file->\$path' ls test/dir","root\tfile\ttest/dir/A.txt","root\tfile\ttest/dir/B.gif","root\tfile\ttest/dir/C.txt");
 	testCommand("perl $prgdir/moirai2.pl -d test -g txt -o '\$path' ls test/dir","test/dir/A.txt","test/dir/C.txt");
 	testCommand("perl $prgdir/moirai2.pl -d test -G txt -o '\$base0' ls test/dir","B");
-	testCommand("perl $prgdir/moirai2.pl -d test -lx -o 'root->file->\$path' ls test/dir","inserted 3");
+	testCommand("perl $prgdir/moirai2.pl -d test -l -o 'root->file->\$path' ls test/dir","inserted 3");
 	testCommand("perl $prgdir/rdf.pl -d test insert root directory test/dir","inserted 1");
 	testCommand("perl $prgdir/moirai2.pl -d test -i 'root->directory->\$input' ls","test/dir/A.txt","test/dir/B.gif","test/dir/C.txt");
 	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 4");
@@ -4057,6 +4415,7 @@ sub test3{
 	unlink("test/Akira.txt");
 	unlink("test/output.txt");
 	unlink("test/message.txt");
+	unlink(".moirai2/crontab/hello.sh");
 	#Testing bash
 	createFile("test/input1.txt","Akira\tHello");
 	createFile("test/input2.txt","Akira\tWorld");
@@ -4067,27 +4426,25 @@ sub test3{
 	unlink("test/command.sh");
 }
 #Testing containers
-sub test4{
-	open(OUT,">test/C.json");
-	print OUT "{\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}\n";
-	close(OUT);
+sub test5{
+	createFile("test/C.json","{\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}");
 	my $name=`uname -s`;chomp($name);
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea test/C.json","^$name");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea test/C.json","^$name");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea -c ubuntu test/C.json","^Linux");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea -c ubuntu test/C.json","^Linux");
 	unlink("test/C.json");
-	open(OUT,">test/D.json");
-	print OUT "{\"https://moirai2.github.io/schema/daemon/container\":\"ubuntu\",\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}\n";
-	close(OUT);
+	createFile("test/D.json","{\"https://moirai2.github.io/schema/daemon/container\":\"ubuntu\",\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea test/D.json","^Linux");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea test/D.json","^Linux");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea -c ubuntu test/D.json","^Linux");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea -c ubuntu test/D.json","^Linux");
 	unlink("test/D.json");
 }
-#Testing server
-sub test5{
+sub test6{
+}
+#Testing server (Takes about 5-10 minutes)=m
+sub test7{
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a ah3q\@172.18.91.78 exec uname","Linux");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a ah3q\@172.18.91.78 -c ubuntu exec uname -a","^Linux .+ x86_64 x86_64 x86_64 GNU/Linux\$");
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a ah3q\@172.18.91.78 -c singularity/lolcow.sif exec cowsay 'Hello World'"," _____________","< Hello World >"," -------------","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
@@ -4095,14 +4452,12 @@ sub test5{
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a 172.18.91.78 -q openstack exec hostname","^moirai\\d+-node-\\d+\$");
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a ah3q\@172.18.91.78 -c singularity/lolcow.sif -q openstack exec cowsay"," __","<  >"," --","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
 }
-sub test6{
-}
 ############################## testCommand ##############################
 sub testCommand{
 	my @values=@_;
 	my $command=shift(@values);
 	my $value2=join("\n",@values);
-	my ($writer,$file)=tempfile();
+	my ($writer,$file)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	close($writer);
 	if(system("$command > $file")){
 		print STDERR ">$command\n";
@@ -4121,7 +4476,7 @@ sub testCommand{
 sub testCommandRegex{
 	my $command=shift();
 	my $value2=shift();
-	my ($writer,$file)=tempfile();
+	my ($writer,$file)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	close($writer);
 	if(system("$command > $file")){
 		print STDERR ">$command\n";
@@ -4143,10 +4498,8 @@ sub testSub{
 	my $value1=eval($command);
 	if(compareValues($value1,$value2)==0){return;}
 	print STDERR ">$command\n";
-	if(ref($value2)eq"ARRAY"||ref($value2)eq"ARRAY"){
-		printTable($value1);
-		printTable($value2);
-	}else{print STDERR "'$value1' != '$value2'\n";}
+	if(ref($value2)eq"ARRAY"||ref($value2)eq"ARRAY"){printTable($value1);printTable($value2);}
+	else{print STDERR "'$value1' != '$value2'\n";}
 }
 ############################## testSubs ##############################
 sub testSubs{
@@ -4221,9 +4574,7 @@ sub throwJobs{
 	my $username;
 	my $servername;
 	my $serverdir;
-	if(defined($remotepath)){
-		($username,$servername,$serverdir)=splitServerPath($remotepath);
-	}
+	if(defined($remotepath)){($username,$servername,$serverdir)=splitServerPath($remotepath);}
 	if(scalar(@variables)==0){return;}
 	my ($fh,$path)=tempfile("bashXXXXXXXXXX",DIR=>"$rootDir/$throwdir",SUFFIX=>".sh");
 	chmod(0777,$path);
@@ -4326,11 +4677,13 @@ sub throwJobs{
 			print $fh "  > $stdoutfile \\\n";
 			print $fh "  2> $stderrfile\n";
 		}
+		my $workdir=$var->{"base"}->{"workdir"};
+		my $logfile="$jobdir/$execid.txt";
 		push(@ids,$execid);
 		if(exists($command->{$urls->{"daemon/remotepath"}})){
 			my $fromDir=$var->{"base"}->{"workdir"};
 			my $toDir=$var->{"server"}->{"workdir"};
-			rsyncDirectory("$fromDir/","$username\@$servername:$toDir/");
+			rsyncDirectory("$fromDir/","$username\@$servername:$toDir");
 		}
 	}
 	print $fh "if [ -e $stdout ] && [ ! -s $stdout ]; then\n";
@@ -4351,7 +4704,6 @@ sub throwJobs{
 	#$process is updated when job is thrown
 	#Before this, process is empty
 	foreach my $id(@ids){
-		my ($writer,$tempfile)=tempfile();
 		writeLogFile($id,$urls->{"daemon/execute"}."\tprocessed");
 		my $logfile=Cwd::abs_path("$jobdir/$id.txt");
 		my $processfile="$processdir/$id.txt";
@@ -4404,7 +4756,6 @@ sub uploadOutputs{
 	my $serverpath=$process->{$urls->{"daemon/serverpath"}};
 	my $url=$process->{$urls->{"daemon/command"}};
 	my $rootdir=$process->{$urls->{"daemon/rootdir"}};
-	printTable($process);
 	foreach my $output(@{$command->{"output"}}){
 		if(!exists($process->{"$url#$output"})){next;}
 		my $outputfile=$process->{"$url#$output"};
@@ -4428,6 +4779,16 @@ sub which{
 	}
 	my $result;
 	if(defined($servername)){
+		open(CMD,"ssh $servername 'test -f $command && echo 1 2>&1 |");
+		while(<CMD>){chomp;if($_ ne ""){$result="$servername:$command";}}
+		close(CMD);
+	}else{
+		open(CMD,"test -f $command && echo 1 2>&1 |");
+		while(<CMD>){chomp;if($_ ne ""){$result="$rootDir/$command";}}
+		close(CMD);
+	}
+	if($result ne ""){$hash->{$cmd}=$result;return $result;}
+	if(defined($servername)){
 		open(CMD,"ssh $servername 'which $command' 2>&1 |");
 		while(<CMD>){chomp;if($_ ne ""){$result=$_;}}
 		close(CMD);
@@ -4443,7 +4804,7 @@ sub which{
 sub writeFileContent{
 	my @array=@_;
 	my $file=shift(@array);
-	my ($writer,$tmpfile)=tempfile();
+	my ($writer,$tmpfile)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	foreach my $line(@array){print $writer "$line\n";}
 	close($writer);
 	if($file=~/^(.+\@.+)\:(.+)$/){system("scp $tmpfile $1:$2 2>&1 1>/dev/null");}

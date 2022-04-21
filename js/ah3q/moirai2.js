@@ -4,6 +4,13 @@ function moirai2(rdfdb){
 	this.rdfdb=rdfdb;
 }
 //######################################## QUERY ########################################
+moirai2.prototype.commandResults=function(url,method){
+	var self=this;
+	var json={rdfdb:self.rdfdb,url:url};
+	var post=$.ajax({type:'POST',dataType:'json',url:"moirai2.php?command=results",data:json});
+	post.fail(function(xhr,textStatus){console.log("failed",xhr,textStatus);});
+	post.done(function(data){if(method!=null)method(data);});
+}
 moirai2.prototype.rdfQuery=function(text,method){
 	var self=this;
 	var json={rdfdb:self.rdfdb,query:text};

@@ -2136,6 +2136,7 @@ sub test{
 	my $hash={};
 	if(scalar(@arguments)>0){foreach my $arg(@arguments){$hash->{$arg}=1;}}
 	else{for(my $i=0;$i<=8;$i++){$hash->{$i}=1;}}
+	if(fileExistsInDirectory("test")){system("rm -r test/*");}
 	mkdir("test");
 	if(exists($hash->{0})){test0();}
 	if(exists($hash->{1})){test1();}
@@ -2143,8 +2144,11 @@ sub test{
 	if(exists($hash->{3})){test3();}
 	rmdir("test");
 }
-#Test sub functions
+#Test test
 sub test0{
+}
+#Test sub functions
+sub test1{
 	testSub("getPredicateFromFile(\"$dbdir/A.txt\")","A");
 	testSub("getPredicateFromFile(\"$dbdir/B/A.txt\")","B/A");
 	testSub("getPredicateFromFile(\"$dbdir/B/A.txt.gz\")","B/A");
@@ -2185,7 +2189,7 @@ sub test0{
 	testSub("getFileFromPredicate(\"ah3q\\\@dgt-ac4:A/B\")","$dbdir/ssh/ah3q/dgt-ac4/A/B.txt");
 }
 #Testing basic functionality
-sub test1{
+sub test2{
 	mkdir("file");
 	createFile("test/id.txt","A\tA1","B\tB1","C\tC1","D\tD1");
 	createFile("test/name.txt","A1\tAkira","B1\tBen","C1\tChris","D1\tDavid");
@@ -2272,7 +2276,7 @@ sub test1{
 	testCommand("perl $prgdir/rdf.pl -q -d test delete % % %","");
 }
 #Testing advanced cases
-sub test2{
+sub test3{
 	#Testing special queries like ()
 	createFile("test/import.txt","A\tB\tC","X\tB\tY","C\tD\tE","C\tD\tH","C\tD\tI","F\tD\tG");
 	testCommand("perl $prgdir/rdf.pl -d test insert < test/import.txt","inserted 6");
@@ -2357,7 +2361,14 @@ sub test2{
 	unlink("test/name/one.txt");
 	rmdir("test/name");
 }
-sub test3{
+############################## fileExistsInDirectory ##############################
+sub fileExistsInDirectory{
+	my $directory=shift();
+	opendir(DIR,$directory);
+	foreach my $file(readdir(DIR)){
+		if($file=~/^\./){next;}
+		else{return 1;}
+	}
 }
 ############################## testCommand ##############################
 sub testCommand{
