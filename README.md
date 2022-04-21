@@ -2,12 +2,26 @@
 
 ## Description
 
-MOIRAI2 is a scientific workflow system.
-Commands are all web based (https://moirai2.github.io/command).
-Input, output, parameter, time, stdout, stderr are recorded in RDF sqlite3 database.
+MOIRAI2 is a simple scientific workflow system written in perl to process multiple commands sequentially, keep logs/history of commands, and construct a meta database of files and values (notated with triples) with simple to use bash like notation. 
 
-bash2cwl has moved to https://github.com/moirai2/bash2cwl
+For example:
 
+> perl moirai2.pl exec ls -lt
+
+This will simply execute 'ls -lt' command and store stdout output, time of executions, and command line in [a log file](example/log.txt) under .moirai2/log directory.
+
+> perl moirai2.pl -o example->file->$output exec echo hello world > $output
+
+This will execute (exec) a command echo hello world > $output and create an output file with a content hello world.
+It will also record a triple, example(subject), file(predicate), and filepath to output(object) in text based metadata database. 
+
+> perl moirai2.pl -i example->file->$input -o $input->count->$output exec output=$(wc -l $input)
+
+Based output file (hello world) from the previous execution, it will execute word count (wc) command and store its result in $output variable. 
+
+Also triple (subject=filepath to hello world text file, predicate=count, object=1) will be recorded in metadata database.
+
+Chain commands can be connected by linking triples like examples above. 
 ## Structure
 ```
 moirai2/

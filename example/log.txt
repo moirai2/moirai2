@@ -1,0 +1,56 @@
+######################################## e20220421104216SUx0 ########################################
+https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/j20220421104216.json
+https://moirai2.github.io/schema/daemon/execid	e20220421104216SUx0
+https://moirai2.github.io/schema/daemon/execute	completed
+https://moirai2.github.io/schema/daemon/processtime	0
+https://moirai2.github.io/schema/daemon/timecompleted	1650505337
+https://moirai2.github.io/schema/daemon/timeended	1650505337
+https://moirai2.github.io/schema/daemon/timeregistered	1650505337
+https://moirai2.github.io/schema/daemon/timestarted	1650505337
+######################################## stdout ########################################
+total 872
+drwxrwxrwx  34 ah3q  staff    1088  4 21 10:41 command
+drwxr-xr-x   6 ah3q  _www      192  4 21 10:31 js
+-rw-------   1 ah3q  wheel  195253  4 21 10:30 moirai2.pl
+-rwxr-xr-x@  1 ah3q  wheel   93711  4 14 14:36 rdf.pl
+-rw-r--r--@  1 ah3q  staff  106725  4 13 09:37 openstack.pl
+drwxr-xr-x   4 ah3q  staff     128  4 11 10:35 flask
+drwxr-xr-x   5 ah3q  _www      160  4 11 10:35 css
+-rwxrwxrwx@  1 ah3q  staff    8311  3 23 00:58 moirai2.php
+-rw-r--r--@  1 ah3q  staff     212  3 11 14:08 docker-compose.yml
+-rw-r--r--@  1 ah3q  staff     496  3 11 12:29 Dockerfile
+drwxr-xr-x  11 ah3q  _www      352  3 10 17:24 images
+-rw-r--r--@  1 ah3q  _www    22843 11 11 11:03 README.md
+######################################## bash ########################################
+#!/bin/sh
+export PATH=/Users/ah3q/Sites/moirai2:/Users/ah3q/Sites/moirai2/bin:/Users/ah3q/Sites/moirai2/.moirai2/bin:$PATH
+cmdurl=".moirai2/cmd/j20220421104216.json"
+execid="e20220421104216SUx0"
+workdir=".moirai2/e20220421104216SUx0"
+rootdir="/Users/ah3q/Sites/moirai2"
+jobfile=".moirai2/ctrl/job/e20220421104216SUx0.txt"
+########## init ##########
+cd $rootdir
+touch $workdir/status.txt
+touch $workdir/log.txt
+function status() { echo "$1	"`date +%s` >> $workdir/status.txt ; }
+function record() { echo "$1	$2" >> $workdir/log.txt ; }
+record https://moirai2.github.io/schema/daemon/execid e20220421104216SUx0
+record https://moirai2.github.io/schema/daemon/command .moirai2/cmd/j20220421104216.json
+status start
+########## command ##########
+ls -lt
+#############################
+status end
+status=""
+if [ -z "$status" ]; then
+if [ -s $workdir/stderr.txt ]; then
+status=error
+fi
+fi
+if [ -z "$status" ]; then
+status=completed
+fi
+status $status
+sleep 1
+touch $workdir/status.txt
