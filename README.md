@@ -8,35 +8,41 @@ For example:
 
 > perl moirai2.pl exec ls -lt
 
-This will simply execute 'ls -lt' command and store stdout output, time of executions, and command line in [a log file](example/log.txt) under .moirai2/log directory.
+This will simply execute 'ls -lt' command and store stdout output, time of executions, and command line information in [a log file](example/log/e20220421104216SUx0.txt) under .moirai2/log directory.
 
-> perl moirai2.pl -o example->file->$output exec echo hello world > $output
+> perl moirai2.pl -o 'example->file->$output' exec 'echo hello world > $output'
 
-This will execute (exec) a command echo hello world > $output and create an output file with a content hello world.
-It will also record a triple, example(subject), file(predicate), and filepath to output(object) in text based metadata database. 
+This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220421104757igzL.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded in a basename of a file).
 
-> perl moirai2.pl -i example->file->$input -o $input->count->$output exec output=$(wc -l $input)
+'echo hello world > $output' is quoted with a single quote (') because a command contains redirect '>' and '$'.  If a command line is not quoted, redirect to a file will be handled by the unix system and not by moirai2 system.  A single quote (') is used instead of double quote ("), because a variable quoted with double quote (") will be replaced by the value by unix system before passing to moirai2.  Single quote will not replace by the value, so single quote is recommended in this case.  If you want to use double quote ("), you can escape $'' with '\' like "echo hello world > \$output"
 
-Based output file (hello world) from the previous execution, it will execute word count (wc) command and store its result in $output variable. 
+> perl moirai2.pl -i 'example->file->$input' -o '$input->count->$count' exec 'wc -l $input > $count'
 
-Also triple (subject=filepath to hello world text file, predicate=count, object=1) will be recorded in metadata database.
+Using an output file with content 'hello world' from the previous execution, moirai2 will execute a word count (wc) command and store its result in $output file.   An [output file](example/text/count), a [log file](example/log/e20220421112633bepB.txt) and a metadata [triple file](example/db/count.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Moirai2 checks for output triple before executing a command line.  If an output triple is found (meaning it's been executed before), wc process will not be executed.
 
-Chain commands can be connected by linking triples like examples above. 
+> perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
+
+Chain of commands can be connected by linking in/out triples like example above.  This is how moiri2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be written by user directly, or through web interface, or through moirai computation.
+
 ## Structure
 ```
 moirai2/
-├── commandeditor.html - HTML for editing command json.
-├── commandviewer.html - Viewintg a command json.
+├── Dockerfile - a docker file of moirai2.
+├── README.md - This readme file
+├── command/ - a collection of command line files.
 ├── css/ - stylesheet used by jquery columns.
+├── docker-compose.yml - docker-compose to run moirai2 web site.
+├── example/ - a collection of example files
+├── flask/ - files used for running web server through docker-compose
 ├── images/ - images used by jquery columns.
 ├── js/ - Javascript used for MOIRAI2 manipulation through a browser.
-|   ├── ah3q/ - my javascripts fro moirai2
-|   ├── jquery/ - jquery (https://visjs.org) scripts
-|   └── vis/ - vis (https://visjs.org) scripts for network graphs
-├── moirai2.php - Used for MOIRAI2 manipulation through a browser.
-├── moirai2.pl - Computes MOIRAI2 commands/network.
-├── rdf.pl - Script to handle Resource Description Framework (RDF) using SQLite3 database.
-└── README.md - This readme file
+│   ├── ah3q/ - my javascripts fro moirai2
+│   ├── jquery/ - jquery (https://visjs.org) scripts
+│   └── vis/ - vis (https://visjs.org) scripts for network graphs
+├── moirai2.php - Used for MOIRAI2 manipulation through a browser interface.
+├── moirai2.pl - Assign and process MOIRAI2 commands.
+├── openstack.pl - A collection of commands to run Openstack for moirai2.
+└── rdf.pl - Script to handle a text-based triple (sub,pre,obj) database.
 ```
 
 ## Install
@@ -56,738 +62,111 @@ To install moirai2 to a directory named "project".
 $ git clone https://github.com/moirai2/moirai2.git project
 ```
 
-## Usage
-
-* Explaining usage by examples.
-
-### Example0
-```shell
-$ perl moirai2.pl exec ls
-README.md
-commandeditor.html
-commandviewer.html
-css
-images
-js
-moirai
-moirai2.php
-moirai2.pl
-rdf.pl
-```
-* Execute ls command
-
-```shell
-$ perl moirai2.pl exec ls -lt
-total 480
-drwxrwxrwx  8 ah3q  _www      256  9 13 23:30 moirai
--rw-r--r--@ 1 ah3q  _www    22230  9 13 23:29 README.md
-drwxrwxrwx  6 ah3q  _www      192  9 13 23:13 js
--rwxrwxrwx@ 1 ah3q  staff  132304  9 13 23:05 moirai2.pl
--rwxrwxrwx@ 1 ah3q  staff   63474  9 13 22:09 rdf.pl
--rwxrwxrwx@ 1 ah3q  _www     7753 12 13  2020 moirai2.php
--rwxr-xr-x@ 1 ah3q  _www     8064 10 23  2020 commandeditor.html
--rwxr-xr-x@ 1 ah3q  _www     3013 10 23  2020 commandviewer.html
-drwxr-xr-x  4 ah3q  _www      128 10  8  2020 css
-drwxr-xr-x  9 ah3q  _www      288 10  8  2020 images
-```
-
-### Example1
-```shell
-$ perl moirai2.pl https://moirai2.github.io/command/text/sort.json
-#Input: input? input.txt
-$ ls rdf/nXXXXXXXXXXXXXX
-sort.txt
-```
-* This is an example of a sort command using a json file I prepared: <a href="https://moirai2.github.io/command/text/sort.json">sort.json</a>.
-* Path to input file (to be sorted) will be prompted, so enter a filepath and push return.
-* Temporary bash shell, stdout, stderr files will be written to rdf/nXXXXXXXXXXXXXX/ (XXXXXXXXXXXXXX is datetime).
-* Computation will finish in few seconds.  All (empty) temporary files will be removed.
-* After computation, sorted file will be output to rdf/nXXXXXXXXXXXXXX/sort.txt 
-
-### Example2
-```shell
-$ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input.txt
-$ ls rdf/nXXXXXXXXXXXXXX
-sort.txt
-```
-* You can specify input path in argument and can avoid prompt message.
-
-### Example3
-```shell
-$ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input.txt output.txt
-$ ls output.txt
-output.txt
-```
-* It's possible to specify both input and output paths.
-* Order of arguments do matter and differ by commands.
-
-### Example4
-* Order of input and output in arguments can be checked with a help option.
-```shell
-$perl moirai2.pl -h https://moirai2.github.io/command/text/sort.json
-
-#URL     :https://moirai2.github.io/command/text/sort.json
-#Command :sort.json [input] [output]
-#Input   :input
-#Output  :output
-#Bash    :output="$workdir/sort.txt"
-         :sort $input > $output
-```
-* In sort.json case, first argument is 'input' and second argument is 'output'.
-* help option without any json URL will print out ordinary help message.
-```shell
-$perl moirai2.pl -h
-
-############################## HELP ##############################
-
-Program: Handles MOIRAI2 command with SQLITE3 database.
-Version: 2020/11/05
-Author: Akira Hasegawa (akira.hasegawa@riken.jp)
-
-Usage: perl moirai2.pl [Options] COMMAND
-
-Commands: daemon   Run daemon
-          file     Checks file information
-          ls       list directories/files
-          command  Execute from user specified command instead of a command json
-          loop     Loop check and execution indefinitely 
-          script   Retrieve scripts and bash files from a command json
-          test     For development purpose
-.....
-```
-* help option without a command will show more specific help message
-```shell
-$perl moirai2.pl -h ls
-
-############################## HELP ##############################
-
-Program: List files/directories and store path information to DB.
-
-Usage: perl moirai2.pl [Options] ls DIR DIR2 ..
-
-        DIR  Directory to search for (if not specified, DIR='.').
-
-Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
-         -g  grep specific string
-         -G  ungrep specific string
-         -o  Output query for insert in '$sub->$pred->$obj' format.
-         -r  Recursive search (default=0)
-
-Variables: $path, $directory, $filename, $basename, $suffix, $dirX (X=0~9), $baseX (X=0~9)
-
-Example: perl moirai2.pl -d DB -r 0 -g GREP -G UNREP -o '$basename->#id->$path' ls DIR DIR2 ..
-
-```
-
-### Example5
-```shell
-$ perl moirai2.pl https://moirai2.github.io/command/text/sort.json input=input.txt output=output.txt
-$ ls output.txt
-output.txt
-```
-* You can specify input and output with "key=value" notation.
-* Order doesn't matter if variable format is used.
-* Notation can be either input=input.txt or '$input=input.txt' (be sure to use single quote when $ is used).
-* To know the valid input and output variable names use a help command explained in Example4.
-
-### Example6
-```shell
-$ cat sort.json
-{"https://moirai2.github.io/schema/daemon/input":"$input",
-"https://moirai2.github.io/schema/daemon/bash":["output=\"$workdir/sort.txt\"","sort $input > $output"],
-"https://moirai2.github.io/schema/daemon/output":"$output"}
-$ perl moirai2.pl sort.json
-#Input: input? input.txt
-$ ls output.txt
-output.txt
-```
-* You can run a command from a json file in your local directory.  Json file doesn't have to be on the web.
-* A command json file used in the previous usage, specifies command lines, input, and output.
-* I have prepared basic commands at <a href="https://moirai2.github.io/command">https://moirai2.github.io/command</a>.
-* You can create your own command json file and use them.
-* https://moirai2.github.io/schema/daemon/input - For multiple values, ["$input1","$input2"]
-* https://moirai2.github.io/schema/daemon/bash - MAKE SURE you assign the output variables in your code.
-* https://moirai2.github.io/schema/daemon/output -  To specify multiple value, "$output1,$output2" is ok too.
-
-### Example7
-* Information of an execution is stored in the Resource Description Framework (RDF) database (https://en.wikipedia.org/wiki/Resource_Description_Framework).
-* Data are store din RDF triples (subject, predicate, object).
-* You can view the RDF database by rdf.pl script with select (% is wildcard):
-```shell
-$ perl rdf.pl select
-n20201119134907	https://moirai2.github.io/command/text/sort.json#input	input.txt
-n20201119134907	https://moirai2.github.io/command/text/sort.json#output	rdf/n20201119134907/sort.txt
-n20201119134907	https://moirai2.github.io/schema/daemon/command	https://moirai2.github.io/command/text/sort.json
-n20201119134907	https://moirai2.github.io/schema/daemon/timeended	1605761347
-n20201119134907	https://moirai2.github.io/schema/daemon/timestarted	1605761347
-n20201119134907	https://moirai2.github.io/schema/daemon/timethrown	1605761347
-$ perl rdf.pl select % https://moirai2.github.io/schema/daemon/command
-n20201119134907	https://moirai2.github.io/schema/daemon/command	https://moirai2.github.io/command/text/sort.json
-$ perl rdf.pl select % % input.txt
-n20201119134907	https://moirai2.github.io/command/text/sort.json#input	input.txt
-```
-
-### Example8
-* Following are examples using database for controlling executions.
-* You can store the results/filepaths of computation in RDF database with -o option.
-```shell
-$perl moirai2.pl -o '$input->sorted->$output' https://moirai2.github.io/command/text/sort.json input=input.txt output=sorted.txt
-$ perl rdf.pl select
-input.txt	sorted	sorted.txt
-n20201119135641	https://moirai2.github.io/command/text/sort.json#input	input.txt
-n20201119135641	https://moirai2.github.io/command/text/sort.json#output	sorted.txt
-n20201119135641	https://moirai2.github.io/schema/daemon/command	https://moirai2.github.io/command/text/sort.json
-n20201119135641	https://moirai2.github.io/schema/daemon/timeended	1605761801
-n20201119135641	https://moirai2.github.io/schema/daemon/timestarted	1605761801
-n20201119135641	https://moirai2.github.io/schema/daemon/timethrown	1605761801
-```
-* Output option format is 'subject->predicate->object'.
-* Variables ($input and $output) need to be matched with variables specified in command lines.
-* Be sure to use single quotes (') instead of double quotes (") when specifying output format.  Otherwise $input and $output will be treated as bash variables (bash tries to assign values to $input and $output resulting in empty values).
-* If you really want to use double quotes, Be sure to add '\' before '$'.
-```shell
-$perl moirai2.pl -o "\$input->sorted->\$output" https://moirai2.github.io/command/text/sort.json input=input.txt output=sorted.txt
-```
-
-### Example9
-* With -i option, variable values can be referenced from the database.
-* Using result from previous example:
-```shell
-$ perl rdf.pl select % sorted
-input.txt	sorted	sorted.txt
-$perl moirai2.pl -i '$original->sorted->$input' -o '$input->resorted->$output' https://moirai2.github.io/command/text/sort.json output=resorted.txt
-$ perl rdf.pl select % %sorted
-input.txt	sorted	sorted.txt
-sorted.txt	resorted	resorted.txt
-```
-* If there are multiple data assigned in the database, all the commands will be executed.
-```shell
-$ perl rdf.pl select % sorted
-input.txt	sorted	sorted.txt
-input2.txt	sorted	sorted2.txt
-$perl moirai2.pl -i '$original->sorted->$input' -o '$input->resorted->$output' https://moirai2.github.io/command/text/sort.json 'output=${input.basename}.resorted.txt'
-$ perl rdf.pl select % %sorted
-input.txt	sorted	sorted.txt
-input2.txt	sorted	sorted2.txt
-sorted.txt	resorted	sorted.resorted.txt
-sorted2.txt	resorted	sorted2.resorted.txt
-```
-
-### Example10
-* By joining input and output notations of commands, the pipeline/workflow can be created.
-```shell
-$ cat workflow.sh
-mkdir -p grepped
-mkdir -p sorted
-mkdir -p uniqued
-$perl moirai2.pl -o 'workflow->input->$path' input
-$perl moirai2.pl -i '$hoge->input->$input' -o '$input->grepped->$output' https://moirai2.github.io/command/text/grep.json 'output=grepped/${input.filename}' 'pattern=moirai2'
-$perl moirai2.pl -i '$hoge->grepped->$input' -o '$input->sorted->$output' https://moirai2.github.io/command/text/sort.json 'output=sorted/${input.filename}'
-$perl moirai2.pl -i '$hoge->sorted->$input' -o '$input->uniqued->$output' https://moirai2.github.io/command/text/uniq_c.json 'output=uniqued/${input.filename}'
-```
-  * This line adds files under input directory to the database.
-  * If there are A.txt and B.txt under input/ directory, 'workflow->input->input/A.txt' and 'workflow->input->input/B.txt' will be added to the database.
-```shell
-$perl moirai2.pl -o 'workflow->input->$path' input
-```
-
-### Example11
-* The command lines don't have to be specified through json.
-```shell
-$ perl moirai2.pl -i '$original->resorted->$file' -o '$file->wc-l->$result' command << 'EOS'
-result=$workdir/${file.basename}.txt
-wc -l < $file > $result
-EOS
-```
-* Command lines are specified using here document (https://en.wikipedia.org/wiki/Here_document).
-* Don't forget to quote EOS with single quote (').  'EOS' make sure $file will be treated as $file instead of actual variable by BASH script.
-* Variables can be either $XXXX or ${XXXX} (same as bash notation)
-* system variables:
-  * cmdurl - "https://moirai2.github.io/command/text/sort.json"
-  * rdfdb - "rdf.sqlite3"
-  * nodeid - "nXXXXXXXXXXXXXX"
-  * ctrldir - Full path to "rdf/ctrl"
-  * prgdir - Full path to where moirai2.pl and rdf.pl are located
-  * rootdir - Full path to where rdf.sqlite3 is located
-  * tmpdir - "rdf/nXXXXXXXXXXXXXX/tmp"
-  * workdir - "rdf/nXXXXXXXXXXXXXX"
-* file exentions (These will be replaced by moirai2.pl):
-  * .path - "/A/B/C/D_E_F.fa"
-  * .directory - "/A/B/C"
-  * .filename - "D_E_F.fa"
-  * .basename - "D_E_F"
-  * .suffix - "fa"
-  * .baseX (X=int) - separated by non alphabet/number.  base0="D", base1="E", base2="F"
-  * .dirX (X=int) - separated by '/'.  dir0="A", dir1="B", dir2="C"
-
 ## Scripts
 
 ### moirai2.pl
-#### main
-```shell
-Program: Handles MOIRAI2 command with SQLITE3 database.
-Version: 2020/11/05
-Author: Akira Hasegawa (akira.hasegawa@riken.jp)
-
-Usage: perl moirai2.pl [Options] COMMAND
-
-Commands: daemon   Run daemon
-          file     Checks file information
-          ls       list directories/files
-          command  Execute from user specified command instead of a command json
-          loop     Loop check and execution indefinitely 
-          script   Retrieve scripts and bash files from a command json
-          test     For development purpose
-```
-
-#### default
-```shell
-Program: Executes MOIRAI2 command of a spcified URL json.
-
-Usage: perl moirai2.pl [Options] JSON/BASH [ASSIGN/ARGV ..]
-
-       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).
-       BASH  URL or path to a command bash file (from https://moirai2.github.io/workflow/).
-     ASSIGN  Assign a MOIRAI2 variables with '$VAR=VALUE' format.
-       ARGV  Arguments for input/output parameters.
-
-Options: -c  Use container for execution [docker,udocker,singularity].
-         -d  RDF sqlite3 database (default='rdf.sqlite3').
-         -h  Show help message.
-         -H  Show update history.
-         -i  Input query for select in '$sub->$pred->$obj' format.
-         -l  Show STDERR and STDOUT logs.
-         -m  Max number of jobs to throw (default='5').
-         -o  Output query for insert in '$sub->$pred->$obj' format.
-         -p  Prompt input parameter(s) to user.
-         -q  Use qsub for throwing jobs.
-         -r  Print return value.
-         -s  Loop second (default='10').
-```
-
-#### file
-```shell
-Program: Check and store file information to the database.
-
-Usage: perl moirai2.pl [Options] file
-
-Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
-         -i  Input query for select in '$sub->$pred->$obj' format.
-         -o  Output query for insert in '$sub->$pred->$obj' format.
-
-Variables:
-  $linecount   Print line count of a file (Can take care of gzip and bzip2).
-  $seqcount    Print sequence count of a FASTA/FASTQ files.
-  $filesize    Print size of a file.
-  $md5         Print MD5 of a file.
-  $timestamp   Print time stamp of a file.
-  $owner       Print owner of a file.
-  $group       Print group of a file.
-  $permission  Print permission of a file.
-```
-
-#### ls
-```shell
-Program: List files/directories and store path information to DB.
-
-Usage: perl moirai2.pl [Options] ls DIR DIR2 ..
-
-        DIR  Directory to search for (if not specified, DIR='.').
-
-Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
-         -g  grep specific string
-         -G  ungrep specific string
-         -o  Output query for insert in '$sub->$pred->$obj' format.
-         -r  Recursive search (default=0)
-
-Variables: $path, $directory, $filename, $basename, $suffix, $dirX (X=0~9), $baseX (X=0~9)
-```
-
-#### command
-```shell
-Usage: perl moirai2.pl [Options] command [ASSIGN ..] << 'EOS'
-COMMAND ..
-COMMAND2 ..
-EOS
-
-     ASSIGN  Assign a MOIRAI2 variables with '$VAR=VALUE' format.
-    COMMAND  Bash command lines to execute.
-        EOS  Assign command lines with Unix's heredoc.
-
-Options: -c  Use container for execution [docker,udocker,singularity].
-         -d  RDF sqlite3 database (default='rdf.sqlite3').
-         -i  Input query for select in '$sub->$pred->$obj' format.
-         -l  Show STDERR and STDOUT logs.
-         -m  Max number of jobs to throw (default='5').
-         -o  Output query for insert in '$sub->$pred->$obj' format.
-         -q  Use qsub for throwing jobs.
-         -r  Print return value.
-         -s  Loop second (default='10').
-```
-
-#### loop
-```shell
-Program: Check for Moirai2 commands every X seconds and execute.
-
-Usage: perl moirai2.pl [Options] loop
-
-Options: -d  RDF sqlite3 database (default='rdf.sqlite3').
-         -l  Show STDERR and STDOUT logs.
-         -m  Max number of jobs to throw (default='5').
-         -q  Use qsub for throwing jobs(default='bash').
-         -s  Loop second (default='no loop').
-```
-
-#### script
-```shell
-Program: Retrieves script and bash files from URL and save them to a directory.
-
-Usage: perl moirai2.pl [Options] script JSON
-
-       JSON  URL or path to a command json file (from https://moirai2.github.io/command/).
-
-Options: -o  Output directory (default='.').
-```
+#### History log of commands
+#### Work directory
+#### Temporary directory
+#### Don’t Execute command if output triple found
+#### Running multiple command lines once
+#### Input and Output
+#### Specifying output paths
+#### Multiple inputs
+#### Multiple outputs
+#### Running with Singularity docker
+#### Running command on remote server
+#### scp used to upload input and download output
 
 ### rdf.pl
+#### Triple database
+#### Triple text files grouped by predicates
+#### Directory predicate
+#### Multiple queries notation
+#### Accessing triples on the web http
+#### Editing by hands
 
-#### sync
-```shell
-rdf.pl -d DB sync
-```
-* Convert db directory/files <=> RDF sqlite3 DB.
-* This command checks timestamp of sqlite3 database file and text triplet files under db directory.
-* If timestamp of sqlite3 database is latest, it'll proceed "save" command.
-* If time stamp of triplet files under db directory are the latest, it'll proceed "load" command.
+### Web interface
+#### moirai2.php
+#### moirai2.js
+####  flask docker-compose
 
-#### save
-```shell
-rdf.pl -d DB save
-```
-* Convert RDF sqlite3 DB => db directory/files.
-* All the triplets stored in sqlite3 database will be written to triplet files.
-* Triplet files are grouped by predicate.
-* For example:
-  * Triplet "A->B->C" will be stored under db/B.txt file.
-  * Triplet "A->http://moirai2.gsc.riken.jp/akira/B->C" will be stored under db/moirai2.gsc.rien.jp/akira/B.txt file.
-  * Triplet "A->B#C->D" will be stored under db/B.txt file.
-* Unused triplet files will be removed.
+### openstack.pl
+#### Setup
 
-#### load
-```shell
-rdf.pl -d DB load
-```
-* Convert db directory/files => RDF sqlite3 DB.
-* All the files under db directory will be loaded.
-* The triplet files doesn't have to be grouped by the predicate.
-* Filename can be anything.
-* Sqlite3 database will be reset and reloaded with triplet under db directory files.
+### Daemon
+>perl moirai2.pl daemon
+Moirai2 can run in daemon mode where program checks for jobs in background and process when found.  Jobs can be assigned in two mode:
+- crontab  moirai2 checks for updates in triple database and process jobs when applicable changes are found.  This is used for an automation of data production.
+- submit  moirai2 checks for a text file under .moirai2/ctrl/submit directory.  A text file contains which command json to use and its parameters.  This is a gateway for a web interface.
 
-#### select
-```shell
-rdf.pl -d DB select SUB PRE OBJ
-```
-* Select database subject, predicate, object.
-* Use '%' for a wildcard.
-```shell
-A->B->C
+#### crontab
+>perl moirai2.pl daemon crontab
 
-> rdf.pl -d DB select A B C
-A B C
-> rdf.pl -d DB select A B %
-A B C
-> rdf.pl -d DB select % % C
-A B C
-```
+By placing a bash file with input triple (root->input->$input) information in .moirai2/crontab/ directory, moirai2 periodically checks for new entry in predicate=input and process if found.
 
-#### insert
-```shell
-rdf.pl -d DB insert SUB PRE OBJ
-```
-* Insert a new RDF (subject, predicate, object).
-```shell
-> rdf.pl -d DB insert D E F
-inserted 1
-```
+> #$-i root->input->$input
+> #$-o $input->count->$count
+> output=`wc -l < $input`
 
-#### update
-```shell
-rdf.pl -d DB update SUB PRE OBJ
-```
-* Update/replace new object with defined subject and predicate.
-```shell
-A->B->C
+Let's say we a file example.txt with just "Hello World", for example.
+If a new triple 'root->input->example.txt' is added to the database (equivalent of 'root  example.txt' line is added to input.txt), moirai2.pl execute 'output=`wc -l < example.txt`' and stores the result in triple database 'example.txt->count->1' (equivalent of 'example.txt 1' in count.txt).
 
->rdf.pl -d DB update A B D
-updated 1
+#### submit
+>perl moirai2.pl daemon submit
 
-A->B->D
-```
+By placing a text file like example bellow under .moirai2/ctrl/submit/ directory, moirai2 will submit a new job using a command json file "example.json" and input parameter "example.txt".
 
-#### delete
-```shell
-rdf.pl -d DB delete SUB PRE OBJ
-```
-* Delete RDF with defined subject, predicate, and object.
-```shell
-A->B->C
+> url   example.json
+> input example.txt
 
->rdf.pl -d DB delete A B C
-deleted 1
-```
+>perl moirai2.pl daemon process
 
-#### object
-```shell
-rdf.pl -d DB object SUB PRE OBJ > VARIABLE
-```
-* Print out object with specified subject, predicate, and object.
-* If there are multiple objects, results will be printed out in one line with a space.
-```shell
-A->B->C
-A->B->D
+#### Jobs Across Internet
 
->rdf.pl -d DB object A B
-C D
-```
+Processing of jobs are controlled by the existance of files under .moriai2/ctrl/job/ directory.  When a job is processed, a file will be transferred from .moirai2/ctrl/job/ to .moirai2/ctrl/process/ directory.  It is possible to share a .moriai2/ctrl/job/ directory across internet by specifying a username, server and directory with -j option like example bellow.  This will look for a file under  .moirai2/ctrl/job/ at 192.168.1.1 and if slot is available, a command file, input files, and parameters will be copied to the remote server and will be processed.  After the computation, output and logs will be copied back to the main server.
 
-#### network
-```shell
-rdf.pl -d DB network > TSV
-```
-* Print all triplets excluding moirai2 system.
-```shell
-A->B->C
-A->B->D
+##### One server and multiple nodes
+Main server takes care of crontab and submit, but no process.  Moirai directory will be created /home/ah3q/main/.moirai2/.  Nodes will look for a new job under /home/ah3q/main/.moirai2/ctrl/job at 192.168.1.1 server.
 
-> rdf.pl -d DB network
-A   B   C
-A   B   D
-```
+> # main server
+> cd /home/ah3q/main
+> perl moirai2.pl daemon crontab submit
+> # Log in to node server1 (192.168.1.2)
+> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+> # Log in to node server2 (192.168.1.3)
+> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+> # Log in to node server3 (192.168.1.4)
+> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+> # Log in to node server4 (192.168.1.5)
+> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
 
-#### network
-```shell
-rdf.pl -d DB import < TSV
-```
-* Import RDF from TSV.
-```shell
-> tsv.txt
-A   B   C
-D   E   F
+It's possible to deploy from main server in one bash script using -b option.  Make sure SSH keys are properly configured.
 
->rdf.pl -d DB import < tsv.txt
-A->B->C
-D->E->F
-```
+> cd /home/ah3q/main
+> perl moirai2.pl daemon crontab submit
+> perl moirai2.pl -b ah3q@192.168.1.2 -j ah3q@192.168.1.1:main daemon processs
+> perl moirai2.pl -b ah3q@192.168.1.3 -j ah3q@192.168.1.1:main daemon processs
+> perl moirai2.pl -b ah3q@192.168.1.4 -j ah3q@192.168.1.1:main daemon processs
+> perl moirai2.pl -b ah3q@192.168.1.5 -j ah3q@192.168.1.1:main daemon processs
 
-#### dump
-```shell
-rdf.pl -d DB dump > TSV
-```
-* Dump database in TSV format.
-```shell
-A->B->C
-D->E->F
+##### Nodes and Server Share Same Hard Disk
 
->rdf.pl -d DB dump > TSV
-A   B   C
-D   E   F
-```
-* Dump database in JSON format.
-```shell
-rdf.pl -d DB -f json dump > JSON
-```
+If the same hard disk are shaed by nodes and server, you can ommit -j option.  All the nodes will look for jobs under /home/ah3q/main/.moirai2 directory.
 
-#### drop
-* Delete the table
-```shell
-rdf.pl -d DB drop
-```
+> cd /home/ah3q/main
+> perl moirai2.pl daemon crontab submit
+> perl moirai2.pl -b ah3q@192.168.1.2:main daemon processs
+> perl moirai2.pl -b ah3q@192.168.1.3:main daemon processs
+> perl moirai2.pl -b ah3q@192.168.1.4:main daemon processs
+> perl moirai2.pl -b ah3q@192.168.1.5:main daemon processs
 
-#### query
-```shell
-rdf.pl -d DB query QUERY > JSON
-```
-* Get key-val from database with a query.
-```shell
-A   B   C
+##### Openstack
 
->perl rdf.pl query 'A->B->$c'
-[{"c":"C"}]
-```
+As you know, Moirai2 can create a new instance of node through OpenStack.  By adding '-q openstack', when excessive jobs are found under job directory, new node will be created to process jobs.  And when not jobs are found, instances will be deleted.
 
-#### replace
-```shell
-rdf.pl -d DB replace FROM TO
-```
-* Replace node with a new value.
-```shell
-A   B   C
-
-rdf.pl -d DB replace C D
-replaced
-
-A   B   D
-```
-
-#### mv
-```shell
-rdf.pl -d DB mv FROM TO
-```
-* Replace variable in database and also move file to a new path.
-```shell
-A B C.txt
-
-rdf.pl -d DB mv C.txt D.txt
-
-A B D.txt
-move C.txt to D.txt
-```
-
-#### rm
-```shell
-rdf.pl -d DB rm PATH
-```
-* Remove a file and record.
-```shell
-A B C.txt
-
-rdf.pl -d DB rm C.txt
-
-C.txt	https://moirai2.github.io/schema/file/timeremoved	1595086775
-remove C.txt
-```
-
-#### newnode
-```shell
-rdf.pl -d DB newnode > NODE
-```
-# Create a new node ID.
-```shell
-> rdf.pl -d DB newnode
-rdf.sqlite3#node1
-```
-
-#### reindex
-```shell
-rdf.pl -d DB reindex
-```
-* Reindex database.
-
-#### download
-```shell
-rdf.pl -d DB download URL
-```
-* Download a file path and record information.
-
-#### command
-```shell
-rdf.pl -d DB -f json command < JSON
-```
-* Register execution of a command in the database.
-* Run a command with moirai2.pl.
-
-#### merge
-```shell
-rdf.pl -d DB merge DB2 DB3
-```
-* Merge database and database arguments.
-
-#### linecount
-```shell
-rdf.pl linecount DIR/FILE > TSV
-```
-* Count lines and register number.
-
-#### seqcount
-```shell
-rdf.pl seqcount DIR/FILE > TSV
-```
-* Count sequences and register number.
-
-#### filesize
-```shell
-rdf.pl filesize DIR/FILE > TSV
-```
-* Check file size and register.
-
-#### md5
-```shell
-rdf.pl md5 DIR/FILE > TSV
-```
-* Check md5 and register.
-
-#### ls
-```shell
-rdf.pl ls DIR/FILE > LIST
-```
-* List directory and register database.
-
-```shell
-rdf.pl -d DB ls '-' < STDIN
-```
-
-#### copy
-```shell
-rdf.pl -d DB -D DB2 copy QUERY
-```
-* Copy database to a new database with query.
-
-#### install
-```shell
-rdf.pl -d DB install URL
-```
-* Install software URL.
-
-#### rmexec
-```shell
-rdf.pl -d DB rmexec
-```
-* Remove currently running executes.
-
-#### input
-```shell
-rdf.pl -d DB input SUB PRE OBJECT OBJECT2 [..]
-```
-* Input multiple objects.
-
-#### prompt
-```shell
-rdf.pl -d DB prompt SUB PRE QUESTION DEFAULT
-```
-* Prompt and new triplet to RDF database.
-* SUB->PRE->[user defined] will be inserted.
-* When [return] is typed, DEFAULT will be used instead.
-* When user typed value.
-```shell
-> rdf.pl prompt A B "What is object?" C
-What is object? something
-> rdf.pl select 
-A   B   something
-```
-* When user just hit return.
-```shell
-> rdf.pl prompt A B "What is object?" C
-What is object?
-> rdf.pl select 
-A   B   C
-```
-#### executes
-```shell
-rdf.pl -d DB executes
-```
-* Output execute information.
-
-#### html
-```shell
-rdf.pl -d DB html
-```
-* Output execute information in html mode.
-
-#### history
-```shell
-rdf.pl -d DB history
-```
-* Output execute information in shell mode.
+> cd /home/ah3q/main
+> perl moirai2.pl -q openstack daemon crontab submit process
 
 ## Licence
 

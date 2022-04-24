@@ -1,0 +1,64 @@
+######################################## e20220421104757igzL ########################################
+.moirai2/cmd/j20220421104757.json#output	.moirai2/e20220421104757igzL/tmp/output
+https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/j20220421104757.json
+https://moirai2.github.io/schema/daemon/execid	e20220421104757igzL
+https://moirai2.github.io/schema/daemon/execute	completed
+https://moirai2.github.io/schema/daemon/processtime	0
+https://moirai2.github.io/schema/daemon/timecompleted	1650505678
+https://moirai2.github.io/schema/daemon/timeended	1650505678
+https://moirai2.github.io/schema/daemon/timeregistered	1650505678
+https://moirai2.github.io/schema/daemon/timestarted	1650505678
+######################################## insert ########################################
+example	file	.moirai2/e20220421104757igzL/tmp/output
+######################################## bash ########################################
+#!/bin/sh
+export PATH=/Users/ah3q/Sites/moirai2:/Users/ah3q/Sites/moirai2/bin:/Users/ah3q/Sites/moirai2/.moirai2/bin:$PATH
+cmdurl=".moirai2/cmd/j20220421104757.json"
+execid="e20220421104757igzL"
+workdir=".moirai2/e20220421104757igzL"
+rootdir="/Users/ah3q/Sites/moirai2"
+tmpdir=".moirai2/e20220421104757igzL/tmp"
+jobfile=".moirai2/ctrl/job/e20220421104757igzL.txt"
+output=$tmpdir/output
+########## init ##########
+cd $rootdir
+touch $workdir/status.txt
+touch $workdir/log.txt
+function status() { echo "$1	"`date +%s` >> $workdir/status.txt ; }
+function record() { echo "$1	$2" >> $workdir/log.txt ; }
+mkdir -p /tmp/$execid
+ln -s /tmp/$execid $tmpdir
+record https://moirai2.github.io/schema/daemon/execid e20220421104757igzL
+record https://moirai2.github.io/schema/daemon/command .moirai2/cmd/j20220421104757.json
+status start
+########## command ##########
+echo hello world > $output
+#############################
+status end
+if [[ "$(declare -p output)" =~ "declare -a" ]]; then
+for out in ${output[@]} ; do
+record "$cmdurl#output" "$out"
+echo "insert example->file->$out"
+done
+else
+record "$cmdurl#output" "$output"
+echo "insert example->file->$output"
+fi
+rm $workdir/tmp
+if [ -z "$(ls -A /tmp/$execid)" ]; then
+rmdir /tmp/$execid
+else
+mv /tmp/$execid $workdir/tmp
+fi
+status=""
+if [ -z "$status" ]; then
+if [ -s $workdir/stderr.txt ]; then
+status=error
+fi
+fi
+if [ -z "$status" ]; then
+status=completed
+fi
+status $status
+sleep 1
+touch $workdir/status.txt
