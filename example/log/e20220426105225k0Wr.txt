@@ -1,0 +1,67 @@
+######################################## e20220426105225k0Wr ########################################
+.moirai2/cmd/j20220426105225sCPq.json#output	output.txt
+https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/j20220426105225sCPq.json
+https://moirai2.github.io/schema/daemon/execid	e20220426105225k0Wr
+https://moirai2.github.io/schema/daemon/execute	completed
+https://moirai2.github.io/schema/daemon/processtime	0
+https://moirai2.github.io/schema/daemon/timecompleted	1650937946
+https://moirai2.github.io/schema/daemon/timeended	1650937946
+https://moirai2.github.io/schema/daemon/timeregistered	1650937946
+https://moirai2.github.io/schema/daemon/timestarted	1650937946
+######################################## time ########################################
+registered	2022/04/26 10:52:26
+start	2022/04/26 10:52:26
+end	2022/04/26 10:52:26
+completed	2022/04/26 10:52:26
+######################################## bash ########################################
+#!/bin/sh
+export PATH=/Users/ah3q/Sites/moirai2:/Users/ah3q/Sites/moirai2/bin:/Users/ah3q/Sites/moirai2/.moirai2/bin:$PATH
+cmdurl=".moirai2/cmd/j20220426105225sCPq.json"
+execid="e20220426105225k0Wr"
+workdir=".moirai2/e20220426105225k0Wr"
+rootdir="/Users/ah3q/Sites/moirai2"
+tmpdir=".moirai2/e20220426105225k0Wr/tmp"
+jobfile=".moirai2/ctrl/job/e20220426105225k0Wr.txt"
+output=$tmpdir/output
+########## init ##########
+cd $rootdir
+touch $workdir/status.txt
+touch $workdir/log.txt
+function status() { echo "$1	"`date +%s` >> $workdir/status.txt ; }
+function record() { echo "$1	$2" >> $workdir/log.txt ; }
+mkdir -p /tmp/$execid
+ln -s /tmp/$execid $tmpdir
+record https://moirai2.github.io/schema/daemon/execid e20220426105225k0Wr
+record https://moirai2.github.io/schema/daemon/command .moirai2/cmd/j20220426105225sCPq.json
+status start
+########## command ##########
+ls -lt > $output;
+#############################
+status end
+mv $output output.txt
+output=output.txt
+if [[ "$(declare -p output)" =~ "declare -a" ]]; then
+for out in ${output[@]} ; do
+record "$cmdurl#output" "$out"
+done
+else
+record "$cmdurl#output" "$output"
+fi
+rm $workdir/tmp
+if [ -z "$(ls -A /tmp/$execid)" ]; then
+rmdir /tmp/$execid
+else
+mv /tmp/$execid $workdir/tmp
+fi
+status=""
+if [ -z "$status" ]; then
+if [ -s $workdir/stderr.txt ]; then
+status=error
+fi
+fi
+if [ -z "$status" ]; then
+status=completed
+fi
+status $status
+sleep 1
+touch $workdir/status.txt

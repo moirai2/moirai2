@@ -2,23 +2,23 @@
 
 ## Description
 
-MOIRAI2 is a simple scientific workflow system written in perl to process multiple commands sequentially, keep logs/history of commands, and construct a meta database of files and values (notated with triples) with simple to use bash like notation. 
+MOIRAI2 is a simple scientific workflow system written in perl to process multiple commands sequentially, keep logs/history of commands, and construct a meta database of files and values (notated with [triples](https://en.wikipedia.org/wiki/Semantic_triple)) with simple to use bash like notation. 
 
 For example:
 
 > perl moirai2.pl exec ls -lt
 
-This will simply execute 'ls -lt' command and store stdout output, time of executions, and command line information in [a log file](example/log/e20220421104216SUx0.txt) under .moirai2/log directory.
+This will simply execute 'ls -lt' command and store stdout output, time of executions, and command line information in [a log file](example/log/e20220424224043Mbqj.txt) under .moirai2/log directory.
 
 > perl moirai2.pl -o 'example->file->$output' exec 'echo hello world > $output'
 
-This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220421104757igzL.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded in a basename of a file).
+This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220424224158meiw.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded in a basename of a file).
 
 'echo hello world > $output' is quoted with a single quote (') because a command contains redirect '>' and '$'.  If a command line is not quoted, redirect to a file will be handled by the unix system and not by moirai2 system.  A single quote (') is used instead of double quote ("), because a variable quoted with double quote (") will be replaced by the value by unix system before passing to moirai2.  Single quote will not replace by the value, so single quote is recommended in this case.  If you want to use double quote ("), you can escape $'' with '\' like "echo hello world > \$output"
 
 > perl moirai2.pl -i 'example->file->$input' -o '$input->count->$count' exec 'wc -l $input > $count'
 
-Using an output file with content 'hello world' from the previous execution, moirai2 will execute a word count (wc) command and store its result in $output file.   An [output file](example/text/count), a [log file](example/log/e20220421112633bepB.txt) and a metadata [triple file](example/db/count.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Moirai2 checks for output triple before executing a command line.  If an output triple is found (meaning it's been executed before), wc process will not be executed.
+Using an output file with content 'hello world' from the previous execution, moirai2 will execute a word count (wc) command and store its result in $output file.   An [output file](example/text/count), a [log file](example/log/e20220424224235CQWg.txt) and a metadata [triple file](example/db/count.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Moirai2 checks for output triple before executing a command line.  If an output triple is found (meaning it's been executed before), wc process will not be executed.
 
 > perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
 
@@ -65,13 +65,80 @@ $ git clone https://github.com/moirai2/moirai2.git project
 ## Scripts
 
 ### moirai2.pl
-#### History log of commands
+
+>Commands:
+>             build  Build a command json from command lines and script files
+>       clear/clean  Clean all command log and history by removing .moirai2 directory
+>           command  Execute user specified command from STDIN
+>            daemon  Checks and runs the submitted and automated scripts/jobs
+>              exec  Execute user specified command from ARGUMENTS
+>              html  Output HTML files of command/logs/database
+>           history  List up executed commands
+>                ls  Create triples from directories/files and show or store them in triple database
+>               log  Print out logs information of processes
+>              open  Open .moirai2 directory (for Mac only)
+>         newdaemon  Setup a new daemon specified server
+>         openstack  Use openstack.pl to create new instance to process jobs
+>          sortsubs  For reorganizing this script(test commands)
+>            submit  Submit job with command URL and parameters specified in STDIN
+>              test  For development purpose (test commands)
+
 #### Work directory
+With each execution of process, a work directory is created under .moirai2/ with 'YYYYMMDDhhmmssXXXX' format where YYYY is year, MM is month, DD, is day, hh is hour, mm is minute, ss is second, and XXXX is a random character (for example, a directory path will be '.moirai2/e20220424202838b86T/').  'YYYYMMDDhhmmssXXXX' is also used as an execid of the process too.
+
+These files will be created under work directory:
+- log.txt - a file to keep command, input, output, and time information
+- run.sh - a bash file used to run command
+- status.txt - keep current status and timestamp
+- stderr.txt - STDERR output from running command
+- stdout.txt - STDOUT output from running command
+
+These files will be deleted after execution and all the results will be summarized into one log file.
+
+#### Summary File
+A summary file is divided into these section:
+- execid - a command URL, input and output parameters, and status.
+- time - registered, start, end, and completed datetime
+- stdout - STDOUT of command if exists
+- stderr - STDERR of command if exists
+- bash - actual command lines used for processing
+
+- If command is successful, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moiri2/log/YYYYMMDD/' directory.
+- If error occurs, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/error/' directory.
+
+A summary file can be viewed from a command line.
+
+>perl moirai2.pl history EXECID
+
+List of execids can be listed with this command.
+
+>perl moirai2.pl history 
+
 #### Temporary directory
-#### Don’t Execute command if output triple found
-#### Running multiple command lines once
-#### Input and Output
-#### Specifying output paths
+
+A temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is created under a work directory (.moirai2/YYYYMMDDhhmmssXXXX/).  During process, a temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) will be symbolic linked from /tmp/YYYYMMDDhhmmssXXXX.  After completion, a symbolic link will be replaced by the actual directory (mv /tmp/YYYYMMDDhhmmssXXXX .moirai2/YYYYMMDDhhmmssXXXX/tmp/).  By writing result to a temporary directory, I/O traffic will be reduced by using a local directory of nodes.
+
+To use this temporary directory, use '$tmpdir' variable.
+
+> perl moirai2.pl exec 'ls -lt > $tmpdir/output.txt'
+
+When output variable exists in a command line, moirai2 automatically creates a temporary file path.
+
+> perl moirai2.pl -o output exec 'ls -lt > $output'
+
+output=$tmpdir/output will be assigned at the beginning of a bash file.
+
+> perl moirai2.pl -o output exec 'ls -lt > $output;' output=output.txt
+
+By specifying output file path, path will be replaced after the computation (See [log file](example/log/e20220426105225k0Wr.txt).
+
+> output=$tmpdir/output
+> ls -lt > $output
+> mv $output output.txt
+
+#### Command Mode
+#### Input/Output Triples
+#### Running multiple command lines at once
 #### Multiple inputs
 #### Multiple outputs
 #### Running with Singularity docker
@@ -161,7 +228,7 @@ If the same hard disk are shaed by nodes and server, you can ommit -j option.  A
 > perl moirai2.pl -b ah3q@192.168.1.4:main daemon processs
 > perl moirai2.pl -b ah3q@192.168.1.5:main daemon processs
 
-##### Openstack
+##### Openstack (Available soon)
 
 As you know, Moirai2 can create a new instance of node through OpenStack.  By adding '-q openstack', when excessive jobs are found under job directory, new node will be created to process jobs.  And when not jobs are found, instances will be deleted.
 

@@ -1,26 +1,31 @@
-######################################## e20220421112633bepB ########################################
-.moirai2/cmd/j20220421112633.json#count	.moirai2/e20220421112633bepB/tmp/count
-.moirai2/cmd/j20220421112633.json#input	.moirai2/e20220421105354kgF4/tmp/output
-https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/j20220421112633.json
-https://moirai2.github.io/schema/daemon/execid	e20220421112633bepB
+######################################## e20220424224235CQWg ########################################
+.moirai2/cmd/j20220424224235ALXD.json#count	.moirai2/e20220424224235CQWg/tmp/count
+.moirai2/cmd/j20220424224235ALXD.json#input	.moirai2/e20220424224158meiw/tmp/output
+https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/j20220424224235ALXD.json
+https://moirai2.github.io/schema/daemon/execid	e20220424224235CQWg
 https://moirai2.github.io/schema/daemon/execute	completed
 https://moirai2.github.io/schema/daemon/processtime	0
-https://moirai2.github.io/schema/daemon/timecompleted	1650507994
-https://moirai2.github.io/schema/daemon/timeended	1650507994
-https://moirai2.github.io/schema/daemon/timeregistered	1650507994
-https://moirai2.github.io/schema/daemon/timestarted	1650507994
+https://moirai2.github.io/schema/daemon/timecompleted	1650807756
+https://moirai2.github.io/schema/daemon/timeended	1650807756
+https://moirai2.github.io/schema/daemon/timeregistered	1650807756
+https://moirai2.github.io/schema/daemon/timestarted	1650807756
+######################################## time ########################################
+registered	2022/04/24 22:42:36
+start	2022/04/24 22:42:36
+end	2022/04/24 22:42:36
+completed	2022/04/24 22:42:36
 ######################################## insert ########################################
-.moirai2/e20220421105354kgF4/tmp/output	count	.moirai2/e20220421112633bepB/tmp/count
+.moirai2/e20220424224158meiw/tmp/output	count	.moirai2/e20220424224235CQWg/tmp/count
 ######################################## bash ########################################
 #!/bin/sh
 export PATH=/Users/ah3q/Sites/moirai2:/Users/ah3q/Sites/moirai2/bin:/Users/ah3q/Sites/moirai2/.moirai2/bin:$PATH
-cmdurl=".moirai2/cmd/j20220421112633.json"
-execid="e20220421112633bepB"
-workdir=".moirai2/e20220421112633bepB"
+cmdurl=".moirai2/cmd/j20220424224235ALXD.json"
+execid="e20220424224235CQWg"
+workdir=".moirai2/e20220424224235CQWg"
 rootdir="/Users/ah3q/Sites/moirai2"
-tmpdir=".moirai2/e20220421112633bepB/tmp"
-input=".moirai2/e20220421105354kgF4/tmp/output"
-jobfile=".moirai2/ctrl/job/e20220421112633bepB.txt"
+tmpdir=".moirai2/e20220424224235CQWg/tmp"
+input=".moirai2/e20220424224158meiw/tmp/output"
+jobfile=".moirai2/ctrl/job/e20220424224235CQWg.txt"
 count=$tmpdir/count
 ########## init ##########
 cd $rootdir
@@ -30,8 +35,8 @@ function status() { echo "$1	"`date +%s` >> $workdir/status.txt ; }
 function record() { echo "$1	$2" >> $workdir/log.txt ; }
 mkdir -p /tmp/$execid
 ln -s /tmp/$execid $tmpdir
-record https://moirai2.github.io/schema/daemon/execid e20220421112633bepB
-record https://moirai2.github.io/schema/daemon/command .moirai2/cmd/j20220421112633.json
+record https://moirai2.github.io/schema/daemon/execid e20220424224235CQWg
+record https://moirai2.github.io/schema/daemon/command .moirai2/cmd/j20220424224235ALXD.json
 if [[ "$(declare -p input)" =~ "declare -a" ]]; then
 for out in ${input[@]} ; do
 record "$cmdurl#input" "$out"
