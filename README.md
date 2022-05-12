@@ -12,9 +12,9 @@ This will simply execute 'ls -lt' command and store stdout output, time of execu
 
 > perl moirai2.pl -o 'example->file->$output' exec 'echo hello world > $output'
 
-This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220424224158meiw.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded in a basename of a file).
+This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220424224158meiw.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded as a basename of a file).
 
-'echo hello world > $output' is quoted with a single quote (') because a command contains redirect '>' and '$'.  If a command line is not quoted, redirect to a file will be handled by the unix system and not by moirai2 system.  A single quote (') is used instead of double quote ("), because a variable quoted with double quote (") will be replaced by the value by unix system before passing to moirai2.  Single quote will not replace by the value, so single quote is recommended in this case.  If you want to use double quote ("), you can escape $'' with '\' like "echo hello world > \$output"
+'echo hello world > $output' is quoted with a single quote (') because a command contains redirect '>' and '$'.  If a command line is not quoted, redirect to a file will be handled by the unix system and not by moirai2 system.  A single quote (') is used instead of double quote ("), because a variable quoted with double quote (") will be replaced by the value by unix system before passing to moirai2.  Single quote is recommended for wrapping a command line passed to moirai2 because of this reason.  If you want to use double quote ("), you can escape $'' with '\' like "echo hello world > \$output"
 
 > perl moirai2.pl -i 'example->file->$input' -o '$input->count->$count' exec 'wc -l $input > $count'
 
@@ -22,7 +22,7 @@ Using an output file with content 'hello world' from the previous execution, moi
 
 > perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
 
-Chain of commands can be connected by linking in/out triples like example above.  This is how moiri2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be written by user directly, or through web interface, or through moirai computation.
+Chain of commands can be connected by linking in/out triples like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be written by user directly, or through web interface, or through moirai computation.
 
 ## Structure
 ```
@@ -66,22 +66,22 @@ $ git clone https://github.com/moirai2/moirai2.git project
 
 ### moirai2.pl
 
->Commands:
->             build  Build a command json from command lines and script files
->       clear/clean  Clean all command log and history by removing .moirai2 directory
->           command  Execute user specified command from STDIN
->            daemon  Checks and runs the submitted and automated scripts/jobs
->              exec  Execute user specified command from ARGUMENTS
->              html  Output HTML files of command/logs/database
->           history  List up executed commands
->                ls  Create triples from directories/files and show or store them in triple database
->               log  Print out logs information of processes
->              open  Open .moirai2 directory (for Mac only)
->         newdaemon  Setup a new daemon specified server
->         openstack  Use openstack.pl to create new instance to process jobs
->          sortsubs  For reorganizing this script(test commands)
->            submit  Submit job with command URL and parameters specified in STDIN
->              test  For development purpose (test commands)
+  Commands:
+               build  Build a command json from command lines and script files
+         clear/clean  Clean all command log and history by removing .moirai2 directory
+             command  Execute user specified command from STDIN
+              daemon  Checks and runs the submitted and automated scripts/jobs
+                exec  Execute user specified command from ARGUMENTS
+                html  Output HTML files of command/logs/database
+             history  List up executed commands
+                  ls  Create triples from directories/files and show or store them in triple database
+                 log  Print out logs information of processes
+                open  Open .moirai2 directory (for Mac only)
+           newdaemon  Setup a new daemon specified server
+           openstack  Use openstack.pl to create new instance to process jobs
+            sortsubs  For reorganizing this script(test commands)
+              submit  Submit job with command URL and parameters specified in STDIN
+                test  For development purpose (test commands)
 
 #### Work directory
 With each execution of process, a work directory is created under .moirai2/ with 'YYYYMMDDhhmmssXXXX' format where YYYY is year, MM is month, DD, is day, hh is hour, mm is minute, ss is second, and XXXX is a random character (for example, a directory path will be '.moirai2/e20220424202838b86T/').  'YYYYMMDDhhmmssXXXX' is also used as an execid of the process too.
@@ -103,7 +103,7 @@ A summary file is divided into these section:
 - stderr - STDERR of command if exists
 - bash - actual command lines used for processing
 
-- If command is successful, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moiri2/log/YYYYMMDD/' directory.
+- If command is successful, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/log/YYYYMMDD/' directory.
 - If error occurs, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/error/' directory.
 
 A summary file can be viewed from a command line.
