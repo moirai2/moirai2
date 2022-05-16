@@ -116,17 +116,14 @@ List of execids can be listed with this command.
 
 #### Temporary directory
 
-A temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is created under a work directory (.moirai2/YYYYMMDDhhmmssXXXX/).  During process, a temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) will be symbolic linked from /tmp/YYYYMMDDhhmmssXXXX.  After completion, a symbolic link will be replaced by the actual directory (mv /tmp/YYYYMMDDhhmmssXXXX .moirai2/YYYYMMDDhhmmssXXXX/tmp/).  By writing result to a temporary directory, I/O traffic will be reduced by using a local directory of nodes.
+While processing a command line, a temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is created under a work directory (.moirai2/YYYYMMDDhhmmssXXXX/).  This temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is actually a symbolic link from /tmp/YYYYMMDDhhmmssXXXX.  This is to reduce I/O traffic of a server network by outputing result to a local directory of each node.  Upon completion of a command, a symbolic link will be replaced by the actual directory (mv /tmp/YYYYMMDDhhmmssXXXX .moirai2/YYYYMMDDhhmmssXXXX/tmp/).
 
-To use this temporary directory, use '$tmpdir' variable.
-
-> perl moirai2.pl exec 'ls -lt > $tmpdir/output.txt'
-
-When output variable exists in a command line, moirai2 automatically creates a temporary file path.
+moirai2 automatically creates a temporary file path for all output variables defined.  For example:
 
 > perl moirai2.pl -o output exec 'ls -lt > $output'
 
-output=$tmpdir/output will be assigned at the beginning of a bash file.
+'output=$tmpdir/output' is automatically assigned before user defined command lines.
+So user doesn't have to worry about using $tmpdir notation.
 
 > perl moirai2.pl -o output exec 'ls -lt > $output;' output=output.txt
 
@@ -137,6 +134,22 @@ By specifying output file path, path will be replaced after the computation (See
 > mv $output output.txt
 
 #### Command Mode
+If you want to process multiple command lines, use 'command' mode.  This will take in command lines from STDIN.  For example:
+
+> perl moirai2.pl command << 'EOF'
+ls -lt > $tmpdir/output.txt
+wc -l $tmpdir/output.txt > output.txt
+rm $tmpdir/output.txt
+EOF
+
+Make sure you use single quoted End Of File marker 'EOF', since usually command lines will contain '$' to represent variables.  $tmpdir is a system variable to use a temporary directory explained in previous section.
+
+> perl moirai2.pl command 'output=output2.txt' << 'EOF'
+ls -lt > $tmpdir/output.txt
+wc -l $tmpdir/output.txt > $output
+rm $tmpdir/output.txt
+EOF
+
 #### Input/Output Triples
 #### Running multiple command lines at once
 #### Multiple inputs
