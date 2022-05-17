@@ -2701,7 +2701,7 @@ sub initExecute{
 	my $url=$command->{$urls->{"daemon/command"}};
 	my $execid=$vars->{"execid"};
 	my $rootdir=$rootDir;#/Users/ah3q/Sites/moirai2
-	my $moiraidir=$moiraidir;#.moirai
+	my $moiraidir=$moiraidir;#.moirai2
 	my $workdir="$moiraidir/$execid";#.moirai2/eYYYYMMDDHHMMSS
 	my $exportpath="$rootDir:$rootDir/bin:$rootDir/$moiraidir/bin:\$PATH";
 	mkdir($workdir);

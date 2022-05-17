@@ -2,7 +2,7 @@
 
 ## Description
 
-MOIRAI2 is a simple scientific workflow system written in perl to process multiple commands sequentially, keep logs/history of commands, and construct a meta database of files and values (notated with [triples](https://en.wikipedia.org/wiki/Semantic_triple)) with simple to use bash like notation. 
+MOIRAI2 is a simple scientific workflow system written in perl to process multiple commands sequentially, keep logs/history of commands, and construct a meta database of files and values (notated with [triples](https://en.wikipedia.org/wiki/Semantic_triple)) with simple to use bash like notation.
 
 For example:
 
@@ -66,25 +66,28 @@ $ git clone https://github.com/moirai2/moirai2.git project
 
 ### moirai2.pl
 
-  Commands:
-               build  Build a command json from command lines and script files
-         clear/clean  Clean all command log and history by removing .moirai2 directory
-             command  Execute user specified command from STDIN
-              daemon  Checks and runs the submitted and automated scripts/jobs
-                exec  Execute user specified command from ARGUMENTS
-                html  Output HTML files of command/logs/database
-             history  List up executed commands
-                  ls  Create triples from directories/files and show or store them in triple database
-                 log  Print out logs information of processes
-                open  Open .moirai2 directory (for Mac only)
-           newdaemon  Setup a new daemon specified server
-           openstack  Use openstack.pl to create new instance to process jobs
-            sortsubs  For reorganizing this script(test commands)
-              submit  Submit job with command URL and parameters specified in STDIN
-                test  For development purpose (test commands)
+```
+Commands:
+         build  Build a command json from command lines and script files
+   clear/clean  Clean all command log and history by removing .moirai2 directory
+       command  Execute user specified command from STDIN
+        daemon  Checks and runs the submitted and automated scripts/jobs
+         error  Check error logs
+          exec  Execute user specified command from ARGUMENTS
+          html  Output HTML files of command/logs/database
+       history  List up executed commands
+            ls  Create triples from directories/files and show or store them in triple database
+           log  Print out logs information of processes
+          open  Open .moirai2 directory (for Mac only)
+     newdaemon  Setup a new daemon specified server
+     openstack  Use openstack.pl to create new instance to process jobs
+      sortsubs  For reorganizing this script(test commands)
+        submit  Submit job with command URL and parameters specified in STDIN
+          test  For development purpose (test commands)
+```
 
 #### Work directory
-With each execution of process, a work directory is created under .moirai2/ with 'YYYYMMDDhhmmssXXXX' format where YYYY is year, MM is month, DD, is day, hh is hour, mm is minute, ss is second, and XXXX is a random character (for example, a directory path will be '.moirai2/e20220424202838b86T/').  'YYYYMMDDhhmmssXXXX' is also used as an execid of the process too.
+With each execution of process, a work directory is created under .moirai2/ with 'YYYYMMDDhhmmssXXXX' format where YYYY is year, MM is month, DD, is day, hh is hour, mm is minute, ss is second, and XXXX is a random character (for example, a directory path will be '.moirai2/e20220424202838b86T/').  'YYYYMMDDhhmmssXXXX' is also used as an execute ID (execid) of the process too.
 
 These files will be created under work directory:
 - log.txt - a file to keep command, input, output, and time information
@@ -93,7 +96,7 @@ These files will be created under work directory:
 - stderr.txt - STDERR output from running command
 - stdout.txt - STDOUT output from running command
 
-These files will be deleted after execution and all the results will be summarized into one log file.
+These files will be deleted after execution and all the results will be summarized into one [log file](example/log/e20220424224235CQWg.txt).
 
 #### Summary File
 A summary file is divided into these section:
@@ -104,37 +107,88 @@ A summary file is divided into these section:
 - bash - actual command lines used for processing
 
 - If command is successful, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/log/YYYYMMDD/' directory.
-- If error occurs, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/error/' directory.
+
+To view logs of execute IDs:
+
+>perl moirai2.pl history 
 
 A summary file can be viewed from a command line.
 
 >perl moirai2.pl history EXECID
 
-List of execids can be listed with this command.
+#### Error File
 
->perl moirai2.pl history 
+- If error occurs, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/error/' directory.
+
+To view errors logs:
+
+>perl moirai2.pl error
+
+After viewing error logs, moirai2 will prompt 
+
+> Do you want to delete all error logs [y/n]?
+
+If the causes of error is fixed, be sure to delete these error logs.
+Moirai2 will NOT execute an error command with same input parameters, unless error log files are removed from moirai2 error directory.
 
 #### Temporary directory
 
-While processing a command line, a temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is created under a work directory (.moirai2/YYYYMMDDhhmmssXXXX/).  This temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is actually a symbolic link from /tmp/YYYYMMDDhhmmssXXXX.  This is to reduce I/O traffic of a server network by outputing result to a local directory of each node.  Upon completion of a command, a symbolic link will be replaced by the actual directory (mv /tmp/YYYYMMDDhhmmssXXXX .moirai2/YYYYMMDDhhmmssXXXX/tmp/).
+While processing a command line, a temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is created under a work directory (.moirai2/YYYYMMDDhhmmssXXXX/).  This temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is actually a symbolic link from /tmp/YYYYMMDDhhmmssXXXX.  A /tmp temporary directory is to reduce I/O traffic of a server network by outputing result to a local directory of each node.  Upon completion of a command, a symbolic link will be replaced by the actual directory (mv /tmp/YYYYMMDDhhmmssXXXX .moirai2/YYYYMMDDhhmmssXXXX/tmp/).
 
-moirai2 automatically creates a temporary file path for all output variables defined.  For example:
+Temporary directory is automatically used to specify output variables.  For example, If you specify output variable like this:
 
 > perl moirai2.pl -o output exec 'ls -lt > $output'
 
-'output=$tmpdir/output' is automatically assigned before user defined command lines.
-So user doesn't have to worry about using $tmpdir notation.
+```
+output=$tmpdir/output
+ls -lt > $output
+```
 
-> perl moirai2.pl -o output exec 'ls -lt > $output;' output=output.txt
+'output=$tmpdir/output' is automatically added before use's command 'ls -lt > $output'.
+In case where user assigned output path in argument.
 
-By specifying output file path, path will be replaced after the computation (See [log file](example/log/e20220426105225k0Wr.txt).
+#### Specifying Output Path By Argument
 
-> output=$tmpdir/output
-> ls -lt > $output
-> mv $output output.txt
+In default mode, all output files will be kept under $tempdir, but if you want to to keep somewhere else, you can specify output path in argument like this:
+
+> perl moirai2.pl exec 'ls -lt > $output;' output=output.txt
+
+Basically this means at the end of processing, reassign output variable to "output.txt".  ';' is used to separate actual command line 'ls -lt > $output' and Moirai2 argument 'output=output.txt'.  This basically does following in a bash script (Actual [log file](example/log/e20220517112019ajb_.txt)):
+
+```
+execid="e20220517112019ajb_"
+tmpdir=".moirai2/e20220517112019ajb_/tmp"
+output=$tmpdir/output
+mkdir -p /tmp/$execid
+ln -s /tmp/$execid $tmpdir
+ls -lt > $output
+mv $output output.txt
+output=output.txt
+```
+
+If you want to specify multiple output variables, you can simply add more arguments like following:
+
+> perl moirai2.pl exec 'ls -lt > $output;wc -l $output>$output2;' output=output.txt output2=output2.txt
+
+This will create a bash like below (Actual [log file](example/log/e20220517112938cvz5.txt)):
+
+```
+execid="e20220517112938cvz5"
+tmpdir=".moirai2/e20220517112938cvz5/tmp"
+output=$tmpdir/output
+output2=$tmpdir/output2
+mkdir -p /tmp/$execid
+ln -s /tmp/$execid $tmpdir
+ls -lt > $output;wc -l $output>$output2
+mv $output output.txt
+output=output.txt
+mv $output2 output2.txt
+output2=output2.txt
+```
 
 #### Command Mode
-If you want to process multiple command lines, use 'command' mode.  This will take in command lines from STDIN.  For example:
+
+If you want to process multiple command lines, use 'command' mode.  This will take in multiple command lines from STDIN.  For example:
 
 > perl moirai2.pl command << 'EOF'
 ls -lt > $tmpdir/output.txt
@@ -142,16 +196,17 @@ wc -l $tmpdir/output.txt > output.txt
 rm $tmpdir/output.txt
 EOF
 
-Make sure you use single quoted End Of File marker 'EOF', since usually command lines will contain '$' to represent variables.  $tmpdir is a system variable to use a temporary directory explained in previous section.
+Make sure you use single quoted End Of File marker 'EOF', since usually command lines will contain '$' to represent variables.  By using single quoted EOF, '$' variables defined in command lines will not be processed by UNIX and will be passed as '$' variables to Moirai2 system.  '$tmpdir' is a system variable to use a temporary directory explained in previous section (Actual [a log file](example/log/e20220517114031V3Wl.txt)).
 
-> perl moirai2.pl command 'output=output2.txt' << 'EOF'
-ls -lt > $tmpdir/output.txt
-wc -l $tmpdir/output.txt > $output
-rm $tmpdir/output.txt
-EOF
+If you want to specify arguments in a command mode, syntax will be something like this(Actual [a log file](example/log/e20220517114255Hu7i.txt)):
+
+> perl moirai2.pl command 'output=worldcount.txt' << 'EOF'
+> ls -lt > $tmpdir/output.txt
+> wc -l $tmpdir/output.txt > $output
+> rm $tmpdir/output.txt
+> EOF
 
 #### Input/Output Triples
-#### Running multiple command lines at once
 #### Multiple inputs
 #### Multiple outputs
 #### Running with Singularity docker
