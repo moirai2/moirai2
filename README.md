@@ -1,20 +1,42 @@
 # Moirai2
 
-## Description
+## Introduction
 
-MOIRAI2 is a simple scientific workflow system written in perl to process multiple commands sequentially, keep logs/history of commands, and construct a meta database of files and values (notated with [triples](https://en.wikipedia.org/wiki/Semantic_triple)) with simple to use bash like notation.
+MOIRAI2 is a very simple scientific workflow system written in basic perl whith was developed with four concepts in mind:
 
-For example:
+- usability - Can execute workflow from a command line or from web page.
+- reprodusibility - Easy to process with singularity/Docker container.
+- scalability - Easy to expand computational power using virtual environment like [Hokusa-Sailing Ship](https://i.riken.jp/en/data-sci/).
+- flexibility - Workflow processes are loosly connected with [semantic triples](https://en.wikipedia.org/wiki/Semantic_triple)
+
+Let's me explain these concepts with examples:
 
 > perl moirai2.pl exec ls -lt
 
 This will simply execute 'ls -lt' command and store stdout output, time of executions, and command line information in [a log file](example/log/e20220424224043Mbqj.txt) under .moirai2/log directory.
 
+> perl moirai2.pl -c ubuntu uname -a
+
+This will execute uname command within ubuntu Docker container environment.
+
+> perl moirai2.pl -a 192.168.1.12 -c ubuntu uname -a
+
+This will execute uname command within ubuntu Docker container environment at 192.168.1.12 server (through SSH).
+
+> perl moirai2.pl -a 192.168.1.12 -q openstack -c ubuntu uname -a
+
+This will execute uname command within ubuntu Docker container environment at 192.168.1.12 server (through SSH) after creating a new (default) instance using [OpenStack](https://www.openstack.org).
+
+By adding options to a command line, user can easily run same command line in different servers, but the same computational environment (ubuntu Docker enrivonment).
+
+Next, let's me explain workflow of MOIRAI2 with examples.
+
 > perl moirai2.pl -o 'example->file->$output' exec 'echo hello world > $output'
 
 This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220424224158meiw.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded as a basename of a file).
 
-'echo hello world > $output' is quoted with a single quote (') because a command contains redirect '>' and '$'.  If a command line is not quoted, redirect to a file will be handled by the unix system and not by moirai2 system.  A single quote (') is used instead of double quote ("), because a variable quoted with double quote (") will be replaced by the value by unix system before passing to moirai2.  Single quote is recommended for wrapping a command line passed to moirai2 because of this reason.  If you want to use double quote ("), you can escape $'' with '\' like "echo hello world > \$output"
+Reason why 'echo hello world > $output'
+is quoted with a single quote (') is because a command contains redirect (>) and variable with dollar sign.  If a command line is not quoted, redirect to a file will be handled by the unix system and not by moirai2 system.  A single quote (') is used instead of double quote ("), because a variable quoted with double quote (") will be replaced by the value by unix system before passing to moirai2.  Single quote is recommended for wrapping a command line passed to moirai2 because of this reason.  If you want to use double quote ("), you can escape $'' with '\' like "echo hello world > \$output".
 
 > perl moirai2.pl -i 'example->file->$input' -o '$input->count->$count' exec 'wc -l $input > $count'
 
@@ -22,7 +44,7 @@ Using an output file with content 'hello world' from the previous execution, moi
 
 > perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
 
-Chain of commands can be connected by linking in/out triples like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be written by user directly, or through web interface, or through moirai computation.
+An [output file](example/text/charcount), a [log file](example/log/e202205171203279pKn.txt) and a metadata [triple file](example/db/charcount.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Chain of commands can be connected by linking in/out triples like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be written by user directly, or through web interface, or through moirai computation.
 
 ## Structure
 ```
@@ -62,7 +84,7 @@ To install moirai2 to a directory named "project".
 $ git clone https://github.com/moirai2/moirai2.git project
 ```
 
-## Scripts
+## Description
 
 ### moirai2.pl
 
@@ -96,12 +118,13 @@ These files will be created under work directory:
 - stderr.txt - STDERR output from running command
 - stdout.txt - STDOUT output from running command
 
-These files will be deleted after execution and all the results will be summarized into one [log file](example/log/e20220424224235CQWg.txt).
+These files will be deleted after execution and all the results will be summarized into one [log file](example/log/e20220424224235CQWg.txt) (example).
 
 #### Summary File
 A summary file is divided into these section:
 - execid - a command URL, input and output parameters, and status.
 - time - registered, start, end, and completed datetime
+- insert/update/delete - edit log of triple database
 - stdout - STDOUT of command if exists
 - stderr - STDERR of command if exists
 - bash - actual command lines used for processing
@@ -112,13 +135,13 @@ To view logs of execute IDs:
 
 >perl moirai2.pl history 
 
-A summary file can be viewed from a command line.
+A summary log file can be viewed from a command line.
 
 >perl moirai2.pl history EXECID
 
 #### Error File
 
-- If error occurs, a summary file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/error/' directory.
+- If error occurs, a summary log file 'YYYYMMDDhhmmssXXXX.txt' will be placed under '.moirai2/error/' directory.
 
 To view errors logs:
 
@@ -132,6 +155,8 @@ If the causes of error is fixed, be sure to delete these error logs.
 Moirai2 will NOT execute an error command with same input parameters, unless error log files are removed from moirai2 error directory.
 
 #### Temporary directory
+
+> .moirai2/YYYYMMDDhhmmssXXXX/tmp/ => /tmp/YYYYMMDDhhmmssXXXX (symbolic link)
 
 While processing a command line, a temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is created under a work directory (.moirai2/YYYYMMDDhhmmssXXXX/).  This temporary directory (.moirai2/YYYYMMDDhhmmssXXXX/tmp/) is actually a symbolic link from /tmp/YYYYMMDDhhmmssXXXX.  A /tmp temporary directory is to reduce I/O traffic of a server network by outputing result to a local directory of each node.  Upon completion of a command, a symbolic link will be replaced by the actual directory (mv /tmp/YYYYMMDDhhmmssXXXX .moirai2/YYYYMMDDhhmmssXXXX/tmp/).
 
@@ -153,7 +178,7 @@ In default mode, all output files will be kept under $tempdir, but if you want t
 
 > perl moirai2.pl exec 'ls -lt > $output;' output=output.txt
 
-Basically this means at the end of processing, reassign output variable to "output.txt".  ';' is used to separate actual command line 'ls -lt > $output' and Moirai2 argument 'output=output.txt'.  This basically does following in a bash script (Actual [log file](example/log/e20220517112019ajb_.txt)):
+Basically this means at the end of processing, reassign output variable to "output.txt".  ';' is used to separate actual command line 'ls -lt > $output' and Moirai2 argument 'output=output.txt'.  This basically does following in a bash script ([log file](example/log/e20220517112019ajb_.txt)):
 
 ```
 execid="e20220517112019ajb_"
@@ -170,7 +195,7 @@ If you want to specify multiple output variables, you can simply add more argume
 
 > perl moirai2.pl exec 'ls -lt > $output;wc -l $output>$output2;' output=output.txt output2=output2.txt
 
-This will create a bash like below (Actual [log file](example/log/e20220517112938cvz5.txt)):
+This will create a bash like below ([log file](example/log/e20220517112938cvz5.txt)):
 
 ```
 execid="e20220517112938cvz5"
@@ -190,23 +215,132 @@ output2=output2.txt
 
 If you want to process multiple command lines, use 'command' mode.  This will take in multiple command lines from STDIN.  For example:
 
-> perl moirai2.pl command << 'EOF'
+```
+perl moirai2.pl command << 'EOF'
 ls -lt > $tmpdir/output.txt
 wc -l $tmpdir/output.txt > output.txt
 rm $tmpdir/output.txt
 EOF
+```
 
-Make sure you use single quoted End Of File marker 'EOF', since usually command lines will contain '$' to represent variables.  By using single quoted EOF, '$' variables defined in command lines will not be processed by UNIX and will be passed as '$' variables to Moirai2 system.  '$tmpdir' is a system variable to use a temporary directory explained in previous section (Actual [a log file](example/log/e20220517114031V3Wl.txt)).
+Make sure you use single quoted End Of File marker 'EOF', since usually command lines will contain '$' to represent variables.  By using single quoted EOF, '$' variables defined in command lines will not be processed by UNIX and will be passed as '$' variables to Moirai2 system.  '$tmpdir' is a system variable to use a temporary directory explained in previous section ([log file](example/log/e20220517114031V3Wl.txt)).
 
-If you want to specify arguments in a command mode, syntax will be something like this(Actual [a log file](example/log/e20220517114255Hu7i.txt)):
+If you want to specify arguments in a command mode, syntax will be something like this ([log file](example/log/e20220517114255Hu7i.txt)):
 
-> perl moirai2.pl command 'output=worldcount.txt' << 'EOF'
-> ls -lt > $tmpdir/output.txt
-> wc -l $tmpdir/output.txt > $output
-> rm $tmpdir/output.txt
-> EOF
+```
+perl moirai2.pl command 'output=worldcount.txt' << 'EOF'
+ls -lt > $tmpdir/output.txt
+wc -l $tmpdir/output.txt > $output
+rm $tmpdir/output.txt
+EOF
+```
 
 #### Input/Output Triples
+
+MOIRAI2 uses [semantic triple](https://en.wikipedia.org/wiki/Semantic_triple) to link between command lines to construct a [scientific workflow](https://en.wikipedia.org/wiki/Scientific_workflow_system) (as explained in Introduction section).
+
+```
+> perl moirai2.pl -o 'example->file->$output' exec 'echo hello world > $output'
+> perl moirai2.pl -i 'example->file->$input' -o '$input->count->$count' exec 'wc -l $input > $count'
+> perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
+```
+
+A triple network created by this example looks like this:
+
+```mermaid
+  flowchart LR
+    example-->|file|hello.txt
+    hello.txt-->|count|count
+    hello.txt-->|charcount|charcount
+```
+
+It is possible to walk through multiple triples by sharing the same variable name.  If you want to access root(example) and charcount, use $file to connect both triple. For example:
+
+```
+> perl moirai2.pl -i '$id->file->$file,$file->count->$path1,$file->charcount->$path2' exec 'echo $id charcount results are $path1 and $path2'
+
+example charcount results are .moirai2/e20220523160029WyQX/tmp/count and .moirai2/e20220523160029WyQX/tmp/count
+```
+
+Walkint through the triple branches will become useful when processing STAR alignment.
+For example, a triple network for STAR alignment:
+
+```mermaid
+  flowchart LR
+    Homo_sapiens-->|latestAssembly|hg38
+    hg38-->|starIndex|/data/genomes/hg38/
+    libraryA-->|species|Homo_sapiens
+    libraryA-->|input1|libraryA.read1.fq
+    libraryA-->|input2|libraryA.read2.fq
+```
+
+Command for STAR alignment:
+
+```
+> perl moirai2.pl -i '$library->input1->$input1,$library->input2->$input2,$library->species->$species,$species->latestAssembly->$assembly,$assembly->starIndex->$genomdir' -o '$library->result->$outdir' exec 'STAR --runThreadN 4 --genomeDir $genomdir --readFilesIn $input1 $input2 --outFileNamePrefix $outdir;' 'outdir=/home/ah3q/data/$library/'
+```
+
+After successful processing, a result triple will be added to a network.
+
+```mermaid
+  flowchart LR
+    Homo_sapiens-->|latestAssembly|hg38
+    hg38-->|starIndex|/data/genomes/hg38/
+    libraryA-->|species|Homo_sapiens
+    libraryA-->|input1|libraryA.read1.fq
+    libraryA-->|input2|libraryA.read2.fq
+    libraryA-->|result|/home/ah3q/data/libraryA/
+```
+
+Strength of triple notation is flexibility.  For example, libraries with mixed species (human and mouse) can be handles with a single command line explained in previous example.
+
+```mermaid
+  flowchart LR
+    Homo_sapiens-->|latestAssembly|hg38
+    hg38-->|starIndex|/data/genomes/hg38/
+    Mus_musculus-->|latestAssembly|mm39
+    mm39-->|starIndex|/data/genomes/mm39/
+    libraryA-->|species|Homo_sapiens
+    libraryA-->|input1|libraryA.read1.fq
+    libraryA-->|input2|libraryA.read2.fq
+    libraryB-->|species|Homo_sapiens
+    libraryB-->|input1|libraryB.read1.fq
+    libraryB-->|input2|libraryB.read2.fq
+    libraryC-->|species|Mus_musculus
+    libraryC-->|input1|libraryC.read1.fq
+    libraryC-->|input2|libraryC.read2.fq
+```
+
+If you want to process differently, replace variable with the actual value (Homo_sapiens or Mus_musculus).
+
+```
+> perl moirai2.pl -i '$library->input1->$input1,$library->input2->$input2,$library->species->Homo_sapiens,Homo_sapiens->latestAssembly->$assembly,$assembly->starIndex->$genomdir' -o '$library->result->$outdir' exec 'STAR --runThreadN 4 --genomeDir $genomdir --readFilesIn $input1 $input2 --outFileNamePrefix $outdir;' 'outdir=/home/ah3q/humanData/$library/'
+
+> perl moirai2.pl -i '$library->input1->$input1,$library->input2->$input2,$library->species->Mus_musculus,Mus_musculus->latestAssembly->$assembly,$assembly->starIndex->$genomdir' -o '$library->result->$outdir' exec 'STAR --runThreadN 4 --genomeDir $genomdir --readFilesIn $input1 $input2 --outFileNamePrefix $outdir;' 'outdir=/home/ah3q/mouseData/$library/'
+```
+
+By specifying Homo_sapiens for $species variable in first line will handle only Homo sapiens inputs (libraryB).  The second line specifies Mus_musculus for $species, so only Mus musculus input will be handles (libraryC).  After processing, network might look like this:
+
+```mermaid
+  flowchart LR
+    Homo_sapiens-->|latestAssembly|hg38
+    hg38-->|starIndex|/data/genomes/hg38/
+    Mus_musculus-->|latestAssembly|mm39
+    mm39-->|starIndex|/data/genomes/mm39/
+    libraryA-->|species|Homo_sapiens
+    libraryA-->|input1|libraryA.read1.fq
+    libraryA-->|input2|libraryA.read2.fq
+    libraryA-->|result|/home/ah3q/humanData/libraryA/
+    libraryB-->|species|Homo_sapiens
+    libraryB-->|input1|libraryB.read1.fq
+    libraryB-->|input2|libraryB.read2.fq
+    libraryB-->|result|/home/ah3q/humanData/libraryB/
+    libraryC-->|species|Mus_musculus
+    libraryC-->|input1|libraryC.read1.fq
+    libraryC-->|input2|libraryC.read2.fq
+    libraryC-->|result|/home/ah3q/mouseData/libraryC/
+```
+
 #### Multiple inputs
 #### Multiple outputs
 #### Running with Singularity docker

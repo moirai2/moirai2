@@ -1,0 +1,54 @@
+######################################## e202205171203279pKn ########################################
+.moirai2/cmd/j20220517120327dTu9.json#count	.moirai2/e20220517120317XNsf/tmp/count
+.moirai2/cmd/j20220517120327dTu9.json#input	.moirai2/e20220517120307Kyg8/tmp/output
+https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/j20220517120327dTu9.json
+https://moirai2.github.io/schema/daemon/execid	e202205171203279pKn
+https://moirai2.github.io/schema/daemon/execute	completed
+https://moirai2.github.io/schema/daemon/processtime	0
+https://moirai2.github.io/schema/daemon/rootdir	/Users/ah3q/Sites/moirai2
+https://moirai2.github.io/schema/daemon/timecompleted	1652756608
+https://moirai2.github.io/schema/daemon/timeended	1652756608
+https://moirai2.github.io/schema/daemon/timeregistered	1652756608
+https://moirai2.github.io/schema/daemon/timestarted	1652756608
+https://moirai2.github.io/schema/daemon/workdir	.moirai2/e202205171203279pKn
+######################################## time ########################################
+registered	2022/05/17 12:03:28
+start	2022/05/17 12:03:28
+end	2022/05/17 12:03:28
+completed	2022/05/17 12:03:28
+######################################## insert ########################################
+.moirai2/e20220517120307Kyg8/tmp/output	charcount	.moirai2/e20220517120317XNsf/tmp/count
+######################################## bash ########################################
+#!/bin/sh
+export PATH=/Users/ah3q/Sites/moirai2:/Users/ah3q/Sites/moirai2/bin:/Users/ah3q/Sites/moirai2/.moirai2/bin:$PATH
+cmdurl=".moirai2/cmd/j20220517120327dTu9.json"
+execid="e202205171203279pKn"
+workdir=".moirai2/e202205171203279pKn"
+rootdir="/Users/ah3q/Sites/moirai2"
+count=".moirai2/e20220517120317XNsf/tmp/count"
+input=".moirai2/e20220517120307Kyg8/tmp/output"
+jobfile=".moirai2/ctrl/job/e202205171203279pKn.txt"
+########## init ##########
+cd $rootdir
+touch $workdir/status.txt
+touch $workdir/log.txt
+function status() { echo "$1	"`date +%s` >> $workdir/status.txt ; }
+function record() { echo "$1	$2" >> $workdir/log.txt ; }
+status start
+########## command ##########
+wc -c $input > $count
+#############################
+status end
+echo "insert $input->charcount->$count"
+status=""
+if [ -z "$status" ]; then
+if [ -s $workdir/stderr.txt ]; then
+status=error
+fi
+fi
+if [ -z "$status" ]; then
+status=completed
+fi
+status $status
+sleep 1
+touch $workdir/status.txt
