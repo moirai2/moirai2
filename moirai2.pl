@@ -10,7 +10,7 @@ use Time::localtime;
 my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
-my $program_version="2022/05/23";
+my $program_version="2022/05/25";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_T $opt_u $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:Tuv:V:w:xX:Z:');
@@ -414,7 +414,14 @@ sub bashCommand{
 			$value=$options->{$key};
 			print OUT "$key=\"$value\"\n";
 		}else{
-			if(ref($value)eq"ARRAY"){print OUT "$key=(\"".join("\" \"",@{$value})."\")\n";}
+			if(ref($value)eq"ARRAY"){
+				print OUT "$key=(";
+				for(my $i=0;$i<scalar(@{$value});$i++){
+					my $v=$value->[$i];
+					if($i>0){print OUT " ";}
+					print OUT jsonEncode($v);
+				}
+				print OUT ")\n";}
 			else{print OUT "$key=\"$value\"\n";}
 		}
 	}
@@ -911,25 +918,6 @@ sub checkProcessStatus{
 	}else{
 		return;
 	}
-}
-############################## checkQuery ##############################
-sub checkQuery{
-	my @queries=@_;
-	my $hit=0;
-	foreach my $query(@queries){
-		my $i=0;
-		foreach my $node(split(/->/,$query)){
-			if($node=~/^\$[\w_]+$/){}
-			elsif($node=~/^\$(\w+)/){
-				my $label=($i==0)?"subject":($i==1)?"predicate":"object";
-				print STDERR "ERROR : '$node' can't be used as $label in query '$query'.\n";
-				print STDERR "      : Please specify '\$$1' variable in argument with '\$$1=???????'.\n";
-				$hit++;
-			}
-			$i++;
-		}
-	}
-	return $hit;
 }
 ############################## checkTimestamp ##############################
 sub checkTimestamp {
@@ -2277,9 +2265,13 @@ sub handleInputOutput{
 				$suffixs->{$1}=$2;
 				$tokens[2]="\$$1";
 			}
-			foreach my $token(@tokens){if($token=~/^\$(.+)$/){
-				my $variable=$1;
-				if(!existsArray($keys,$variable)){push(@{$keys},$variable);}}
+			foreach my $token(@tokens){
+				my $variable=$token;
+				if($variable=~/^\((.+)\)$/){$variable=$1;}
+				if($variable=~/^\$(.+)$/){
+					$variable=$1;
+					if(!existsArray($keys,$variable)){push(@{$keys},$variable);}
+				}
 			}
 			if(!defined($triples)){$triples=[];}
 			push(@{$triples},join("->",@tokens));
@@ -3179,7 +3171,9 @@ sub loadExecutes{
 		while(<$reader>){
 			chomp;
 			my ($key,$val)=split(/\t/);
-			$hash->{$key}=$val;
+			if(!exists($hash->{$key})){$hash->{$key}=$val;}
+			elsif(ref($hash->{$key})eq"ARRAY"){push(@{$hash->{$key}},$val);}
+			else{$hash->{$key}=[$hash->{$key},$val];}
 		}
 		close($reader);
 		if(exists($hash->{$urls->{"daemon/execute"}})){next;}
@@ -4881,6 +4875,14 @@ sub test3{
 	unlink("test/output.txt");
 	#Testing suffix
 	testCommandRegex("perl moirai2.pl -r output -X '\$output.txt' exec 'wc -l > \$output'",".moirai2/e\\w{18}/tmp/output.txt\$");
+	#Testing multiple inputs
+	createFile("test/text.txt","example\tAkira","example\tBen","example\tChris","example\tDavid");
+	testCommand("perl $prgdir/moirai2.pl -d test  -i 'example->text->(\$input)' exec 'echo \${input\[\@\]}'","Akira Ben Chris David");
+	unlink("test/text.txt");
+	#Testing multiple outputs
+	testCommand("perl $prgdir/moirai2.pl -d test -o 'name->test->\$output' exec 'output=(\"Akira\" \"Ben\" \"Chris\" \"David\");'","");
+	testCommand("cat test/test.txt","name\tAkira","name\tBen","name\tChris","name\tDavid");
+	unlink("test/test.txt");
 }
 #Testing build and ls functionality
 sub test4{

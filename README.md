@@ -341,8 +341,88 @@ By specifying Homo_sapiens for $species variable in first line will handle only 
     libraryC-->|result|/home/ah3q/mouseData/libraryC/
 ```
 
-#### Multiple inputs
-#### Multiple outputs
+#### Input Array
+
+Let's say we have three triples pointing to three files "hello.txt", "world.txt", "akira.txt" with predicate=file.
+
+```mermaid
+  flowchart LR
+    example-->|file|hello.txt
+    example-->|file|world.txt
+    example-->|file|akira.txt
+```
+
+If triple 'example->file->$input' is used to execute command, variable $input will be assigned three times.  Which means commands will be executed three times.
+
+```
+> perl moirai2.pl -i 'example->file->$input' exec 'ls -lt $input'
+[1] ls -lt hello.txt
+[2] ls -lt world.txt
+[3] ls -lt akira.txt
+```
+
+If you want to retrieve all files in one array and execute in one command line, use parenthesis () around the variable of triple.  Retrieved data will be assigned as BASH array.  To access array data, use [BASH array notation](https://opensource.com/article/18/5/you-dont-know-bash-intro-bash-arrays).
+
+```
+> perl moirai2.pl -i 'example->file->($input)' exec 'ls -lt ${input[@]}'
+
+input=("akira.txt" "hasegawa.txt" "moirai2.txt")
+ls -lt akira.txt hasegawa.txt moirai2.txt
+
+> perl moirai2.pl -i 'example->file->($input)' exec 'ls -lt ${input[0]}'
+
+ls -lt akira.txt
+
+> perl moirai2.pl -i 'example->file->($input)' exec 'ls -lt ${input[1]}'
+
+ls -lt hasegawa.txt
+
+> perl moirai2.pl -i 'example->file->($input)' exec 'ls -lt ${input[2]}'
+
+ls -lt moirai2.txt
+
+> perl moirai2.pl -d test -i 'example->input->($input)' command << 'EOF'
+for i in ${input[@]}; do
+  ls -lt  $i
+done
+EOF
+
+ls -lt akira.txt
+ls -lt hasegawa.txt
+ls -lt moirai2.txt
+```
+
+#### Output Array
+
+There are cases where you want to use array for output.  You can just use BASH array notation and MOIRAI2 will take care of the rest.  For example:
+
+```
+perl moirai2.pl -o 'name->test->$output' exec 'output=("Akira" "Ben" "Chris" "David");'
+```
+
+These four entries will be added to a triple database.
+  * name->test->Akira
+  * name->test->Ben
+  * name->test->Chris
+  * name->test->David
+
+This output array will be useful in bioinformatics when files are splitted by barcodes, for example:
+
+```
+perl moirai2.pl -o '$input->split->$split' << 'EOF'
+outdir=$tempdir/out
+splitByBarcode.pl -o $outdir $input
+split=(`ls $outdir`)
+EOF
+```
+
+Let assume splitByBarcode.pl takes in input.fq and split by barcodes and write files (e.g. ATCG.fq AACG.fq CGAA.fq TTAC.fq) to $outdir.
+Filepaths are stored to $split variable with "split=(`ls $outdir`)" and four entries will be added to a triple database with "-o '$input->split->$split'".
+  * input.fq->split->ATCG.fq
+  * input.fq->split->AACG.fq
+  * input.fq->split->CGAA.fq
+  * input.fq->split->TTAC.fq
+
 #### Running with Singularity docker
 #### Running command on remote server
 #### scp used to upload input and download output
