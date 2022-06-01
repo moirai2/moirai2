@@ -2,7 +2,7 @@
 
 ## Introduction
 
-MOIRAI2 is a very simple scientific workflow system written in basic perl whith was developed with four concepts in mind:
+MOIRAI2 is a very simple [scientific workflow system](https://en.wikipedia.org/wiki/Scientific_workflow_system) written in basic perl whith was developed with four concepts in mind:
 
 - usability - Can execute workflow from a command line or from web page.
 - reprodusibility - Just by adding options (-c), can execute with singularity/Docker container.
@@ -27,11 +27,16 @@ This will execute uname command within ubuntu Docker container environment at 19
 
 This will execute uname command within ubuntu Docker container environment at 192.168.1.12 server (through SSH) after creating a new (default) instance using [OpenStack](https://www.openstack.org).
 
-By adding options to a command line, user can easily run same command line in different servers, but the same computational environment (ubuntu Docker enrivonment).
+By adding options to a command line, user can easily run same command line in different servers, but with the same computational environment (ubuntu Docker enrivonment).
 
 Next, let's me explain how a workflow is handled by MOIRAI2 with examples.
 
 > perl moirai2.pl -o 'example->file->$output' exec 'echo hello world > $output'
+
+```mermaid
+  flowchart LR
+    example-->|file|helloworld.txt
+```
 
 This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220424224158meiw.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded as a basename of a file).
 
@@ -40,11 +45,24 @@ is quoted with a single quote (') is because a command contains redirect (>) and
 
 > perl moirai2.pl -i 'example->file->$input' -o '$input->count->$count' exec 'wc -l $input > $count'
 
+```mermaid
+  flowchart LR
+    example-->|file|helloworld.txt
+    helloworld.txt-->|count|1 helloworld.txt
+```
+
 Using an output file with content 'hello world' from the previous execution, moirai2 will execute a word count (wc) command and store its result in $output file.   An [output file](example/text/count), a [log file](example/log/e20220424224235CQWg.txt) and a metadata [triple file](example/db/count.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Moirai2 checks for output triple before executing a command line.  If an output triple is found (meaning it's been executed before), wc process will not be executed.
 
 > perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
 
-An [output file](example/text/charcount), a [log file](example/log/e202205171203279pKn.txt) and a metadata [triple file](example/db/charcount.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Chain of commands can be connected by linking in/out triples like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be written by user directly, or through web interface, or through moirai computation.
+```mermaid
+  flowchart LR
+    example-->|file|helloworld.txt
+    helloworld.txt-->|count|1 helloworld.txt
+    helloworld.txt-->|charcount|12 helloworld.txt
+```
+
+An [output file](example/text/charcount), a [log file](example/log/e202205171203279pKn.txt) and a metadata [triple file](example/db/charcount.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Chain of commands can be connected by linking in/out triples like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be edited by user directly (text edit), or through web interface (php or flask), or through moirai computation (daemon).
 
 ## Structure
 ```
@@ -168,9 +186,15 @@ Temporary directory is automatically used to specify output variables.  For exam
 output=$tmpdir/output
 ls -lt > $output
 ```
-
 'output=$tmpdir/output' is automatically added before use's command 'ls -lt > $output'.
 In case where user assigned output path in argument.
+
+A path to temporary directory is stored under variable '$tmpdir'.  In the example below, temporary file is created under a temporary directory.
+
+```
+>perl moirai2.pl exec 'ls -lt > $tmpdir/temp.txt;wc -l $tmpdir/temp.txt;unlink $tmpdir/temp.txt'
+      14 .moirai2/e20220601175158bfMO/tmp/temp.txt
+```
 
 #### Specifying Variable Values By Arguments
 
@@ -525,9 +549,14 @@ Commands:    assign  Assign triple if sub+pre doesn't exist
 ```
 
 #### Triple database
-Triple database is a very simple text-based database.
+A rdf.pl's triple database is a very simple text-based database.
 Triple informations are stored in a file with predicate as basename.
 For example, example(subject)->inputfile(predicate)->input.txt(object) triple will be stored in a file "inputfile.txt" with subject and object separated by tab delim.
+
+```mermaid
+  flowchart LR
+    example-->|inputfile|input.txt
+```
 
 ```
 > cat inputfile.txt
@@ -535,6 +564,12 @@ example input.txt
 ```
 
 If additional triple is added, for example, "example->inputfile->input2.txt", a content of "inputfile.txt" will look like this:
+
+```mermaid
+  flowchart LR
+    example-->|inputfile|input.txt
+    example-->|inputfile|input2.txt
+```
 
 ```
 > cat inputfile.txt
@@ -544,8 +579,46 @@ example input2.txt
 
 File content will be sorted alphabetically with each update.
 This text-based triple databse is not meant to be used for a large-scale database.
+This predicate text file can be gunzipped, if no additional update is necessary.
+Meaning 'inputfile.txt.gz' is read only and rdf.pl can't write/update anymore.
 
 #### Directory predicate
+Normally predicate is defined with basename of a text file.  In case of 'inputfile.txt', predicate is 'inputfile'.  It's possible to have directory structure.  For example, in case of 'example/inputfile.txt', predicate will be 'example/inputfile'.
+
+```mermaid
+  flowchart LR
+    inputfile.txt-->|predicate|input
+    example/inputfile.txt-->|predicate|example/input
+```
+
+Also, predicate can be dirname of a directory.  For example. example/datacontent/ directory has two text files: "000.txt" and "001.txt".
+```
+example/datacontent/
+├── 000.txt
+└── 001.txt
+```
+It's possible to query all triples of 000.txt and 001.txt simply with "$key->example/datacontent->$value".
+If you want to access 001.txt only, you can simply query with "$key->example/datacontent/001->$value".
+
+#### Insert triple
+
+If you want to insert new triple to database, use a command:
+```
+perl rdf.pl insert A B C
+```
+This will basically creates B.txt with a content "A\tC".
+
+```
+perl rdf.pl -d test insert A B C
+```
+By adding -d option to specify database root, new triple file "test/B.txt" will be created with a content "A\tC".  This is basically same as:
+
+```
+perl rdf.pl insert A test/B C
+```
+
+
+
 #### Multiple queries notation
 #### Accessing triples on the web http
 #### Editing by hands
@@ -565,26 +638,34 @@ Moirai2 can run in daemon mode where program checks for jobs in background and p
 - submit  moirai2 checks for a text file under .moirai2/ctrl/submit directory.  A text file contains which command json to use and its parameters.  This is a gateway for a web interface.
 
 #### crontab
->perl moirai2.pl daemon crontab
+```
+perl moirai2.pl daemon crontab
+```
 
 By placing a bash file with input triple (root->input->$input) information in .moirai2/crontab/ directory, moirai2 periodically checks for new entry in predicate=input and process if found.
 
-> #$-i root->input->$input
-> #$-o $input->count->$count
-> output=`wc -l < $input`
+```
+#$-i root->input->$input
+#$-o $input->count->$count
+output=`wc -l < $input`
+```
 
 Let's say we a file example.txt with just "Hello World", for example.
 If a new triple 'root->input->example.txt' is added to the database (equivalent of 'root  example.txt' line is added to input.txt), moirai2.pl execute 'output=`wc -l < example.txt`' and stores the result in triple database 'example.txt->count->1' (equivalent of 'example.txt 1' in count.txt).
 
 #### submit
->perl moirai2.pl daemon submit
+```
+perl moirai2.pl daemon submit
+```
 
 By placing a text file like example bellow under .moirai2/ctrl/submit/ directory, moirai2 will submit a new job using a command json file "example.json" and input parameter "example.txt".
 
-> url   example.json
-> input example.txt
+```
+url   example.json
+input example.txt
 
 >perl moirai2.pl daemon process
+```
 
 #### Jobs Across Internet
 
@@ -593,44 +674,52 @@ Processing of jobs are controlled by the existance of files under .moriai2/ctrl/
 ##### One server and multiple nodes
 Main server takes care of crontab and submit, but no process.  Moirai directory will be created /home/ah3q/main/.moirai2/.  Nodes will look for a new job under /home/ah3q/main/.moirai2/ctrl/job at 192.168.1.1 server.
 
-> # main server
-> cd /home/ah3q/main
-> perl moirai2.pl daemon crontab submit
-> # Log in to node server1 (192.168.1.2)
-> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
-> # Log in to node server2 (192.168.1.3)
-> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
-> # Log in to node server3 (192.168.1.4)
-> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
-> # Log in to node server4 (192.168.1.5)
-> perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+```
+# main server
+cd /home/ah3q/main
+perl moirai2.pl daemon crontab submit
+# Log in to node server1 (192.168.1.2)
+perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+# Log in to node server2 (192.168.1.3)
+perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+# Log in to node server3 (192.168.1.4)
+perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+# Log in to node server4 (192.168.1.5)
+perl moirai2.pl -j ah3q@192.168.1.1:main daemon processs
+```
 
 It's possible to deploy from main server in one bash script using -b option.  Make sure SSH keys are properly configured.
 
-> cd /home/ah3q/main
-> perl moirai2.pl daemon crontab submit
-> perl moirai2.pl -b ah3q@192.168.1.2 -j ah3q@192.168.1.1:main daemon processs
-> perl moirai2.pl -b ah3q@192.168.1.3 -j ah3q@192.168.1.1:main daemon processs
-> perl moirai2.pl -b ah3q@192.168.1.4 -j ah3q@192.168.1.1:main daemon processs
-> perl moirai2.pl -b ah3q@192.168.1.5 -j ah3q@192.168.1.1:main daemon processs
+```
+cd /home/ah3q/main
+perl moirai2.pl daemon crontab submit
+perl moirai2.pl -b ah3q@192.168.1.2 -j ah3q@192.168.1.1:main daemon processs
+perl moirai2.pl -b ah3q@192.168.1.3 -j ah3q@192.168.1.1:main daemon processs
+perl moirai2.pl -b ah3q@192.168.1.4 -j ah3q@192.168.1.1:main daemon processs
+perl moirai2.pl -b ah3q@192.168.1.5 -j ah3q@192.168.1.1:main daemon processs
+```
 
 ##### Nodes and Server Share Same Hard Disk
 
 If the same hard disk are shaed by nodes and server, you can ommit -j option.  All the nodes will look for jobs under /home/ah3q/main/.moirai2 directory.
 
-> cd /home/ah3q/main
-> perl moirai2.pl daemon crontab submit
-> perl moirai2.pl -b ah3q@192.168.1.2:main daemon processs
-> perl moirai2.pl -b ah3q@192.168.1.3:main daemon processs
-> perl moirai2.pl -b ah3q@192.168.1.4:main daemon processs
-> perl moirai2.pl -b ah3q@192.168.1.5:main daemon processs
+```
+cd /home/ah3q/main
+perl moirai2.pl daemon crontab submit
+perl moirai2.pl -b ah3q@192.168.1.2:main daemon processs
+perl moirai2.pl -b ah3q@192.168.1.3:main daemon processs
+perl moirai2.pl -b ah3q@192.168.1.4:main daemon processs
+perl moirai2.pl -b ah3q@192.168.1.5:main daemon processs
+```
 
 ##### Openstack (Available soon)
 
 As you know, Moirai2 can create a new instance of node through OpenStack.  By adding '-q openstack', when excessive jobs are found under job directory, new node will be created to process jobs.  And when not jobs are found, instances will be deleted.
 
-> cd /home/ah3q/main
-> perl moirai2.pl -q openstack daemon crontab submit process
+```
+cd /home/ah3q/main
+perl moirai2.pl -q openstack daemon crontab submit process
+```
 
 ## Licence
 

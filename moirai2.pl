@@ -10,7 +10,7 @@ use Time::localtime;
 my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
-my $program_version="2022/05/30";
+my $program_version="2022/06/01";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -4370,10 +4370,12 @@ sub setInputsOutputsFromCommand{
 	my $suffixs=$command->{$urls->{"daemon/suffix"}};
 	my $cmdlines=$command->{$urls->{"daemon/bash"}};
 	my $lsInputs=exists($command->{$urls->{"daemon/ls"}})?["filepath","directory","filename","basename","suffix","base\\d+","dir\\d+"]:[];
+	my $systemInputs=["cmdurl","execid","workdir","rootdir","tmpdir"];
 	my @inputs=();
 	my @outputs=();
 	my $files={};
 	my $variables={};
+	my $temporaries={};# '$tmpdir/temporary.txt', for example
 	my @outlines=();
 	if(!defined($inputKeys)){$inputKeys=[];}
 	if(!defined($outputKeys)){$outputKeys=[];}
@@ -4387,21 +4389,45 @@ sub setInputsOutputsFromCommand{
 	foreach my $variable(@{$outputKeys}){$variables->{$variable}="output";}
 	foreach my $cmdline(@{$cmdlines}){
 		push(@outlines,$cmdline);
-		while($cmdline=~/([\w\_\/\.]+\.(\w{2,4}))($|\s|\>)/g){
+		while($cmdline=~/(\$tmpdir\/\S+\.(\w{2,4}))(\;|$||\s|\>)/g){
+			my $temporary=$1;
+			if(!exists($temporaries->{$temporary})){$temporaries->{$temporary}=1;}
+		}
+		while($cmdline=~/(\$workdir\/\S+\.(\w{2,4}))(\;|$||\s|\>)/g){
+			my $temporary=$1;
+			if(!exists($temporaries->{$temporary})){$temporaries->{$temporary}=1;}
+		}
+		while($cmdline=~/([\w\_\/\.\$]+\.(\w{2,4}))(\;|$||\s|\>)/g){
 			my $file=$1;
+			if($file=~/\$/){next;}
 			if(!exists($files->{$file})){$files->{$file}=1;}
 		}
-		foreach my $file(keys(%{$files})){if($cmdline=~/\s*\>\s*$file/){$files->{$file}="output";}}
-		foreach my $file(keys(%{$files})){if($cmdline=~/^\s*[\/\_\w]*$file/){$files->{$file}="script";}}
+		foreach my $file(keys(%{$files})){
+			if($files->{$file}!=1){next;}
+			if($cmdline=~/\s*\>\s*$file/){$files->{$file}="output";}
+		}
+		foreach my $file(keys(%{$files})){
+			if($files->{$file}!=1){next;}
+			if($cmdline=~/^\s*[\/\_\w]*$file/){$files->{$file}="script";}
+		}
 		foreach my $program("perl","bash","java","python","R"){
-			foreach my $file(keys(%{$files})){if($cmdline=~/^\s*$program \s*[\/\_\w]*$file/){$files->{$file}="script";}}
+			foreach my $file(keys(%{$files})){
+				if($files->{$file}!=1){next;}
+				if($cmdline=~/^\s*$program \s*[\/\_\w]*$file/){$files->{$file}="script";}
+			}
 		}
 		while($cmdline=~/\$([\w\_]+)/g){
 			my $variable=$1;
-			foreach my $lsInput(@{$lsInputs}){if($variable=~/$lsInput/){$variables->{$variable}="input"};next;}
+			
 			if(!exists($variables->{$variable})){$variables->{$variable}=1;}
 		}
 		foreach my $variable(keys(%{$variables})){
+			if($variables->{$variable}!=1){next;}
+			foreach my $input(@{$lsInputs}){if($variable=~/$input/){$variables->{$variable}="input"}}
+			foreach my $input(@{$systemInputs}){if($variable=~/$input/){$variables->{$variable}="input"}}
+		}
+		foreach my $variable(keys(%{$variables})){
+			if($variables->{$variable}!=1){next;}
 			if($cmdline=~/\s*\>\s*\$$variable/){$variables->{$variable}="output";}
 		}
 	}
@@ -4611,12 +4637,12 @@ sub test2{
 	unlink("test/name.txt");
 	#input and output defaults
 	createFile("test/input.txt","Hello World\nAkira Hasegawa\nTsunami Channel");
-	testCommand("perl moirai2.pl -r output -i '{\"input\":\"test/input.txt\"}' -o '{\"output\":\"test/output.txt\"}' exec 'wc -l \$input > \$output'","test/output.txt");
+	testCommand("perl $prgdir/moirai2.pl -r output -i '{\"input\":\"test/input.txt\"}' -o '{\"output\":\"test/output.txt\"}' exec 'wc -l \$input > \$output'","test/output.txt");
 	testCommandRegex("cat test/output.txt","3 test/input.txt");
 	unlink("test/output.txt");
-	testCommandRegex("perl moirai2.pl -r output -i '\$input' -o '\$output.txt' exec 'wc -l < \$input> \$output;' input=test/input.txt",".moirai2/e\\w{18}/tmp/output.txt\$");
+	testCommandRegex("perl $prgdir/moirai2.pl -r output -i '\$input' -o '\$output.txt' exec 'wc -l < \$input> \$output;' input=test/input.txt",".moirai2/e\\w{18}/tmp/output.txt\$");
 	unlink("test/input.txt");
-	system("perl moirai2.pl clean dir");
+	system("perl $prgdir/moirai2.pl clean dir");
 }
 #Testing exec and bash functionality
 sub test3{
@@ -4664,7 +4690,7 @@ sub test3{
 	unlink("test/test.sh");
 	unlink("test/output.txt");
 	#Testing suffix
-	testCommandRegex("perl moirai2.pl -r output -X '\$output.txt' exec 'wc -l > \$output'",".moirai2/e\\w{18}/tmp/output.txt\$");
+	testCommandRegex("perl $prgdir/moirai2.pl -r output -X '\$output.txt' exec 'wc -l > \$output'",".moirai2/e\\w{18}/tmp/output.txt\$");
 	#Testing multiple inputs
 	createFile("test/text.txt","example\tAkira","example\tBen","example\tChris","example\tDavid");
 	testCommand("perl $prgdir/moirai2.pl -d test  -i 'example->text->(\$input)' exec 'echo \${input\[\@\]}'","Akira Ben Chris David");
@@ -4735,6 +4761,19 @@ sub test4{
 	unlink("test/input1.txt");
 	unlink("test/input2.txt");
 	unlink("test/command.sh");
+	mkdir("test");
+	#Testing -i *
+	testCommand("perl $prgdir/moirai2.pl -i 'js/ah3q/*.js' exec 'wc -l <\$filepath>test/\$basename.txt'","");
+	testCommandRegex("cat test/moirai2.txt","\\s+\\d+");
+	testCommandRegex("cat test/tab.txt","\\s+\\d+");
+	unlink("test/moirai2.txt");
+	unlink("test/tab.txt");
+	#Testing -i * with $tmpdir
+	testCommand("perl /Users/ah3q/Sites/moirai2/moirai2.pl -i 'js/ah3q/*.js' exec 'wc -l <\$filepath>\$tmpdir/tmp.txt;uniq -c \$tmpdir/tmp.txt > test/\$basename.txt;rm \$tmpdir/tmp.txt'","");
+	testCommandRegex("cat test/moirai2.txt","\\s+\\d+");
+	testCommandRegex("cat test/tab.txt","\\s+\\d+");
+	unlink("test/moirai2.txt");
+	unlink("test/tab.txt");
 }
 #Testing containers
 sub test5{
@@ -4758,33 +4797,33 @@ sub test6{
 	system("ssh $testserver 'echo \"Hello World\">moiraitest/input.txt'");
 	system("scp moirai2.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
 	system("scp rdf.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
-	system("ssh $testserver \"cd moiraitest;perl moirai2.pl clear\"");
+	system("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl clear\"");
 	# assign job at the server, copy job to local, and execute on a local daemon (-x)
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input.txt output=output.txt\"","^e\\d{14}\\w{4}\$");
-	system("perl moirai2.pl -j $testserver:moiraitest -s 1 -R 0 daemon");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input.txt output=output.txt\"","^e\\d{14}\\w{4}\$");
+	system("perl $prgdir/moirai2.pl -j $testserver:moiraitest -s 1 -R 0 daemon");
 	testCommand("cat input.txt","Hello World");#copied from job server
-	system("perl moirai2.pl -s 1 -R 0 daemon process");
+	system("perl $prgdir/moirai2.pl -s 1 -R 0 daemon process");
 	testCommand("ssh $testserver 'cat moiraitest/input.txt'","Hello World");
-	system("ssh $testserver \"cd moiraitest;perl moirai2.pl -R 0 daemon\"");
+	system("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl -R 0 daemon\"");
 	testCommand("ssh $testserver 'cat moiraitest/input.txt'","Hello World");
 	testCommand("ssh $testserver 'cat moiraitest/output.txt'","       1 input.txt");
 	my $datetime=getDate();
 	testCommandRegex("ssh $testserver 'ls moiraitest/.moirai2/log/$datetime/*.txt'","moiraitest/.moirai2/log/\d+/.+\\.txt");
 	# assign on a local daemon and execute on a remote server (-a)
 	createFile("input2.txt","Akira Hasegawa");
-	testCommand("perl moirai2.pl -r output -i input -o output -a $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
+	testCommand("perl $prgdir/moirai2.pl -r output -i input -o output -a $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
 	testCommand("cat output2.txt","15 input2.txt");
 	unlink("input2.txt");
 	unlink("output2.txt");
 	# assign job at server, copy and execute job in one command line (daemon process)
 	system("ssh $testserver 'echo \"Hello World\nAkira Hasegawa\">moiraitest/input3.txt'");
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input3.txt output=output3.txt\"","^e\\d{14}\\w{4}\$");
-	system("perl moirai2.pl -j $testserver:moiraitest -s 1 -R 1 daemon process");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input3.txt output=output3.txt\"","^e\\d{14}\\w{4}\$");
+	system("perl $prgdir/moirai2.pl -j $testserver:moiraitest -s 1 -R 1 daemon process");
 	testCommand("ssh $testserver 'cat moiraitest/output3.txt'","       2 input3.txt");
 	# assign job to the server from local with -j option
 	createFile("input4.txt","Hello World\nAkira Hasegawa\nTsunami Channel");
-	testCommandRegex("perl moirai2.pl -x -j $testserver:moiraitest -i input -o output exec 'wc -l \$input > \$output;' input=input4.txt output=output4.txt","^e\\d{14}\\w{4}\$");
-	system("ssh $testserver 'cd moiraitest;perl moirai2.pl -s 1 -R 0 daemon process'");
+	testCommandRegex("perl $prgdir/moirai2.pl -x -j $testserver:moiraitest -i input -o output exec 'wc -l \$input > \$output;' input=input4.txt output=output4.txt","^e\\d{14}\\w{4}\$");
+	system("ssh $testserver 'cd moiraitest;perl $prgdir/moirai2.pl -s 1 -R 0 daemon process'");
 	testCommand("ssh $testserver 'cat moiraitest/output4.txt'","3 input4.txt");
 	unlink("input4.txt");
 	system("ssh $testserver 'rm -r moiraitest'");
