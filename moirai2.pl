@@ -10,7 +10,7 @@ use Time::localtime;
 my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
-my $program_version="2022/06/01";
+my $program_version="2022/06/27";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -57,7 +57,6 @@ sub help{
 		print "2022/05/10  Added a function to stop jobs ended with error\n";
 		print "2022/05/09  Added a function to stop duplicated jobs\n";
 		print "2022/04/24  Fixing bugs in remote server and job server\n";
-		print "2022/04/21  Deploy new node when multiple jobs are needed to be processed\n";
 		print "2022/04/20  Fixing small bugs on remote server functionality\n";
 		print "2022/04/14  Daemon system completed\n";
 		print "2022/03/23  rsync workdir with server to upload/download input/output files\n";
@@ -174,7 +173,6 @@ $urls->{"daemon/workid"}="https://moirai2.github.io/schema/daemon/workid";
 $urls->{"daemon/workflow/urls"}="https://moirai2.github.io/schema/daemon/workflow/urls";
 ############################## MAIN ##############################Z
 #xxxDir is absoute path, xxxdir is relative path
-my $testserver="ah3q\@172.18.91.78"; #My Hokusai server
 my $rootDir=absolutePath(".");
 my $homeDir=absolutePath(`echo ~`);
 my $hostname=`hostname`;chomp($hostname);
@@ -186,9 +184,6 @@ if(!defined($opt_m)){$opt_m=1;}
 my $sleeptime=defined($opt_s)?$opt_s:60;
 my $maximumJob=defined($opt_m)?$opt_m:1;
 my $cmdpaths={};
-my $rdfcmd=which('rdf.pl',$cmdpaths);
-my $rdfcmd=which('rdf2.pl',$cmdpaths);
-my $oscmd=which('openstack.pl',$cmdpaths);
 my $md5cmd=which('md5sum',$cmdpaths);
 if(!defined($md5cmd)){$md5cmd=which('md5',$cmdpaths);}
 my $moiraidir=".moirai2";
@@ -1680,6 +1675,7 @@ sub fileExists{
 	my $path=shift();
 	if($path=~/^(.+\@.+)\:(.+)$/){my $result=`ssh $1 'if [ -e $2 ]; then echo 1; fi'`;chomp($result);return ($result==1);}
 	elsif(-e $path){return 1;}
+	my $cwd=Cwd::abs_path(".");
 	return;
 }
 ############################## fileExistsInDirectory ##############################
@@ -3303,7 +3299,7 @@ sub moiraiFinally{
 	my $commands=shift(@execids);
 	my $processes=shift(@execids);
 	my $result=0;
-	foreach my $execid(sort{$a cmp $b}@execids){
+	foreach my $execid(@execids){
 		my $process=$processes->{$execid};
 		if(returnError($execid)eq"error"){$result=1;}
 		my $cmdurl=$process->{$urls->{"daemon/command"}};
@@ -3597,7 +3593,6 @@ sub openFile{
 sub openstackCommand{
 	my @arguments=@_;
 	if(!-e "$prgdir/openstack.pl"){print STDERR "ERROR: $prgdir/openstack.pl not found\n";exit(1);}
-
 }
 ############################## printCommand ##############################
 sub printCommand{
@@ -3947,6 +3942,7 @@ sub removeUnnecessaryOutputs{
 		if($inputTime<$outputTime){next;}
 		push(@array,$hash);
 	}
+	if(scalar(@array)==0){$queryResults->[0]=[];}
 	$queryResults->[1]=\@array;
 }
 ############################## replaceLineWithHash ##############################
@@ -4683,14 +4679,17 @@ sub test3{
 	testCommand("perl $prgdir/moirai2.pl -r output -s 1 test/test.sh","test/input.out.txt");
 	testCommand("cat test/input.out.txt","   1 Hello","   1 World");
 	unlink("test/test.sh");
-	unlink("test/input.txt");
+	unlink("test/input.txt");	
 	unlink("test/input.out.txt");
 	createFile("test/test.sh","#\$-o output","echo 'Hello World' > \$output");
 	testCommand("perl $prgdir/moirai2.pl -r output test/test.sh output=test/output.txt","test/output.txt");
 	unlink("test/test.sh");
 	unlink("test/output.txt");
 	#Testing suffix
-	testCommandRegex("perl $prgdir/moirai2.pl -r output -X '\$output.txt' exec 'wc -l > \$output'",".moirai2/e\\w{18}/tmp/output.txt\$");
+	createFile("test/input.txt","Hello","World");
+	testCommandRegex("perl $prgdir/moirai2.pl -i input -r output -X '\$output.txt' exec 'wc -l \$input > \$output' input=test/input.txt",".moirai2/e\\w{18}/tmp/output.txt\$");
+	system("perl $prgdir/moirai2.pl clean dir");
+	unlink("test/input.txt");
 	#Testing multiple inputs
 	createFile("test/text.txt","example\tAkira","example\tBen","example\tChris","example\tDavid");
 	testCommand("perl $prgdir/moirai2.pl -d test  -i 'example->text->(\$input)' exec 'echo \${input\[\@\]}'","Akira Ben Chris David");
@@ -4699,6 +4698,7 @@ sub test3{
 	testCommand("perl $prgdir/moirai2.pl -d test -o 'name->test->\$output' exec 'output=(\"Akira\" \"Ben\" \"Chris\" \"David\");'","");
 	testCommand("cat test/test.txt","name\tAkira","name\tBen","name\tChris","name\tDavid");
 	unlink("test/test.txt");
+	exit();
 }
 #Testing build and ls functionality
 sub test4{
@@ -4774,6 +4774,26 @@ sub test4{
 	testCommandRegex("cat test/tab.txt","\\s+\\d+");
 	unlink("test/moirai2.txt");
 	unlink("test/tab.txt");
+	#Testing -i * with $opt_t
+	system("mkdir -p test/in");
+	system("mkdir -p test/out");
+	createFile("test/in/input1.txt","one");
+	createFile("test/in/input2.txt","two");
+	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input1.txt","test/out/input2.txt");
+	testCommandRegex("cat test/out/input1.txt","\\s+\\d+");
+	testCommandRegex("cat test/out/input2.txt","\\s+\\d+");
+	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","");
+	system("touch test/in/input1.txt");
+	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input1.txt");
+	unlink("test/out/input2.txt");
+	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input2.txt");
+	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","");
+	unlink("test/in/input1.txt");
+	unlink("test/in/input2.txt");
+	unlink("test/out/input1.txt");
+	unlink("test/out/input2.txt");
+	system("rmdir test/in");
+	system("rmdir test/out");
 }
 #Testing containers
 sub test5{
@@ -4793,22 +4813,23 @@ sub test5{
 }
 #Testing daemon across server
 sub test6{
+	my $testserver="ah3q\@172.18.91.78"; #My Hokusai server
 	system("ssh $testserver 'mkdir -p moiraitest'");
 	system("ssh $testserver 'echo \"Hello World\">moiraitest/input.txt'");
 	system("scp moirai2.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
 	system("scp rdf.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
-	system("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl clear\"");
+	system("ssh $testserver \"cd moiraitest;perl moirai2.pl clear all\"");
 	# assign job at the server, copy job to local, and execute on a local daemon (-x)
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input.txt output=output.txt\"","^e\\d{14}\\w{4}\$");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input.txt output=output.txt\"","^e\\d{14}\\w{4}\$");
 	system("perl $prgdir/moirai2.pl -j $testserver:moiraitest -s 1 -R 0 daemon");
 	testCommand("cat input.txt","Hello World");#copied from job server
 	system("perl $prgdir/moirai2.pl -s 1 -R 0 daemon process");
 	testCommand("ssh $testserver 'cat moiraitest/input.txt'","Hello World");
-	system("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl -R 0 daemon\"");
+	system("ssh $testserver \"cd moiraitest;perl moirai2.pl -R 0 daemon\"");
 	testCommand("ssh $testserver 'cat moiraitest/input.txt'","Hello World");
 	testCommand("ssh $testserver 'cat moiraitest/output.txt'","       1 input.txt");
 	my $datetime=getDate();
-	testCommandRegex("ssh $testserver 'ls moiraitest/.moirai2/log/$datetime/*.txt'","moiraitest/.moirai2/log/\d+/.+\\.txt");
+	testCommandRegex("ssh $testserver 'ls moiraitest/.moirai2/log/$datetime/*.txt'","moiraitest/.moirai2/log/\\d+/.+\\.txt");
 	# assign on a local daemon and execute on a remote server (-a)
 	createFile("input2.txt","Akira Hasegawa");
 	testCommand("perl $prgdir/moirai2.pl -r output -i input -o output -a $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
@@ -4817,23 +4838,24 @@ sub test6{
 	unlink("output2.txt");
 	# assign job at server, copy and execute job in one command line (daemon process)
 	system("ssh $testserver 'echo \"Hello World\nAkira Hasegawa\">moiraitest/input3.txt'");
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl $prgdir/moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input3.txt output=output3.txt\"","^e\\d{14}\\w{4}\$");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input3.txt output=output3.txt\"","^e\\d{14}\\w{4}\$");
 	system("perl $prgdir/moirai2.pl -j $testserver:moiraitest -s 1 -R 1 daemon process");
 	testCommand("ssh $testserver 'cat moiraitest/output3.txt'","       2 input3.txt");
 	# assign job to the server from local with -j option
 	createFile("input4.txt","Hello World\nAkira Hasegawa\nTsunami Channel");
 	testCommandRegex("perl $prgdir/moirai2.pl -x -j $testserver:moiraitest -i input -o output exec 'wc -l \$input > \$output;' input=input4.txt output=output4.txt","^e\\d{14}\\w{4}\$");
-	system("ssh $testserver 'cd moiraitest;perl $prgdir/moirai2.pl -s 1 -R 0 daemon process'");
+	system("ssh $testserver 'cd moiraitest;perl moirai2.pl -s 1 -R 0 daemon process'");
 	testCommand("ssh $testserver 'cat moiraitest/output4.txt'","3 input4.txt");
 	unlink("input4.txt");
-	system("ssh $testserver 'rm -r moiraitest'");
-}
-#Testing server (Takes about 5-10 minutes)
-sub test7{
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver exec uname","Linux");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -c ubuntu exec uname -a","^Linux .+ x86_64 x86_64 x86_64 GNU/Linux\$");
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -c singularity/lolcow.sif exec cowsay 'Hello World'"," _____________","< Hello World >"," -------------","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver exec hostname","^moirai\\d+-server");
+	system("ssh $testserver 'rm -r moiraitest'");
+}
+#Testing Hokusai openstack (Takes about 5-10 minutes)
+sub test7{
+	my $testserver="ah3q\@172.18.91.78"; #My Hokusai server
 	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -q openstack exec hostname","^moirai\\d+-node-\\d+\$");
 	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -c singularity/lolcow.sif -q openstack exec cowsay"," __","<  >"," --","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
 }
@@ -4907,23 +4929,20 @@ sub throwBashJob{
 	if($path=~/^(.+\@.+)\:(.+)$/){$servername=$1;$path=$2;}
 	my $basename=basename($path,".sh");
 	if($qjob eq "sge"){
-		my $command="qsub";
-		if(defined($servername)){if(!defined(which("$servername:$command",$cmdpaths))){print STDERR "ERROR: $command not found at $servername\n";exit(1);}}
-		elsif(!defined(which($command,$cmdpaths))){print STDERR "ERROR: $command not found\n";exit(1);}
+		my $command=which("qsub",$cmdpaths,$servername);
 		if(defined($qjobopt)){$command.=" $qjobopt";}
 		$command.=" $path";
 		if(defined($servername)){$command="ssh $servername \"$command\" 2>&1 1>/dev/null";}
 		if(system($command)==0){sleep(1);}
 		else{appendText("ERROR: Failed to $command",$stderr);}
 	}elsif($qjob eq "slurm"){
-		my $command="slurm";
-		if(defined($servername)){if(!defined(which("$servername:$command",$cmdpaths))){print STDERR "ERROR: $command not found at $servername\n";exit(1);}}
-		elsif(!defined(which($command,$cmdpaths))){print STDERR "ERROR: $command not found\n";exit(1);}
-		$command.=" -o $stdout\n";
-		$command.=" -e $stderr\n";
+		my $command=which("sbatch",$cmdpaths,$servername);
+		$command.=" -o $stdout";
+		$command.=" -e $stderr";
 		if(defined($qjobopt)){$command.=" $qjobopt";}
 		$command.=" $path";
 		if(defined($servername)){$command="ssh $servername \"$command\" 2>&1 1>/dev/null";}
+		if(defined($opt_l)){print ">$command\n";}
 		if(system($command)==0){sleep(1);}
 		else{print STDERR "ERROR: Failed to $command\n";exit(1);}
 	}elsif($qjob eq "openstack"){
@@ -4968,10 +4987,7 @@ sub throwJobs{
 	my $basename=basename($path,".sh");
 	my $stderr=defined($remotepath)?"$serverdir/.moirai2remote/$basename.stderr":"$throwdir/$basename.stderr";
 	my $stdout=defined($remotepath)?"$serverdir/.moirai2remote/$basename.stdout":"$throwdir/$basename.stdout";
-	if($qjob eq "sge"){
-		print $fh "#\$ -e $stderr\n";
-		print $fh "#\$ -o $stdout\n";
-	}
+	print $fh "#!/bin/sh\n";
 	my @execids=();
 	foreach my $var(@variables){
 		my $execid=$var->{"execid"};
@@ -4984,22 +5000,24 @@ sub throwJobs{
 			my $statusfile=$var->{$base}->{"statusfile"};
 			my $logfile=$var->{$base}->{"logfile"};
 			my $rootdir=$var->{$base}->{"rootdir"};
+			my $cmdpath=which("singularity",$cmdpaths,defined($remotepath)?"$username\@$servername":undef);
 			print $fh "cd $rootdir\n";
-			print $fh "cmdpath=`which singularity`\n";
-			print $fh "echo \"cmdpath=\$cmdpath\" > $stderrfile\n";
-			print $fh "echo PATH >> $stderrfile\n";
-			print $fh "if [ -z \"\$cmdpath\" ]; then\n";	
-			print $fh "echo \"singualarity command not found\" > $stderrfile\n";
-			print $fh "echo \"error\t\"`date +\%s` > $statusfile\n";
-			print $fh "touch $stdoutfile\n";
-			print $fh "touch $logfile\n";
-			print $fh "elif [ ! -e $container ]; then\n";	
+			#print $fh "cmdpath=`which singularity`\n";
+			#print $fh "if [ -z \"\$cmdpath\" ]; then\n";	
+			#print $fh "echo \"singualarity command not found\" >> $stderrfile\n";
+			#print $fh "echo \"error\t\"`date +\%s` > $statusfile\n";
+			#print $fh "touch $stdoutfile\n";
+			#print $fh "touch $logfile\n";
+			#print $fh "exit\n";
+			#print $fh "elif [ ! -e $container ]; then\n";	
+			print $fh "if [ ! -e $container ]; then\n";	
 			print $fh "echo \"'$container' file doesn't exist\" > $stderrfile\n";
 			print $fh "echo \"error\t\"`date +\%s` > $statusfile\n";
 			print $fh "touch $stdoutfile\n";
 			print $fh "touch $logfile\n";
+			print $fh "exit\n";
 			print $fh "else\n";
-			print $fh "\$cmdpath \\\n";
+			print $fh "$cmdpath \\\n";
 			print $fh "  --silent \\\n";
 			print $fh "  exec \\\n";
 			print $fh "  --workdir=/root \\\n";
@@ -5018,22 +5036,24 @@ sub throwJobs{
 			my $statusfile=$var->{$base}->{"statusfile"};
 			my $logfile=$var->{$base}->{"logfile"};
 			my $rootdir=$var->{$base}->{"rootdir"};
+			my $cmdpath=which("docker",$cmdpaths,defined($remotepath)?"$username\@$servername":undef);
 			print $fh "cd $rootdir\n";
-			print $fh "cmdpath=`which docker`\n";
-			print $fh "echo \"cmdpath=\$cmdpath\" > $stderrfile\n";
-			print $fh "echo PATH >> $stderrfile\n";
-			print $fh "if [ -z \"\$cmdpath\" ]; then\n";	
-			print $fh "echo \"singualarity command not found\" > $stderrfile\n";
-			print $fh "echo \"error\t\"`date +\%s` > $statusfile\n";
-			print $fh "touch $stdoutfile\n";
-			print $fh "touch $logfile\n";
-			print $fh "elif [[ \"\$(docker images -q $container 2> /dev/null)\" == \"\" ]]; then\n";
+			#print $fh "cmdpath=`which docker`\n";
+			#print $fh "if [ -z \"\$cmdpath\" ]; then\n";	
+			#print $fh "echo \"singualarity command not found\" > $stderrfile\n";
+			#print $fh "echo \"error\t\"`date +\%s` > $statusfile\n";
+			#print $fh "touch $stdoutfile\n";
+			#print $fh "touch $logfile\n";
+			#print $fh "exit\n";
+			#print $fh "elif [[ \"\$(docker images -q $container 2> /dev/null)\" == \"\" ]]; then\n";
+			print $fh "if [[ \"\$($cmdpath images -q $container 2> /dev/null)\" == \"\" ]]; then\n";
 			print $fh "echo \"'$container' docker doesn't exist\" > $stderrfile\n";
 			print $fh "echo \"error\t\"`date +\%s` > $statusfile\n";
 			print $fh "touch $stdoutfile\n";
 			print $fh "touch $logfile\n";
+			print $fh "exit\n";
 			print $fh "else\n";
-			print $fh "\$cmdpath \\\n";
+			print $fh "$cmdpath \\\n";
 			print $fh "  run \\\n";
 			print $fh "  --rm \\\n";
 			print $fh "  --workdir=/root \\\n";
@@ -5065,7 +5085,7 @@ sub throwJobs{
 		my $workdir=$var->{"base"}->{"workdir"};
 		my $logfile="$jobdir/$execid.txt";
 		push(@execids,$execid);
-		if(exists($command->{$urls->{"daemon/remotepath"}})){
+		if(defined($remotepath)){
 			my $fromDir=$var->{"base"}->{"workdir"};
 			my $toDir=$var->{"server"}->{"workdir"};
 			rsyncDirectory("$fromDir/","$username\@$servername:$toDir");
@@ -5077,11 +5097,11 @@ sub throwJobs{
 	print $fh "if [ -e $stderr ] && [ ! -s $stderr ]; then\n";
 	print $fh "rm $stderr\n";
 	print $fh "fi\n";
-	if(defined($serverfile)){print $fh "rm $serverfile\n";}
+	if(defined($remotepath)){print $fh "rm $serverfile\n";}
 	else{print $fh "rm $path\n";}
 	close($fh);
 	#Upload input files to the server
-	if(defined($serverfile)){
+	if(defined($remotepath)){
 		scpFileIfNecessary($path,"$username\@$servername:$serverfile");
 		unlink($path);
 		foreach my $var(@variables){uploadInputsByVar($command,$var);}
@@ -5105,7 +5125,7 @@ sub throwJobs{
 		if(defined($qjob)){print " through '$qjob' system";}
 		print "\n";
 	}
-	if(defined($serverfile)){
+	if(defined($remotepath)){
 		throwBashJob("$username\@$servername:$serverfile",$qjob,$qjobopt,$stdout,$stderr);
 	}else{
 		throwBashJob($path,$qjob,$qjobopt,$stdout,$stderr);
@@ -5212,36 +5232,22 @@ sub uploadOutputs{
 ############################## which ##############################
 sub which{
 	my $cmd=shift();
-	my $hash=shift();
-	if(!defined($hash)){$hash={};}
-	if(exists($hash->{$cmd})){return $hash->{$cmd};}
-	my $servername;
-	my $command=$cmd;
-	if($command=~/^(.+\@.+)\:(.+)$/){
-		$servername=$1;
-		$command=$2;
-	}
+	my $cmdpaths=shift();
+	my $serverpath=shift();
+	if(!defined($cmdpaths)){$cmdpaths={};}
+	if(exists($cmdpaths->{$cmd})){return $cmdpaths->{$cmd};}
 	my $result;
-	if(defined($servername)){
-		open(CMD,"ssh $servername 'test -f $command && echo 1 2>&1 |");
-		while(<CMD>){chomp;if($_ ne ""){$result="$servername:$command";}}
+	if(defined($serverpath)){
+		open(CMD,"ssh $serverpath \"bash -l -c 'which $cmd 2>&1'\" |");
+		while(<CMD>){chomp;if($_=~/$cmd$/){$result=$_;}}
 		close(CMD);
+		if($result ne ""){$cmdpaths->{$cmd}=$result;}
 	}else{
-		open(CMD,"test -f $command && echo 1 2>&1 |");
-		while(<CMD>){chomp;if($_ ne ""){$result="$rootDir/$command";}}
+		open(CMD,"which $cmd 2>&1 |");
+		while(<CMD>){chomp;if($_=~/$cmd$/){$result=$_;}}
 		close(CMD);
+		if($result ne ""){$cmdpaths->{$cmd}=$result;}
 	}
-	if($result ne ""){$hash->{$cmd}=$result;return $result;}
-	if(defined($servername)){
-		open(CMD,"ssh $servername 'which $command' 2>&1 |");
-		while(<CMD>){chomp;if($_ ne ""){$result=$_;}}
-		close(CMD);
-	}else{
-		open(CMD,"which $command 2>&1 |");
-		while(<CMD>){chomp;if($_ ne ""){$result=$_;}}
-		close(CMD);
-	}
-	if($result ne ""){$hash->{$cmd}=$result;}
 	return $result;
 }
 ############################## writeFileContent ##############################

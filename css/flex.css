@@ -1,0 +1,23 @@
+/* https://webukatu.com/wordpress/blog/22973/ */
+
+header{
+  background: #6fb5ff;
+}
+ 
+.box1{
+  background: #b3d874;
+  width: 100%;
+}
+ 
+.box2{
+  background: #ff838b;
+  width: 100%;
+}
+ 
+.flexbox{
+ display: flex;
+}
+ 
+footer{
+  background: #ffce5b;
+}

@@ -48,7 +48,7 @@ is quoted with a single quote (') is because a command contains redirect (>) and
 ```mermaid
   flowchart LR
     example-->|file|helloworld.txt
-    helloworld.txt-->|count|1 helloworld.txt
+    helloworld.txt-->|count|id1[1 helloworld.txt]
 ```
 
 Using an output file with content 'hello world' from the previous execution, moirai2 will execute a word count (wc) command and store its result in $output file.   An [output file](example/text/count), a [log file](example/log/e20220424224235CQWg.txt) and a metadata [triple file](example/db/count.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Moirai2 checks for output triple before executing a command line.  If an output triple is found (meaning it's been executed before), wc process will not be executed.
@@ -58,8 +58,8 @@ Using an output file with content 'hello world' from the previous execution, moi
 ```mermaid
   flowchart LR
     example-->|file|helloworld.txt
-    helloworld.txt-->|count|1 helloworld.txt
-    helloworld.txt-->|charcount|12 helloworld.txt
+    helloworld.txt-->|count|id1[1 helloworld.txt]
+    helloworld.txt-->|charcount|id2[12 helloworld.txt]
 ```
 
 An [output file](example/text/charcount), a [log file](example/log/e202205171203279pKn.txt) and a metadata [triple file](example/db/charcount.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Chain of commands can be connected by linking in/out triples like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be edited by user directly (text edit), or through web interface (php or flask), or through moirai computation (daemon).
