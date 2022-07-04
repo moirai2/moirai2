@@ -10,7 +10,7 @@ use Time::localtime;
 my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
-my $program_version="2022/06/27";
+my $program_version="2022/07/04";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -189,7 +189,7 @@ if(!defined($md5cmd)){$md5cmd=which('md5',$cmdpaths);}
 my $moiraidir=".moirai2";
 my $bindir="$moiraidir/bin";
 my $cmddir="$moiraidir/cmd";
-my $crontabdir="$moiraidir/crontab";
+my $crontabdir="crontab";
 my $ctrldir="$moiraidir/ctrl";
 my $configdir="$ctrldir/config";
 my $deletedir="$ctrldir/delete";
@@ -209,7 +209,6 @@ mkdir($moiraidir);#chmod(0777,$moiraidir);
 mkdir($dbdir);#chmod(0777,$dbdir);
 mkdir($bindir);#chmod(0777,$bindir);
 mkdir($cmddir);#chmod(0777,$cmddir);
-mkdir($crontabdir);#chmod(0777,$crontabdir);
 mkdir($ctrldir);#chmod(0777,$ctrldir);
 mkdir($configdir);#chmod(0777,$configdir);
 mkdir($deletedir);#chmod(0777,$deletedir);

@@ -617,16 +617,26 @@ By adding -d option to specify database root, new triple file "test/B.txt" will 
 perl rdf.pl insert A test/B C
 ```
 
-
-
-#### Multiple queries notation
 #### Accessing triples on the web http
+Since the database are in text formats, you can upload those files to a public server and anyone will be able to access your database.
+
+Theoretically, it'll be possible to merge multiple data on different servers into one by specifying predicate like example below.
+
+```
+perl rdf.pl A->https://aaa.bbb.ccc/ddd->B,B->https://eee.fff.ggg/hhh->C
+```
+
+#### gzipped file
+Gzipped files can be read by the database.  For example, "input.txt.gz" can be read as "input" predicate by the triple database.  This gets handy when database becomes too big and want to save hard-disk spaces.  The down-side is query process will be slowed a bit, since program has to unzip.  Also program will not be able to insert/add new entries to that gunzipped predicate file.
+
 #### Editing by hands
+
+Since all the triple data are recorded in text files, user can easily edit database through common text editors.  Also by deleting a file, the whole predicate can be deleted too.  For example, if you delete "input.txt", a whole data where predicate is input will be deleted from the database.
 
 ### Web interface
 #### moirai2.php
 #### moirai2.js
-####  flask docker-compose
+#### flask docker-compose
 
 ### openstack.pl
 #### Setup
