@@ -634,9 +634,27 @@ Gzipped files can be read by the database.  For example, "input.txt.gz" can be r
 Since all the triple data are recorded in text files, user can easily edit database through common text editors.  Also by deleting a file, the whole predicate can be deleted too.  For example, if you delete "input.txt", a whole data where predicate is input will be deleted from the database.
 
 ### Web interface
-#### moirai2.php
-#### moirai2.js
 #### flask docker-compose
+  * requirements
+    * Docker: https://www.docker.com
+    * docker-compose: https://docs.docker.com/compose/
+
+  * To build moirai2 server
+```
+bash scripts/build.sh
+```
+
+  * To start the moirai2 server
+```
+bash scripts/up.sh
+```
+
+  * To stop the moirai2 server
+```
+bash scripts/down.sh
+```
+
+  * To access local moirai2 website: http://localhost:5000
 
 ### openstack.pl
 #### Setup

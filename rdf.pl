@@ -42,6 +42,7 @@ sub help{
 	print "             select  Select triple(s)\n";
 	print "              split  split GTF and other files\n";
 	print "               test  For development purpose\n";
+	print "          timestamp  Get timestamp of specified predicate\n";
 	print "             update  Update triple(s)\n";
 	print "\n";
 	print "Commands of file statistics:\n";
@@ -177,6 +178,7 @@ elsif($command eq"query"){commandQuery(@ARGV);}
 elsif($command eq"select"){commandSelect(@ARGV);}
 elsif($command eq"seqcount"){commandSeqcount(@ARGV);}
 elsif($command eq"split"){commandSplit(@ARGV);}
+elsif($command eq"timestamp"){commandTimestamp(@ARGV);}
 elsif($command eq"update"){commandUpdate(@ARGV);}
 ############################## URLs ##############################
 my $urls={};
@@ -322,6 +324,31 @@ sub commandConfig{
 	close(IN);
 	my $total=updateJson($json);
 	if(!defined($opt_q)){print "updated $total\n";}
+}
+############################## checkTimestamp ##############################
+sub checkTimestamp {
+	my $path=shift();
+	if($path=~/^(.+\@.+)\:(.+)$/){
+		my $stat=`ssh $1 'perl -e \"my \@array=stat(\\\$ARGV[0]);print \\\$array[9]\" $2'`;
+		if($stat eq ""){return;}
+		return $stat;
+	}else{
+		my @stats=stat($path);
+		return $stats[9];
+	}
+}
+############################## commandTimestamp ##############################
+sub commandTimestamp{
+	my @predicates=@_;
+	my $timestamp;
+	foreach my $predicate(@predicates){
+		foreach my $file(getFileFromPredicate($predicate)){
+			my $t=checkTimestamp($file);
+			if(!defined($timestamp)){$timestamp=$t;}
+			elsif($t>$timestamp){$timestamp=$t;}
+		}
+	}
+	print "$timestamp\n";
 }
 ############################## commandDelete ##############################
 sub commandDelete{
@@ -969,6 +996,7 @@ sub getFileFromPredicate{
 	elsif(-e "$dir/$predicate.txt.gz"){return "$dir/$predicate.txt.gz";}
 	elsif(-e "$dir/$predicate.txt.bz2"){return "$dir/$predicate.txt.bz2";}
 	else{
+		$predicate=~s/\(\.\+\)/\*/g;
 		my @paths=`ls $dir/$predicate.* 2>/dev/null`;
 		foreach my $path(@paths){chomp($path);}
 		foreach my $path(@paths){
