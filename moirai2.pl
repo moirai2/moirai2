@@ -10,7 +10,7 @@ use Time::localtime;
 my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
-my $program_version="2022/07/11";
+my $program_version="2022/07/13";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -185,7 +185,7 @@ my $maximumJob=$opt_m;
 my $cmdpaths={};
 my $md5cmd=which('md5sum',$cmdpaths);
 if(!defined($md5cmd)){$md5cmd=which('md5',$cmdpaths);}
-my $dbdir=defined($opt_d)?checkDatabaseDirectory($opt_d):".";
+my $dbdir=defined($opt_d)?checkDatabaseDirectory($opt_d):undef;
 my $moiraidir=".moirai2";
 my $bindir="$moiraidir/bin";
 my $cmddir="$moiraidir/cmd";
@@ -206,7 +206,7 @@ my $throwdir="$moiraidir/throw";
 #I need to rethink about the permission of these directories
 #For now, I commented out all chmods.
 mkdir($moiraidir);#chmod(0777,$moiraidir);
-mkdir($dbdir);#chmod(0777,$dbdir);
+if(defined($dbdir)){mkdir($dbdir);}#chmod(0777,$dbdir);
 mkdir($bindir);#chmod(0777,$bindir);
 mkdir($cmddir);#chmod(0777,$cmddir);
 mkdir($ctrldir);#chmod(0777,$ctrldir);
@@ -372,7 +372,7 @@ sub bashCommand{
 			if($value eq "F"){next;}
 			if($value=~/false/i){next;}
 			$value=$options->{$key};
-			print OUT "$key=\"$value\"\n";
+			print OUT "$key=".jsonEncode($value)."\n";
 		}else{
 			if(ref($value)eq"ARRAY"){
 				print OUT "$key=(";
@@ -382,7 +382,7 @@ sub bashCommand{
 					print OUT jsonEncode($v);
 				}
 				print OUT ")\n";}
-			else{print OUT "$key=\"$value\"\n";}
+			else{print OUT "$key=".jsonEncode($value)."\n";}
 		}
 	}
 	if(scalar(@outputvars)>0){
@@ -957,6 +957,7 @@ sub completeProcess{
 	my $logfile="$workdir/log.txt";
 	my $bashfile="$workdir/run.sh";
 	my $processfile="$processdir/$execid.txt";
+	my $rdfdb=exists($command->{$urls->{"daemon/rdfdb"}})?$command->{$urls->{"daemon/rdfdb"}}."/":defined($dbdir)?"$dbdir/":undef;
 	if(exists($process->{$urls->{"daemon/hostname"}})){$processfile="$processdir/".$process->{$urls->{"daemon/hostname"}}."/$execid.txt";}
 	my $dirname=substr(substr($execid,-18),0,8);
 	my $serverpath=$process->{$urls->{"daemon/serverpath"}};
@@ -1055,9 +1056,9 @@ sub completeProcess{
 	my $updatecount=0;
 	while(<$reader>){
 		chomp;
-		if(/insert\s+(.+)\-\>(.+)\-\>(.+)/){print $insertwriter "$1\t$2\t$3\n";$insertcount++;next;}
-		if(/delete\s+(.+)\-\>(.+)\-\>(.+)/){print $deletewriter "$1\t$2\t$3\n";$deletecount++;next;}
-		if(/update\s+(.+)\-\>(.+)\-\>(.+)/){print $updatewriter "$1\t$2\t$3\n";$updatecount++;next;}
+		if(/insert\s+(.+)\-\>(.+)\-\>(.+)/){print $insertwriter "$1\t$rdfdb$2\t$3\n";$insertcount++;next;}
+		if(/delete\s+(.+)\-\>(.+)\-\>(.+)/){print $deletewriter "$1\t$rdfdb$2\t$3\n";$deletecount++;next;}
+		if(/update\s+(.+)\-\>(.+)\-\>(.+)/){print $updatewriter "$1\t$rdfdb$2\t$3\n";$updatecount++;next;}
 		if($stdoutcount==0){print $logwriter "######################################## stdout ########################################\n";}
 		print $logwriter "$_\n";$stdoutcount++;
 	}
@@ -1078,7 +1079,7 @@ sub completeProcess{
 	if($insertcount>0){
 		print $logwriter "######################################## insert ########################################\n";
 		my $reader=openFile($insertfile);
-		while(<$reader>){chomp;print $logwriter "$_\n";}
+		while(<$reader>){print $logwriter "$_";}
 		close($reader);
 		system("mv $insertfile $insertdir/".basename($insertfile));
 	}else{unlink($insertfile);}
@@ -1086,7 +1087,7 @@ sub completeProcess{
 	if($updatecount>0){
 		print $logwriter "######################################## update ########################################\n";
 		my $reader=openFile($updatefile);
-		while(<$reader>){chomp;print $logwriter "$_\n";}
+		while(<$reader>){print $logwriter "$_";}
 		close($reader);
 		system("mv $updatefile $updatedir/".basename($updatefile));
 	}else{unlink($updatefile);}
@@ -1094,7 +1095,7 @@ sub completeProcess{
 	if($deletecount>0){
 		print $logwriter "######################################## delete ########################################\n";
 		my $reader=openFile($deletefile);
-		while(<$reader>){chomp;print $logwriter "$_\n";}
+		while(<$reader>){print $logwriter "$_";}
 		close($reader);
 		system("mv $deletefile $deletedir/".basename($deletefile));
 	}else{unlink($deletefile);}
@@ -1130,7 +1131,7 @@ sub completeProcess{
 sub controlDelete{
 	my @files=getFiles($deletedir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -d $dbdir -f tsv delete";
+	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -f tsv delete";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1141,7 +1142,7 @@ sub controlDelete{
 sub controlInsert{
 	my @files=getFiles($insertdir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -d $dbdir -f tsv insert";
+	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -f tsv insert";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1174,7 +1175,7 @@ sub controlProcess{
 sub controlUpdate{
 	my @files=getFiles($updatedir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -d $dbdir -f tsv upate";
+	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -f tsv upate";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1679,6 +1680,7 @@ sub getBash{
 	my @lines=();
 	my $input;
 	my $output;
+	my $script;
 	foreach my $line(split(/\n/,$content)){
 		if($line=~/^#\$\s?-b\s+?(.+)$/){$command->{$urls->{"daemon/command/option"}}=jsonDecode($1);}
 		elsif($line=~/^#\$\s?-c\s+?(.+)$/){$command->{$urls->{"daemon/container"}}=$1;}
@@ -1688,21 +1690,25 @@ sub getBash{
 		elsif($line=~/^#\$\s?-F\s+?(.+)$/){$command->{$urls->{"daemon/error/file/empty"}}=handleKeys($1);}#-F
 		elsif($line=~/^#\$\s?-O\s+?(.+)$/){$command->{$urls->{"daemon/error/stdout/ignore"}}=handleKeys($1);}#-O
 		elsif($line=~/^#\$\s?-f\s+?(.+)$/){$command->{$urls->{"daemon/file/stats"}}=handleKeys($1);}#-f
-		elsif($line=~/^#\$\s?-i\s+?(.+)$/){$input=$1;}#-i
+		elsif($line=~/^#\$\s?-i\s+?(.+)$/){if(defined($input)){$input.=",";}$input.=$1;}#-i
 		elsif($line=~/^#\$\s?-m\s+?(.+)$/){$command->{$urls->{"daemon/maxjob"}}=$1;}#-m
-		elsif($line=~/^#\$\s?-o\s+?(.+)$/){$output=$1;}#-o
+		elsif($line=~/^#\$\s?-o\s+?(.+)$/){if(defined($output)){$output.=",";}$output.=$1;}#-o
 		elsif($line=~/^#\$\s?-q\s+?(.+)$/){$command->{$urls->{"daemon/qjob"}}=$1;}#-q
 		elsif($line=~/^#\$\s?-Q\s+?(.+)$/){$command->{$urls->{"daemon/qjob/opt"}}=$1;}#-Q
 		elsif($line=~/^#\$\s?-d\s+?(.+)$/){$command->{$urls->{"daemon/rdfdb"}}=checkDatabaseDirectory($1);}#-d
 		elsif($line=~/^#\$\s?-a\s+?(.+)$/){$command->{$urls->{"daemon/remotepath"}}=handleServer($1);}#-a
 		elsif($line=~/^#\$\s?-r\s+?(.+)$/){$command->{$urls->{"daemon/return"}}=handleKeys($1);}#-r
 		elsif($line=~/^#\$\s?-s\s+?(.+)$/){$command->{$urls->{"daemon/sleeptime"}}=$1;}#-s
-		elsif($line=~/^#\$\s?-S\s+?(.+)$/){$command->{$urls->{"daemon/script"}}=$1;loadScripts($command);}#-S
+		elsif($line=~/^#\$\s?-S\s+?(.+)$/){if(defined($script)){$script.=",";}$script.=$1;}#-S
 		elsif($line=~/^#\$\s?-X\s+?(.+)$/){$command->{$urls->{"daemon/suffix"}}=handleSuffix($1);}#-X
 		elsif($line=~/^#\$\s?(.+)\=(.+)$/){
 			if(!exists($command->{$urls->{"daemon/userdefined"}})){$command->{$urls->{"daemon/userdefined"}}={};}
 			$command->{$urls->{"daemon/userdefined"}}->{$1}=$2;
 		}else{push(@lines,$line);}
+	}
+	if(defined($script)){
+		$command->{$urls->{"daemon/script"}}=$script;
+		loadScripts($command);
 	}
 	$command->{$urls->{"daemon/bash"}}=\@lines;
 	my $inputKeys={};
@@ -1959,6 +1965,7 @@ sub getNumberOfJobsRunning{
 sub getQueryResults{
 	my $dir=shift();
 	my $query=shift();
+	if(!defined($dir)){$dir=".";}
 	my @queries=ref($query)eq"ARRAY"?@{$query}:split(/,/,$query);
 	foreach my $line(@queries){if(ref($line)eq"ARRAY"){$line=join("->",@{$line});}}
 	my $command="perl $prgdir/rdf.pl -d $dir -f json query '".join("' '",@queries)."'";
@@ -2029,7 +2036,7 @@ sub handleInputOutput{
 		my $json=jsonDecode($statement);
 		foreach my $key(sort{$a cmp $b}keys(%{$json})){
 			my $value=$json->{$key};
-			if($key=~/^\$(.+)$/){$key=$1;}
+			if($key=~/^\$(\w+)$/){$key=$1;}
 			if(ref($value)eq"HASH"){
 				foreach my $key2(keys(%{$value})){
 					my $value2=$value->{$key2};
@@ -2043,7 +2050,7 @@ sub handleInputOutput{
 					}
 				}
 			}else{
-				if($key=~/^\$(.+)$/){$key=$1;}
+				if($key=~/^\$(\w+)$/){$key=$1;}
 				if(!defined($userdefined)){$userdefined={};}
 				if(!exists($userdefined->{$key})){$userdefined->{$key}=$value;}
 			}
@@ -2065,7 +2072,7 @@ sub handleInputOutput{
 			foreach my $token(@tokens){
 				my $variable=$token;
 				if($variable=~/^\((.+)\)$/){$variable=$1;}
-				if($variable=~/^\$(.+)$/){
+				if($variable=~/^\$(\w+)$/){
 					$variable=$1;
 					if(!existsArray($keys,$variable)){push(@{$keys},$variable);}
 				}
@@ -2087,7 +2094,7 @@ sub handleInputOutput{
 				if(!defined($suffixs)){$suffixs={};}
 				$variable=$1;
 				$suffixs->{$1}=$2;
-			}elsif($variable=~/^\$(.+)$/){$variable=$1;}
+			}elsif($variable=~/^\$(\w+)$/){$variable=$1;}
 			if(!existsArray($keys,$variable)){push(@{$keys},$variable);}
 		}
 	}
@@ -2577,7 +2584,7 @@ sub initExecute{
 			$vars->{"docker"}->{"statusfile"}="$workdir/status.txt";
 			$vars->{"docker"}->{"logfile"}="$workdir/log.txt";
 			$vars->{"docker"}->{"exportpath"}="/root:/root/bin:$moiraidir/bin:\$PATH";
-			if(exists($command->{$urls->{"daemon/script"}})){$vars->{"docker"}->{"exportpath"}="$rootdir/$workdir/bin:".$vars->{"docker"}->{"exportpath"};}
+			if(exists($command->{$urls->{"daemon/script"}})){$vars->{"docker"}->{"exportpath"}="$workdir/bin:".$vars->{"docker"}->{"exportpath"};}
 		}
 	}
 	my $datetime=`date +%s`;chomp($datetime);
@@ -2712,11 +2719,11 @@ sub jsonUnescape{
 ############################## jsonEncode ##############################
 sub jsonEncode{
 	my $object=shift();
-	if(ref($object)eq"ARRAY"){return jsonEncode_array($object);}
-	elsif(ref($object)eq"HASH"){return jsonEncode_hash($object);}
-	else{return "\"".json_escape($object)."\"";}
+	if(ref($object)eq"ARRAY"){return jsonEncodeArray($object);}
+	elsif(ref($object)eq"HASH"){return jsonEncodeHash($object);}
+	else{return "\"".jsonEscape($object)."\"";}
 }
-sub jsonEncode_array{
+sub jsonEncodeArray{
 	my $hashtable=shift();
 	my $json="[";
 	my $i=0;
@@ -2728,7 +2735,7 @@ sub jsonEncode_array{
 	$json.="]";
 	return $json;
 }
-sub jsonEncode_hash{
+sub jsonEncodeHash{
 	my $hashtable=shift();
 	my $json="{";
 	my $i=0;
@@ -2740,7 +2747,7 @@ sub jsonEncode_hash{
 	$json.="}";
 	return $json;
 }
-sub json_escape{
+sub jsonEscape{
 	my $text=shift();
 	$text=~s/\\/\\\\/g;
 	$text=~s/\n/\\n/g;
@@ -3098,9 +3105,10 @@ sub ls{
 	my @directories=@{$arguments};
 	my $suffixs;
 	my $queryResults;
+	my $rdfdb=defined($dbdir)?$dbdir:".";
 	if(defined($opt_i)){
 		my ($keys,$queryIn)=handleInputOutput($opt_i,$userdefined,$suffixs);
-		$queryResults=getQueryResults($dbdir,$queryIn);
+		$queryResults=getQueryResults($rdfdb,$queryIn);
 	}else{
 		if(scalar(@directories)==0){push(@directories,".");}
 		foreach my $directory(@directories){push(@{$queryResults->[1]},{"input"=>$directory});}
@@ -3143,8 +3151,8 @@ sub ls{
 		my ($writer,$temp)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 		foreach my $line(@lines){print $writer "$line\n";}
 		close($writer);
-		if(defined($opt_l)){system("perl $prgdir/rdf.pl -d $dbdir import < $temp");}
-		else{system("perl $prgdir/rdf.pl -q -d $dbdir import < $temp");}
+		if(defined($opt_l)){system("perl $prgdir/rdf.pl -d $rdfdb import < $temp");}
+		else{system("perl $prgdir/rdf.pl -q -d $rdfdb import < $temp");}
 	}else{
 		foreach my $line(@lines){print "$line\n";}
 	}
@@ -3809,23 +3817,28 @@ sub removeUnnecessaryExecutes{
 	if(!exists($command->{$urls->{"daemon/query/out"}})){return;}
 	my $query=$command->{$urls->{"daemon/query/out"}};
 	my $outputs=getQueryResults($rdfdb,$query);
-	my $inputKeys={};
-	foreach my $input(@{$inputs->[0]}){$inputKeys->{$input}=1;}
-	my $outputKeys={};
-	foreach my $output(@{$outputs->[0]}){if(!exists($inputKeys->{$output})){$outputKeys->{$output}=1;}}
+	my $inputTemp={};
+	foreach my $input(@{$inputs->[0]}){$inputTemp->{$input}=1;}
+	my $commonTemp={};
+	my $outputTemp={};
+	foreach my $output(@{$outputs->[0]}){
+		if(exists($inputTemp->{$output})){$commonTemp->{$output}=1;}
+		else{$outputTemp->{$output}=1;}
+	}
+	my @outputKeys=keys(%{$outputTemp});
+	my @commonKeys=keys(%{$commonTemp});
 	my @array=();
 	foreach my $input(@{$inputs->[1]}){
-		my $skip=0;
+		my $keep=1;
 		foreach my $output(@{$outputs->[1]}){
-			my $hit=1;
-			foreach my $key(@{$outputs->[0]}){
-				if(exists($outputKeys->{$key})){next;}
-				if(!exists($input->{$key})){$hit=0;last;}
-				if($input->{$key} ne $output->{$key}){$hit=0;last;}
+			my $skip=0;
+			foreach my $commonKey(@commonKeys){
+				if($input->{$commonKey}ne$output->{$commonKey}){$skip=1;last;}
 			}
-			if($hit==1){$skip=1;}
+			if($skip){next;}
+			$keep=0;last;
 		}
-		if($skip==0){push(@array,$input);}
+		if($keep){push(@array,$input);}
 	}
 	$inputs->[1]=\@array;
 }
@@ -4557,11 +4570,11 @@ sub test2{
 	unlink("test/text.txt");
 	#testing input/output with "done" flag
 	mkdirs("$moiraidir/ctrl/insert/");
-	createFile("$moiraidir/ctrl/insert/A.txt","A\tname\tAkira");
+	createFile("$moiraidir/ctrl/insert/A.txt","A\ttest/name\tAkira");
 	system("echo 'mkdir -p test/\$dirname'|perl $prgdir/moirai2.pl -d test -s 1 -i '\$id->name->\$dirname' -o '\$id->mkdir->done' command");
 	if(!-e "test/Akira"){print STDERR "test/Akira directory not created\n";}
 	else{rmdir("test/Akira");}
-	createFile("$moiraidir/ctrl/insert/B.txt","B\tname\tBen");
+	createFile("$moiraidir/ctrl/insert/B.txt","B\ttest/name\tBen");
 	system("echo 'mkdir -p test/\$dirname'|perl $prgdir/moirai2.pl -d test -s 1 -i '\$id->name->\$dirname' -o '\$id->mkdir->done' command");
 	if(!-e "test/Ben"){print STDERR "test/Ben directory not created\n";}
 	else{rmdir("test/Ben");}

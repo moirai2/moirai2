@@ -995,14 +995,21 @@ sub getFileFromPredicate{
 	}elsif(defined($anchor)){return "$dir/$predicate.txt";}
 	elsif(-e "$dir/$predicate.txt.gz"){return "$dir/$predicate.txt.gz";}
 	elsif(-e "$dir/$predicate.txt.bz2"){return "$dir/$predicate.txt.bz2";}
-	else{
+	elsif($predicate=~/\(\.\+\)/){
 		$predicate=~s/\(\.\+\)/\*/g;
 		my @paths=`ls $dir/$predicate.* 2>/dev/null`;
 		foreach my $path(@paths){chomp($path);}
+		my @array=();
 		foreach my $path(@paths){
 			foreach my $suffix(sort{$b cmp $a}keys(%{$fileSuffixes})){
-				if($path=~/$suffix$/){return $path;}
+				if($path=~/$suffix$/){push(@array,$path);}
 			}
+		}
+		if(scalar(@array==1)){return $array[0];}
+		return \@array;
+	}else{
+		foreach my $suffix(sort{$b cmp $a}keys(%{$fileSuffixes})){
+			if(-e "$dir/$predicate.$suffix"){return "$dir/$predicate.$suffix";}
 		}
 	}
 	if(-d "$dir/$predicate"){return "$dir/$predicate";}
@@ -1662,6 +1669,8 @@ sub queryVariables{
 	if(-d $path){
 		@files=listFiles(undef,undef,-1,$path);
 		@files=narrowDownByPredicate($dir,$predicate,@files);
+	}elsif(ref($path)eq"ARRAY"){
+		push(@files,@{$path});
 	}else{push(@files,$path);}
 	my @array=();
 	if(defined($joinSubject)){
