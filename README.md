@@ -521,11 +521,73 @@ perl moirai2.pl -a ah3q@moirai2.gsc.riken.jp exec uname -a
 perl moirai2.pl -a ah3q@moirai2.gsc.riken.jp:moirai2 exec uname -a
 ```
 
-Example of input and output
+  * Example of input and output
 ```
 echo "Hello World" > input.txt
 perl moirai2.pl -a ah3q@moirai2.gsc.riken.jp:moirai2 exec 'wc -l input.txt > output.txt'
 ```
+
+#### Using bash for notation a command
+
+  * Command line(s) for moirai2 can be written in bash format.  Other format is json, but bash is more huan readable.
+  * For example:
+
+```
+> vi wc.sh
+#!/bin/sh
+#$ -i input
+#$ -r output
+output=`wc -l $input`
+
+> perl moirai2.pl wc.sh input=input.txt
+       1 input.txt
+```
+
+  * Options are set by using "#$".  Notations (-i, -r, etc) are same as options from a command line.
+  * This will be useful for writing cron jobs.
+
+#### Manipulating triple database from STDOUT
+
+  * It's possible to insert/update/delete triples from database through STDOUT of the command.
+
+```
+INSERT A->B->C
+UPDATE D->E->F
+DELETE G->H->I
+```
+
+  * Using the notation above, moirai2 will extract these lines from STDOUT and insert, update, or delete triples from the database.
+  * Example of insert/update/delete:
+```
+#!/bin/sh
+#$ -i $id->file->$file
+#$ -i $file->process->true
+lineCount=`wc -l $file`
+echo "UPDATE $file->lineCount->$lineCount"
+echo "DELETE $file->process->true"
+echo "INSERT $file->processed->true"
+```
+
+#### flag 
+
+```
+A104->xmlFile->xml/A104.xml
+xml/A104.xml->flag/needProcess->true
+```
+
+  * When predicate is found under '/flag' directory (as example above,'flag/needProcess'), a triple be processed as a control flag and will be treated differently from a common predicate where AS SOON AS moirai2 creates a job, flag will automatically removed from the database.
+  * For example, using above example:
+
+```
+#!/bin/sh
+#$ -i $id->xmlFile->$file
+#$ -i $file->flag/needProcess->true
+lineCount=`wc -l $file`
+echo "UPDATE $file->lineCount->$lineCount"
+echo "INSERT $file->processed->true"
+```
+
+  * As soon as a job is created, flag "xml/A104.xml->flag/needProcess->true" will be removed from the triple database.  This will be useful for specifying(flaggin) which file(s) you want moirai2 to process.
 
 ### rdf.pl
 Script name is "rdf.pl" where RDF stands for "[resouce description framework](https://en.wikipedia.org/wiki/Resource_Description_Framework)".  But script doesn't not follow a strict RDF rules, but uses only the concept of triple semantics only.

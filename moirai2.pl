@@ -10,7 +10,7 @@ use Time::localtime;
 my ($program_name,$prgdir,$program_suffix)=fileparse($0);
 $prgdir=Cwd::abs_path($prgdir);
 my $program_path="$prgdir/$program_name";
-my $program_version="2022/07/13";
+my $program_version="2022/07/30";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -52,6 +52,8 @@ sub help{
 	if(defined($opt_H)){
 		print "############################## Updates ##############################\n";
 		print "\n";
+		print "2022/07/30  Added flag handler where as soon as jobs are created, flags are removed from db\n";
+		print "2022/07/24  Added user and group for docker run\n";
 		print "2022/07/11  Refactored moirai2.pl and rdf.pl\n";
 		print "2022/05/25  Update mode added where input/output relation is ignored\n";
 		print "2022/05/14  Added error command functionality to view error logs\n";
@@ -178,7 +180,7 @@ my $homeDir=absolutePath(`echo ~`);
 my $hostname=`hostname`;chomp($hostname);
 my $prgmode=shift(@ARGV);
 if(defined($opt_q)){if($opt_q eq "qsub"){$opt_q="sge";}elsif($opt_q eq "squeue"){$opt_q="slurm";}}
-if(!defined($opt_s)){$opt_s=60;}
+if(!defined($opt_s)){$opt_s=10;}
 if(!defined($opt_m)){$opt_m=1;}
 my $sleeptime=$opt_s;
 my $maximumJob=$opt_m;
@@ -897,6 +899,7 @@ sub cleanMoiraiFiles{
 		foreach my $file(getFiles("$ctrldir/update")){system("rm $file");}
 		foreach my $file(getFiles("$moiraidir/throw")){system("rm $file");}
 	}
+	foreach my $dir(getDirs("$ctrldir/process")){system("rm -r $dir");}
 	if(exists($hash->{"dir"})){foreach my $dir(getDirs($moiraidir,"\\d{14}")){system("rm -r $dir");}}
 	if(exists($hash->{"error"})){foreach my $file(getFiles("$logdir/error")){system("rm $file");}}
 	if(exists($hash->{"log"})){foreach my $dir(getDirs($logdir,"\\d{8}")){system("rm -r $dir");}}
@@ -1056,9 +1059,9 @@ sub completeProcess{
 	my $updatecount=0;
 	while(<$reader>){
 		chomp;
-		if(/insert\s+(.+)\-\>(.+)\-\>(.+)/){print $insertwriter "$1\t$rdfdb$2\t$3\n";$insertcount++;next;}
-		if(/delete\s+(.+)\-\>(.+)\-\>(.+)/){print $deletewriter "$1\t$rdfdb$2\t$3\n";$deletecount++;next;}
-		if(/update\s+(.+)\-\>(.+)\-\>(.+)/){print $updatewriter "$1\t$rdfdb$2\t$3\n";$updatecount++;next;}
+		if(/insert\s+(.+)\-\>(.+)\-\>(.+)/i){print $insertwriter "$1\t$rdfdb$2\t$3\n";$insertcount++;next;}
+		if(/delete\s+(.+)\-\>(.+)\-\>(.+)/i){print $deletewriter "$1\t$rdfdb$2\t$3\n";$deletecount++;next;}
+		if(/update\s+(.+)\-\>(.+)\-\>(.+)/i){print $updatewriter "$1\t$rdfdb$2\t$3\n";$updatecount++;next;}
 		if($stdoutcount==0){print $logwriter "######################################## stdout ########################################\n";}
 		print $logwriter "$_\n";$stdoutcount++;
 	}
@@ -1510,20 +1513,27 @@ sub createNewCommandFromLines{
 }
 ############################## daemonCheckTimestamp ##############################
 sub daemonCheckTimestamp{
+	my $currentTime=time();
 	my $command=shift();
+	if(!exists($command->{$urls->{"daemon/timestamp"}})){
+		$command->{$urls->{"daemon/timestamp"}}=$currentTime;
+		return 1;
+	}
 	my $cmdurl=$command->{$urls->{"daemon/command"}};
 	my $queries=$command->{$urls->{"daemon/query/in"}};
 	if(!defined($queries)){return 1;}
 	my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
+	my $time1=$command->{$urls->{"daemon/timestamp"}};
 	my $hit=0;
 	foreach my $query(@{$queries}){
 		my @tokens=split(/\-\>/,$query);
 		my $predicate=$tokens[1];
-		my $time1=$command->{$urls->{"daemon/timestamp"}};
-		my $time2=`perl $prgdir/rdf.pl -d $rdfdb timestamp $predicate`;
+		$predicate=~s/\$\w+/%/g;
+		my $time2=`perl $prgdir/rdf.pl -d $rdfdb timestamp '$predicate'`;
 		chomp($time2);
-		if($time1<$time2){$hit=1;$command->{$urls->{"daemon/timestamp"}}=$time2;}
+		if($time1<$time2){$hit=1;last;}
 	}
+	if($hit){$command->{$urls->{"daemon/timestamp"}}=$currentTime;}
 	return $hit;
 }
 ############################## dirExists ##############################
@@ -1969,6 +1979,7 @@ sub getQueryResults{
 	my @queries=ref($query)eq"ARRAY"?@{$query}:split(/,/,$query);
 	foreach my $line(@queries){if(ref($line)eq"ARRAY"){$line=join("->",@{$line});}}
 	my $command="perl $prgdir/rdf.pl -d $dir -f json query '".join("' '",@queries)."'";
+	#print STDERR ">$command\n";
 	my $result=`$command`;chomp($result);
 	my $hashs=jsonDecode($result);
 	my $keys=retrieveKeysFromQueries($query);
@@ -3345,16 +3356,12 @@ sub moiraiPrepare{
 		push(@jobs,$job);
 	}
 	@jobs=moiraiPrepareCheck(@jobs);
-	if(scalar(@jobs)==0){
-		print STDERR "#ERROR  There is no job to process.";
-		if(!defined($opt_l)){print STDERR "  Use '-l' options to see more detail";}
-		print STDERR "\n";
-		exit(1);
-	}
-	if(defined($opt_u)){
+	if(defined($opt_u)&&scalar(@jobs)>0){
 		print "Proceed running ".scalar(@jobs)." jobs [y/n]? ";
 		if(!getYesOrNo()){exit(1);}
 	}
+	my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
+	moiraiPrepareRemoveFlag($rdfdb,$queryKeys,$queryResults);
 	my @execids=writeJobHash(@jobs);
 	return @execids;
 }
@@ -3369,13 +3376,9 @@ sub moiraiPrepareCheck{
 		my $hash={};
 		while(my($key,$val)=each(%{$job})){if($key=~/^$url#(.+)$/){$hash->{$1}=$val;}}
 		if(moiraiPrepareMatch($hash,$processes->{"registered"}->{$url})){
-			if(defined($opt_l)){
-				print STDERR "#WARNING  '$execid' will not be processed, since same job is already registered\n";
-			}
+			print STDERR "#WARNING  '$execid' will not be processed, since same job is currently registered\n";
 		}elsif(moiraiPrepareMatch($hash,$processes->{"ongoing"}->{$url})){
-			if(defined($opt_l)){
-				print STDERR "#WARNING  '$execid' will not be processed, since same job is currently on going\n";
-			}
+			print STDERR "#WARNING  '$execid' will not be processed, since same job is currently on going\n";
 		}elsif(moiraiPrepareMatch($hash,$processes->{"error"}->{$url})){
 			print STDERR "#WARNING  '$execid' will not be processed, since earlier job ended with error\n";
 			print STDERR "#WARNING  Use 'perl moirai2.pl error' to check error messages\n";
@@ -3401,6 +3404,31 @@ sub moiraiPrepareMatch{
 		last;
 	}
 	return $hit;
+}
+############################## moiraiPrepareRemoveFlag ##############################
+sub moiraiPrepareRemoveFlag{
+	my $rdfdb=shift();
+	my $queryKeys=shift();
+	my $queryResults=shift();
+	my @queries=();
+	foreach my $query(@{$queryKeys}){
+		my @tokens=split(/\-\>/,$query);
+		if($tokens[1]!~/flag\/(\w+)$/){next;}
+		push(@queries,$tokens[0]."\t$rdfdb/".$tokens[1]."\t".$tokens[2]);
+	}
+	my ($writer,$file)=tempfile(DIR=>"/tmp",SUFFIX=>".txt",UNLINK=>0);
+	foreach my $query(@queries){
+		foreach my $result(@{$queryResults->[1]}){		
+			my $line=$query;
+			foreach my $key(sort{$b cmp $a}keys(%{$result})){
+				my $val=$result->{$key};
+				$line=~s/\$$key/$val/g;
+			}
+			print $writer "$line\n";
+		}
+	}
+	close($writer);
+	system("mv $file $deletedir/".basename($file));
 }
 ############################## moiraiPrepareVars ##############################
 sub moiraiPrepareVars{
@@ -4038,7 +4066,7 @@ sub runDaemon{
 		if(defined($opt_l)){$command.=" -l";}
 		if(defined($opt_m)){$command.=" -m $opt_m";}
 		if(defined($opt_M)){$command.=" -M $opt_M";}
-		if(defined($opt_r)){$command.=" -r";}
+		if(defined($opt_R)){$command.=" -R";}
 		if(defined($opt_s)){$command.=" -s $opt_s";}
 		$command.=" daemon";
 		if(defined($cronMode)){$command.=" cron";}
@@ -4052,11 +4080,10 @@ sub runDaemon{
 		exit(0);
 	}
 	my $commands={};
-	my $ongoing=[];
-	my $processes={};
 	my $processes=reloadProcesses($commands);
 	my $serverProcesses=reloadServerProcesses($commands);
 	my $runCount=defined($opt_R)?$opt_R:undef;
+	my $sleeptime=defined($opt_s)?$opt_s:10;
 	my $jobserver;
 	if(defined($opt_j)){
 		$jobserver=handleServer($opt_j);
@@ -4070,6 +4097,8 @@ sub runDaemon{
 		if(defined($processMode)){print "#  - Process jobs found at '$jobdir' directory.\n" }
 		if(defined($jobserver)){print "#  - Jobs will retrieved from '$jobserver' server.\n" }
 	}
+	my @crons=();
+	my $cronTime=0;
 	my $executes={};
 	my $execurls=[];
 	my @execids=();
@@ -4087,14 +4116,18 @@ sub runDaemon{
 			}
 		}
 		if(defined($cronMode)){# handle cron
-			my @urls=listFilesRecursively("(\.json|\.sh)\$",undef,-1,$crondir);
-			foreach my $url(@urls){
-				my $command=loadCommandFromURL($url,$commands);
-				handleRdfdbOption($command);
-				if(!exists($command->{$urls->{"daemon/timestamp"}})){next;}
-				$command->{$urls->{"daemon/timestamp"}}=0;
+			my $time=checkTimestamp($crondir);
+			if($cronTime<$time){
+				@crons=listFilesRecursively("(\.json|\.sh)\$",undef,-1,$crondir);
+				foreach my $url(@crons){
+					my $command=loadCommandFromURL($url,$commands);
+					if(exists($command->{$urls->{"daemon/timestamp"}})){next;}
+					handleRdfdbOption($command);
+					$command->{$urls->{"daemon/timestamp"}}=0;
+				}
+				$cronTime=$time;
 			}
-			foreach my $url(sort{$a cmp $b}@urls){
+			foreach my $url(@crons){
 				my $command=$commands->{$url};
 				if(daemonCheckTimestamp($command)){
 					if(bashCommandHasOptions($command)){
@@ -4115,7 +4148,7 @@ sub runDaemon{
 				}
 			}
 		}
-		if(defined($processMode)){# main mode
+		if(defined($processMode)){# main mode local
 			my $jobs_running=getNumberOfJobsRunning();
 			my $jobSlot=$maximumJob-$jobs_running;
 			if($jobSlot<=0){sleep($opt_s);next;}
@@ -4125,15 +4158,15 @@ sub runDaemon{
 			loadExecutes($commands,$executes,$execurls,@jobFiles);
 			mainProcess($execurls,$commands,$executes,$processes,$jobSlot);
 		}
-		if(defined($jobserver)){
+		if(defined($jobserver)){#get job from the server
 			my $jobs_running=getNumberOfJobsRunning();
 			my $jobSlot=$maximumJob-$jobs_running;
 			if($jobSlot<=0){sleep($opt_s);next;}
 			retrieveServerJobs($jobserver,$commands,$jobSlot);
 		}
-		if(-e $stopFile){last;}
+		if(-e $stopFile){$runCount=-1;last;}
 		if(defined($runCount)){$runCount--;if($runCount<0){last;}}
-		sleep(opt_s);
+		sleep($sleeptime);
 	}
 	#Wait until job is completed when daemon's loop count is defined
 	if(defined($runCount)){
@@ -4206,7 +4239,7 @@ sub saveCommandSub{
 	my $url=shift();
 	if(exists($command->{$url})){
 		if($url eq $urls->{"daemon/maxjob"}&&$command->{$url}==1){return;}
-		if($url eq $urls->{"daemon/sleeptime"}&&$command->{$url}==60){return;}
+		if($url eq $urls->{"daemon/sleeptime"}&&$command->{$url}==10){return;}
 		my $line="";
 		if($url ne $urls->{"daemon/bash"}){$line=",";}
 		my $value=$command->{$url};
@@ -5006,6 +5039,7 @@ sub throwJobs{
 			print $fh "  run \\\n";
 			print $fh "  --rm \\\n";
 			print $fh "  --workdir=/root \\\n";
+			print $fh "  -u `id -u`:`id -g` \\\n";
 			print $fh "  -v '$rootdir:/root' \\\n";
 			print $fh "  $container \\\n";
 			print $fh "  /bin/bash $bashfile \\\n";
