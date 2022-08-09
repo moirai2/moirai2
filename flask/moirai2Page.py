@@ -1,35 +1,29 @@
-import os # list files,basename,etc
+import os # list files, basename, etc
 import re # regular expression
-import urllib # access www url
+import urllib # access www url and get content
 import tempfile # handle temporary file/directory
-import shutil # file manipulation
+import shutil # file manipulation mv/cp
 import subprocess # execute command line
-import sys # system
-import datetime # handle date and time
-import jinja2 # jinja2
-import xml.etree.ElementTree as ET
-import json
-import gzip
-from flask import Flask,url_for,flash,request,Response,redirect,render_template,make_response
-from markupsafe import escape
-from bs4 import BeautifulSoup 
-from werkzeug.utils import secure_filename
+import sys # sys.stderr, sys.stdout
+import datetime # get year/month/date hour/minute/second
+import jinja2 # display template HTML with replaced ariables
+import xml.etree.ElementTree as ET # Handling XML
+import json # handling JSON file format
+import gzip # handling gzipped file
+import sqlite3 # handling sqlite3 file
+from flask import Flask,url_for,flash,request,Response,redirect,render_template,make_response,g
+from markupsafe import escape # safe upload
+from bs4 import BeautifulSoup # Parsing HTML content
+from werkzeug.utils import secure_filename # secure filename
 
-############################## flask ##############################
-# twitch panels created using https://nerdordie.com/resources/customizable-twitch-panels/
-app=Flask(__name__,static_folder='static')
-app.config['UPLOAD_FOLDER']='static/upload'
-app.secret_key=os.urandom(24)
-SUBMIT_DIR="../.moirai/ctrl/submit/"
-COMMAND_DIR="command/"
+SUBMIT_DIR="../.moirai/ctrl/submit"
+COMMAND_DIR="command"
 
 ############################## homepage ##############################
-@app.route("/")
 def homepage():
     return render_template('index.html')
 
 ############################## commands ##############################
-@app.route("/commands.html")
 def commands():
     commands=[]
     paths=listDir(COMMAND_DIR,-1)
@@ -40,33 +34,29 @@ def commands():
     return render_template('commands.html',commands=commands)
 
 ############################## command ##############################
-@app.route("/command/<path:path>")
 def command(path):
+    print(path,file=sys.stderr)
     command=loadCommand(path)
     return render_template('command.html',command=command)
 
 ############################## run ##############################
-@app.route('/run',methods=['GET','POST'])
 def run(path):
     content=["Hello World"]
     submitMoirai(content)
     return path
 
 ############################## query ##############################
-@app.route('/query',methods=['GET','POST'])
 def query():
     return "Hello World"
 
 ############################## db ##############################
-@app.route('/db',methods=['GET','POST'])
 def db(path):
     cp=subprocess.run(['perl','bin/rdf.pl','-d','static/db','-f','json','query',path],stdout=subprocess.PIPE)
     content=cp.stdout
     return path
 
 ############################## submit ##############################
-@app.route('/submit',methods=['GET','POST'])
-def submitMoirai(content):
+def submit(content):
     os.makedirs(SUBMIT_DIR,exist_ok=True)
     writer=open(SUBMIT_DIR+"test.txt",'w')
     writer.writelines(content)
@@ -93,7 +83,7 @@ def listDir(path=".",recursion=0,grep=None,ungrep=None):
 
 ############################## loadCommand ##############################
 def loadCommand(path):
-    reader=open(COMMAND_DIR+path,'r')
+    reader=open(path,'r')
     j=json.load(reader)
     reader.close()
     input=j["https://moirai2.github.io/schema/daemon/input"]
@@ -108,8 +98,3 @@ def loadCommand(path):
     hash["bash"]=bash
     hash["path"]=path
     return hash
-
-############################## MAIN ##############################
-
-if __name__=="__main__":
-    app.run(host="0.0.0.0",debug=True,use_reloader=True)

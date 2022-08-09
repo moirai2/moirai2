@@ -2,7 +2,7 @@
 
 ## Introduction
 
-MOIRAI2 is a very simple [scientific workflow system](https://en.wikipedia.org/wiki/Scientific_workflow_system) written in basic perl whith was developed with four concepts in mind:
+MOIRAI2 is a very simple [scientific workflow system](https://en.wikipedia.org/wiki/Scientific_workflow_system) written in basic perl which was developed with four concepts in mind:
 
 - usability - Can execute workflow from a command line or from web page.
 - reprodusibility - Just by adding options (-c), can execute with singularity/Docker container.
@@ -568,7 +568,7 @@ echo "DELETE $file->process->true"
 echo "INSERT $file->processed->true"
 ```
 
-#### flag 
+#### Flag Handling
 
 ```
 A104->xmlFile->xml/A104.xml

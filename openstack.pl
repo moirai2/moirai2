@@ -15,8 +15,8 @@ use Time::HiRes;
 use Time::Local;
 use Time::localtime;
 ############################## HEADER ##############################
-my($program_name,$prgdir,$program_suffix)=fileparse($0);
-$prgdir=substr($prgdir,0,-1);
+my($program_name,$program_directory,$program_suffix)=fileparse($0);
+$program_directory=substr($program_directory,0,-1);
 my $program_version="2022/03/03";
 ############################## OPTIONS ##############################
 use vars qw($opt_c $opt_d $opt_f $opt_h $opt_i $opt_p $opt_q $opt_r $opt_s);
@@ -2387,7 +2387,7 @@ sub replaceVariableFromThisScript{
 	my $output=shift();
 	my $path=shift();
 	if(!defined($opt_q)&&!defined($output)){print ">Saving settings...  ";}
-	if(!defined($path)){$path="$prgdir/$program_name";}
+	if(!defined($path)){$path="$program_directory/$program_name";}
 	if(-B $path){return;}
 	my @keys=keys(%{$hash});
 	my ($writer,$tmpfile)=tempfile("scriptXXXXXXXXXX",DIR=>$openstackdir,SUFFIX=>".pl",UNLINK=>1);
@@ -2572,7 +2572,7 @@ sub snapshotInstanceGracefully{
 }
 ############################## sortSubs ##############################
 sub sortSubs{
-	my $path="$prgdir/$program_name";
+	my $path="$program_directory/$program_name";
 	my $reader=openFile($path);
 	my @headers=();
 	my $name;

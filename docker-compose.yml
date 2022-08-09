@@ -7,7 +7,7 @@ services:
     ports:
      - "5000:5000"
     volumes:
-      - ./flask/code:/code
+      - ./flask:/code
       - ./images:/code/static/images
       - ./css:/code/static/css
       - ./js:/code/static/js

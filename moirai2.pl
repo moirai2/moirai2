@@ -7,10 +7,10 @@ use FileHandle;
 use Getopt::Std;
 use Time::localtime;
 ############################## HEADER ##############################
-my ($program_name,$prgdir,$program_suffix)=fileparse($0);
-$prgdir=Cwd::abs_path($prgdir);
-my $program_path="$prgdir/$program_name";
-my $program_version="2022/07/30";
+my ($program_name,$program_directory,$program_suffix)=fileparse($0);
+$program_directory=Cwd::abs_path($program_directory);
+my $program_path="$program_directory/$program_name";
+my $program_version="2022/08/09";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -173,7 +173,7 @@ $urls->{"daemon/workdir"}="https://moirai2.github.io/schema/daemon/workdir";
 $urls->{"daemon/workflow"}="https://moirai2.github.io/schema/daemon/workflow";
 $urls->{"daemon/workid"}="https://moirai2.github.io/schema/daemon/workid";
 $urls->{"daemon/workflow/urls"}="https://moirai2.github.io/schema/daemon/workflow/urls";
-############################## MAIN ##############################Z
+############################## MAIN ##############################
 #xxxDir is absoute path, xxxdir is relative path
 my $rootDir=absolutePath(".");
 my $homeDir=absolutePath(`echo ~`);
@@ -1134,7 +1134,7 @@ sub completeProcess{
 sub controlDelete{
 	my @files=getFiles($deletedir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -f tsv delete";
+	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv delete";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1145,7 +1145,7 @@ sub controlDelete{
 sub controlInsert{
 	my @files=getFiles($insertdir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -f tsv insert";
+	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv insert";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1178,7 +1178,7 @@ sub controlProcess{
 sub controlUpdate{
 	my @files=getFiles($updatedir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $prgdir/rdf.pl -q -f tsv upate";
+	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv upate";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1447,11 +1447,11 @@ sub createHtmlDatabase{
 	print "<script type=\"text/javascript\" src=\"js/jquery/jquery-3.4.1.min.js\"></script>\n";
 	print "<script type=\"text/javascript\" src=\"js/jquery/jquery.columns.min.js\"></script>\n";
 	print "<script type=\"text/javascript\">\n";
-	#my $network=`perl $prgdir/rdf.pl -d $dbdir export network`;
+	#my $network=`perl $program_directory/rdf.pl -d $dbdir export network`;
 	#chomp($network);
-	my $db=`perl $prgdir/rdf.pl export db`;
+	my $db=`perl $program_directory/rdf.pl export db`;
 	chomp($db);
-	my $log=`perl $prgdir/rdf.pl export log`;
+	my $log=`perl $program_directory/rdf.pl export log`;
 	chomp($log);
 	#print "var network=$network;\n";
 	print "var db=$db;\n";
@@ -1529,7 +1529,7 @@ sub daemonCheckTimestamp{
 		my @tokens=split(/\-\>/,$query);
 		my $predicate=$tokens[1];
 		$predicate=~s/\$\w+/%/g;
-		my $time2=`perl $prgdir/rdf.pl -d $rdfdb timestamp '$predicate'`;
+		my $time2=`perl $program_directory/rdf.pl -d $rdfdb timestamp '$predicate'`;
 		chomp($time2);
 		if($time1<$time2){$hit=1;last;}
 	}
@@ -1978,7 +1978,7 @@ sub getQueryResults{
 	if(!defined($dir)){$dir=".";}
 	my @queries=ref($query)eq"ARRAY"?@{$query}:split(/,/,$query);
 	foreach my $line(@queries){if(ref($line)eq"ARRAY"){$line=join("->",@{$line});}}
-	my $command="perl $prgdir/rdf.pl -d $dir -f json query '".join("' '",@queries)."'";
+	my $command="perl $program_directory/rdf.pl -d $dir -f json query '".join("' '",@queries)."'";
 	#print STDERR ">$command\n";
 	my $result=`$command`;chomp($result);
 	my $hashs=jsonDecode($result);
@@ -3162,8 +3162,8 @@ sub ls{
 		my ($writer,$temp)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 		foreach my $line(@lines){print $writer "$line\n";}
 		close($writer);
-		if(defined($opt_l)){system("perl $prgdir/rdf.pl -d $rdfdb import < $temp");}
-		else{system("perl $prgdir/rdf.pl -q -d $rdfdb import < $temp");}
+		if(defined($opt_l)){system("perl $program_directory/rdf.pl -d $rdfdb import < $temp");}
+		else{system("perl $program_directory/rdf.pl -q -d $rdfdb import < $temp");}
 	}else{
 		foreach my $line(@lines){print "$line\n";}
 	}
@@ -3556,7 +3556,7 @@ sub openFile{
 ############################## openstackCommand ##############################
 sub openstackCommand{
 	my @arguments=@_;
-	if(!-e "$prgdir/openstack.pl"){print STDERR "ERROR: $prgdir/openstack.pl not found\n";exit(1);}
+	if(!-e "$program_directory/openstack.pl"){print STDERR "ERROR: $program_directory/openstack.pl not found\n";exit(1);}
 }
 ############################## printCommand ##############################
 sub printCommand{
@@ -4107,7 +4107,7 @@ sub runDaemon{
 		controlWorkflow($serverProcesses,$commands);
 		if(defined($submitMode)){
 			foreach my $file(getFiles($submitdir)){
-				my $cmdline="perl $prgdir/moirai2.pl";
+				my $cmdline="perl $program_directory/moirai2.pl";
 				$cmdline.=" -x -w s";
 				$cmdline.=" submit $file";
 				if(defined($opt_l)){print ">$cmdline\n";}
@@ -4132,13 +4132,13 @@ sub runDaemon{
 				if(daemonCheckTimestamp($command)){
 					if(bashCommandHasOptions($command)){
 						my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
-						my $cmdline="perl $prgdir/moirai2.pl";
+						my $cmdline="perl $program_directory/moirai2.pl";
 						$cmdline.=" -d $rdfdb";
 						$cmdline.=" -x -w a";
 						$cmdline.=" $url";
 						if(defined($opt_l)){print ">$cmdline\n";}
 						my @ids=`$cmdline`;
-						if(defined(runCount)){foreach my $id(@ids){chomp($id);push(@execids,$id);}}
+						if(defined($runCount)){foreach my $id(@ids){chomp($id);push(@execids,$id);}}
 					}else{
 						my ($writer,$script)=tempfile(DIR=>"/tmp",SUFFIX=>".sh");
 						print $writer "bash $url\n";
@@ -4463,7 +4463,7 @@ sub setInputsOutputsFromCommand{
 }
 ############################## sortSubs ##############################
 sub sortSubs{
-	my $path="$prgdir/$program_name";
+	my $path="$program_directory/$program_name";
 	my $reader=openFile($path);
 	my @headers=();
 	my $name;
@@ -4568,30 +4568,30 @@ sub test1{
 sub test2{
 	#testing input/output 1
 	createFile("test/Akira.txt","A","B","C","D","A","D","B");
-	testCommand("perl $prgdir/rdf.pl -d test insert root file test/Akira.txt","inserted 1");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -i 'root->file->\$file' exec 'sort \$file'","A","A","B","B","C","D","D");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -i 'root->file->\$file' -r 'output' exec 'sort \$file|uniq -c>\$output' '\$output=test/output.txt'","test/output.txt");
-	testCommand("perl $prgdir/rdf.pl -d test delete root file test/Akira.txt","deleted 1");
+	testCommand("perl $program_directory/rdf.pl -d test insert root file test/Akira.txt","inserted 1");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i 'root->file->\$file' exec 'sort \$file'","A","A","B","B","C","D","D");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i 'root->file->\$file' -r 'output' exec 'sort \$file|uniq -c>\$output' '\$output=test/output.txt'","test/output.txt");
+	testCommand("perl $program_directory/rdf.pl -d test delete root file test/Akira.txt","deleted 1");
 	unlink("test/output.txt");
 	unlink("test/Akira.txt");
 	#testing input/output 2
 	createFile("test/A.json","{\"https://moirai2.github.io/schema/daemon/input\":\"\$string\",\"https://moirai2.github.io/schema/daemon/bash\":[\"echo \\\"\$string\\\" > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -r '\$output' test/A.json 'Akira Hasegawa' test/output.txt","test/output.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -r '\$output' test/A.json 'Akira Hasegawa' test/output.txt","test/output.txt");
 	testCommand("cat test/output.txt","Akira Hasegawa");
 	unlink("test/output.txt");
-	testCommand("perl $prgdir/rdf.pl -d test insert case1 'string' 'Akira Hasegawa'","inserted 1");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -i '\$id->string->\$string' -o '\$id->text->\$output' test/A.json 'output=test/\$id.txt'","");
+	testCommand("perl $program_directory/rdf.pl -d test insert case1 'string' 'Akira Hasegawa'","inserted 1");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->string->\$string' -o '\$id->text->\$output' test/A.json 'output=test/\$id.txt'","");
 	testCommand("cat test/case1.txt","Akira Hasegawa");
-	testCommand("perl $prgdir/rdf.pl -d test select case1 text","case1\ttext\ttest/case1.txt");
+	testCommand("perl $program_directory/rdf.pl -d test select case1 text","case1\ttext\ttest/case1.txt");
 	unlink("test/A.json");
 	#testing input/output 3
 	createFile("test/B.json","{\"https://moirai2.github.io/schema/daemon/input\":\"\$input\",\"https://moirai2.github.io/schema/daemon/bash\":[\"sort \$input > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -i '\$id->text->\$input' -o '\$input->sorted->\$output' test/B.json '\$output=test/\$id.sort.txt'","");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->text->\$input' -o '\$input->sorted->\$output' test/B.json '\$output=test/\$id.sort.txt'","");
 	testCommand("cat test/case1.sort.txt","Akira Hasegawa");
-	testCommand("perl $prgdir/rdf.pl -d test select % 'sorted'","test/case1.txt\tsorted\ttest/case1.sort.txt");
+	testCommand("perl $program_directory/rdf.pl -d test select % 'sorted'","test/case1.txt\tsorted\ttest/case1.sort.txt");
 	createFile("test/case2.txt","Hasegawa","Akira","Chiyo","Hasegawa");
-	testCommand("perl $prgdir/rdf.pl -d test insert case2 'text' test/case2.txt","inserted 1");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -i '\$id->text->\$input' -o '\$input->sorted->\$output' test/B.json '\$output=test/\$id.sort.txt'","");
+	testCommand("perl $program_directory/rdf.pl -d test insert case2 'text' test/case2.txt","inserted 1");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->text->\$input' -o '\$input->sorted->\$output' test/B.json '\$output=test/\$id.sort.txt'","");
 	testCommand("cat test/case2.sort.txt","Akira","Chiyo","Hasegawa","Hasegawa");
 	unlink("test/case1.txt");
 	unlink("test/case2.txt");
@@ -4604,49 +4604,49 @@ sub test2{
 	#testing input/output with "done" flag
 	mkdirs("$moiraidir/ctrl/insert/");
 	createFile("$moiraidir/ctrl/insert/A.txt","A\ttest/name\tAkira");
-	system("echo 'mkdir -p test/\$dirname'|perl $prgdir/moirai2.pl -d test -s 1 -i '\$id->name->\$dirname' -o '\$id->mkdir->done' command");
+	system("echo 'mkdir -p test/\$dirname'|perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->name->\$dirname' -o '\$id->mkdir->done' command");
 	if(!-e "test/Akira"){print STDERR "test/Akira directory not created\n";}
 	else{rmdir("test/Akira");}
 	createFile("$moiraidir/ctrl/insert/B.txt","B\ttest/name\tBen");
-	system("echo 'mkdir -p test/\$dirname'|perl $prgdir/moirai2.pl -d test -s 1 -i '\$id->name->\$dirname' -o '\$id->mkdir->done' command");
+	system("echo 'mkdir -p test/\$dirname'|perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->name->\$dirname' -o '\$id->mkdir->done' command");
 	if(!-e "test/Ben"){print STDERR "test/Ben directory not created\n";}
 	else{rmdir("test/Ben");}
 	unlink("test/mkdir.txt");
 	unlink("test/name.txt");
 	#input and output defaults
 	createFile("test/input.txt","Hello World\nAkira Hasegawa\nTsunami Channel");
-	testCommand("perl $prgdir/moirai2.pl -r output -i '{\"input\":\"test/input.txt\"}' -o '{\"output\":\"test/output.txt\"}' exec 'wc -l \$input > \$output'","test/output.txt");
+	testCommand("perl $program_directory/moirai2.pl -r output -i '{\"input\":\"test/input.txt\"}' -o '{\"output\":\"test/output.txt\"}' exec 'wc -l \$input > \$output'","test/output.txt");
 	testCommandRegex("cat test/output.txt","3 test/input.txt");
 	unlink("test/output.txt");
-	testCommandRegex("perl $prgdir/moirai2.pl -r output -i '\$input' -o '\$output.txt' exec 'wc -l < \$input> \$output;' input=test/input.txt",".moirai2/e\\w{18}/tmp/output.txt\$");
+	testCommandRegex("perl $program_directory/moirai2.pl -r output -i '\$input' -o '\$output.txt' exec 'wc -l < \$input> \$output;' input=test/input.txt",".moirai2/e\\w{18}/tmp/output.txt\$");
 	unlink("test/input.txt");
-	system("perl $prgdir/moirai2.pl clean dir");
+	system("perl $program_directory/moirai2.pl clean dir");
 }
 #Testing exec and bash functionality
 sub test3{
 	#Testing exec1
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 exec 'ls $moiraidir/ctrl'","config","delete","insert","job","process","submit","update");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -r '\$output' exec 'output=(`ls $moiraidir/ctrl`);'","config delete insert job process submit update");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -r output exec 'ls -lt > \$output' '\$output=test/list.txt'","test/list.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 exec 'ls $moiraidir/ctrl'","config","delete","insert","job","process","submit","update");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -r '\$output' exec 'output=(`ls $moiraidir/ctrl`);'","config delete insert job process submit update");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -r output exec 'ls -lt > \$output' '\$output=test/list.txt'","test/list.txt");
 	unlink("test/list.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -o '$moiraidir/ctrl->file->\$output' exec 'output=(`ls $moiraidir/ctrl`);'","");
-	testCommand("perl $prgdir/rdf.pl -d test select $moiraidir/ctrl file","$moiraidir/ctrl\tfile\tconfig","$moiraidir/ctrl\tfile\tdelete","$moiraidir/ctrl\tfile\tinsert","$moiraidir/ctrl\tfile\tjob","$moiraidir/ctrl\tfile\tprocess","$moiraidir/ctrl\tfile\tsubmit","$moiraidir/ctrl\tfile\tupdate");
-	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 7");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -o '$moiraidir/ctrl->file->\$output' exec 'output=(`ls $moiraidir/ctrl`);'","");
+	testCommand("perl $program_directory/rdf.pl -d test select $moiraidir/ctrl file","$moiraidir/ctrl\tfile\tconfig","$moiraidir/ctrl\tfile\tdelete","$moiraidir/ctrl\tfile\tinsert","$moiraidir/ctrl\tfile\tjob","$moiraidir/ctrl\tfile\tprocess","$moiraidir/ctrl\tfile\tsubmit","$moiraidir/ctrl\tfile\tupdate");
+	testCommand("perl $program_directory/rdf.pl -d test delete % % %","deleted 7");
 	#Testing exec2
 	createFile("test/hello.txt","A","B","C","A");
-	testCommand("perl $prgdir/moirai2.pl -r output -i input -o output exec 'sort -u \$input > \$output;' input=test/hello.txt output=test/output.txt","test/output.txt");
+	testCommand("perl $program_directory/moirai2.pl -r output -i input -o output exec 'sort -u \$input > \$output;' input=test/hello.txt output=test/output.txt","test/output.txt");
 	testCommand("cat test/output.txt","A\nB\nC");
 	unlink("test/output.txt");
-	testCommand("echo i|perl $prgdir/moirai2.pl -r out1 exec 'sort -u test/hello.txt > test/output2.txt' > /dev/null","test/hello.txt is [I]nput/[O]utput? test/output2.txt");
+	testCommand("echo i|perl $program_directory/moirai2.pl -r out1 exec 'sort -u test/hello.txt > test/output2.txt' > /dev/null","test/hello.txt is [I]nput/[O]utput? test/output2.txt");
 	testCommand("cat test/output2.txt","A\nB\nC");
 	unlink("test/hello.txt");
 	unlink("test/output2.txt");
 	#Testing bash functionality
 	createFile("test/test.sh","#\$-i \$id->input->\$input","#\$-o \$id->output->\$output.txt","sort \$input | uniq -c > \$output");
 	createFile("test/input.txt","A","B","D","C","F","E","G","A","A","A");
-	testCommand("perl $prgdir/rdf.pl -d test/db insert idA input test/input.txt","inserted 1");
-	testCommand("perl $prgdir/moirai2.pl -d test/db -s 1 -r '\$output' test/test.sh output=test/uniq.txt","test/uniq.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test/db -s 1 -r '\$output' test/test.sh output=test/uniq.txt","");
+	testCommand("perl $program_directory/rdf.pl -d test/db insert idA input test/input.txt","inserted 1");
+	testCommand("perl $program_directory/moirai2.pl -d test/db -s 1 -r '\$output' test/test.sh output=test/uniq.txt","test/uniq.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test/db -s 1 -r '\$output' test/test.sh output=test/uniq.txt","");
 	testCommand("cat test/uniq.txt","   4 A","   1 B","   1 C","   1 D","   1 E","   1 F","   1 G");
 	testCommand("cat test/db/output.txt","idA\ttest/uniq.txt");
 	unlink("test/uniq.txt");
@@ -4658,26 +4658,26 @@ sub test3{
 	#Testing bash with arguments
 	createFile("test/test.sh","#\$-i input","#\$-o output","#\$ input=test/input.txt","#\$ output=test/\${input.basename}.out.txt","sort \$input | uniq -c > \$output");
 	createFile("test/input.txt","Hello","World");
-	testCommand("perl $prgdir/moirai2.pl -r output -s 1 test/test.sh","test/input.out.txt");
+	testCommand("perl $program_directory/moirai2.pl -r output -s 1 test/test.sh","test/input.out.txt");
 	testCommand("cat test/input.out.txt","   1 Hello","   1 World");
 	unlink("test/test.sh");
 	unlink("test/input.txt");	
 	unlink("test/input.out.txt");
 	createFile("test/test.sh","#\$-o output","echo 'Hello World' > \$output");
-	testCommand("perl $prgdir/moirai2.pl -r output test/test.sh output=test/output.txt","test/output.txt");
+	testCommand("perl $program_directory/moirai2.pl -r output test/test.sh output=test/output.txt","test/output.txt");
 	unlink("test/test.sh");
 	unlink("test/output.txt");
 	#Testing suffix
 	createFile("test/input.txt","Hello","World");
-	testCommandRegex("perl $prgdir/moirai2.pl -i input -r output -X '\$output.txt' exec 'wc -l \$input > \$output' input=test/input.txt",".moirai2/e\\w{18}/tmp/output.txt\$");
-	system("perl $prgdir/moirai2.pl clean dir");
+	testCommandRegex("perl $program_directory/moirai2.pl -i input -r output -X '\$output.txt' exec 'wc -l \$input > \$output' input=test/input.txt",".moirai2/e\\w{18}/tmp/output.txt\$");
+	system("perl $program_directory/moirai2.pl clean dir");
 	unlink("test/input.txt");
 	#Testing multiple inputs
 	createFile("test/text.txt","example\tAkira","example\tBen","example\tChris","example\tDavid");
-	testCommand("perl $prgdir/moirai2.pl -d test  -i 'example->text->(\$input)' exec 'echo \${input\[\@\]}'","Akira Ben Chris David");
+	testCommand("perl $program_directory/moirai2.pl -d test  -i 'example->text->(\$input)' exec 'echo \${input\[\@\]}'","Akira Ben Chris David");
 	unlink("test/text.txt");
 	#Testing multiple outputs
-	testCommand("perl $prgdir/moirai2.pl -d test -o 'name->test->\$output' exec 'output=(\"Akira\" \"Ben\" \"Chris\" \"David\");'","");
+	testCommand("perl $program_directory/moirai2.pl -d test -o 'name->test->\$output' exec 'output=(\"Akira\" \"Ben\" \"Chris\" \"David\");'","");
 	testCommand("cat test/test.txt","name\tAkira","name\tBen","name\tChris","name\tDavid");
 	unlink("test/test.txt");
 }
@@ -4685,52 +4685,52 @@ sub test3{
 sub test4{
 	# Testing build
 	createFile("test/1.sh","ls \$input > \$output");
-	testCommand("perl $prgdir/moirai2.pl -d test -i '\$input' -o '\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\"}");
-	testCommand("perl $prgdir/moirai2.pl -d test -i 'root->directory->\$input' -o 'root->content->\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/query/in\":\"root->directory->\$input\",\"https://moirai2.github.io/schema/daemon/query/out\":\"root->content->\$output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\"}");
+	testCommand("perl $program_directory/moirai2.pl -d test -i '\$input' -o '\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\"}");
+	testCommand("perl $program_directory/moirai2.pl -d test -i 'root->directory->\$input' -o 'root->content->\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/query/in\":\"root->directory->\$input\",\"https://moirai2.github.io/schema/daemon/query/out\":\"root->content->\$output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\"}");
 	unlink("test/1.sh");
 	#Testing ls
 	mkdir("test/dir");
 	system("touch test/dir/A.txt");
 	system("touch test/dir/B.gif");
 	system("touch test/dir/C.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test ls test/dir","test/dir/A.txt","test/dir/B.gif","test/dir/C.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -o '\$filename' ls test/dir","A.txt","B.gif","C.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -o '\$suffix' ls test/dir","txt","gif","txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -x -o 'root->file->\$filepath' ls test/dir","root\tfile\ttest/dir/A.txt","root\tfile\ttest/dir/B.gif","root\tfile\ttest/dir/C.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -g txt -o '\$filepath' ls test/dir","test/dir/A.txt","test/dir/C.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -G txt -o '\$base0' ls test/dir","B");
-	testCommand("perl $prgdir/moirai2.pl -d test -l -o 'root->file->\$filepath' ls test/dir","inserted 3");
-	testCommand("perl $prgdir/rdf.pl -d test insert root directory test/dir","inserted 1");
-	testCommand("perl $prgdir/moirai2.pl -d test -i 'root->directory->\$input' ls","test/dir/A.txt","test/dir/B.gif","test/dir/C.txt");
-	testCommand("perl $prgdir/rdf.pl -d test delete % % %","deleted 4");
+	testCommand("perl $program_directory/moirai2.pl -d test ls test/dir","test/dir/A.txt","test/dir/B.gif","test/dir/C.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -o '\$filename' ls test/dir","A.txt","B.gif","C.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -o '\$suffix' ls test/dir","txt","gif","txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -x -o 'root->file->\$filepath' ls test/dir","root\tfile\ttest/dir/A.txt","root\tfile\ttest/dir/B.gif","root\tfile\ttest/dir/C.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -g txt -o '\$filepath' ls test/dir","test/dir/A.txt","test/dir/C.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -G txt -o '\$base0' ls test/dir","B");
+	testCommand("perl $program_directory/moirai2.pl -d test -l -o 'root->file->\$filepath' ls test/dir","inserted 3");
+	testCommand("perl $program_directory/rdf.pl -d test insert root directory test/dir","inserted 1");
+	testCommand("perl $program_directory/moirai2.pl -d test -i 'root->directory->\$input' ls","test/dir/A.txt","test/dir/B.gif","test/dir/C.txt");
+	testCommand("perl $program_directory/rdf.pl -d test delete % % %","deleted 4");
 	system("rm -r test/dir");
 	#Testing submit function
 	createFile("test/submit.json","{\"https://moirai2.github.io/schema/daemon/bash\":[\"ls test\"],\"https://moirai2.github.io/schema/daemon/return\":\"stdout\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
 	createFile("test/submit.txt","url\ttest/submit.json");
-	testCommand("perl $prgdir/moirai2.pl -d test submit test/submit.txt","submit.json");
+	testCommand("perl $program_directory/moirai2.pl -d test submit test/submit.txt","submit.json");
 	#Testing submit function with daemon
 	createFile(".moirai2/ctrl/submit/submit.txt","url\ttest/submit.json");
-	testCommand("perl $prgdir/moirai2.pl -d test -R 0 daemon submit process","submit.json");
+	testCommand("perl $program_directory/moirai2.pl -d test -R 0 daemon submit process","submit.json");
 	unlink("test/submit.json");
 	#Testing bash script submit
 	createFile("test/submit.sh","#\$ -i message","#\$ -o output","#\$ -r output","#\$ message=test script","#\$ output=test/output.txt","echo \"Hello \$message\">\$output");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 test/submit.sh message=Akira|xargs cat","Hello Akira");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 test/submit.sh message=Akira|xargs cat","Hello Akira");
 	#no input argument
 	createFile(".moirai2/ctrl/submit/submit.txt","url\ttest/submit.sh");
-	testCommand("perl $prgdir/moirai2.pl -d test -R 0 daemon submit process|xargs cat","Hello test script");
+	testCommand("perl $program_directory/moirai2.pl -d test -R 0 daemon submit process|xargs cat","Hello test script");
 	#with input argument
 	createFile(".moirai2/ctrl/submit/submit.txt","url\ttest/submit.sh","message\tHasegawa");
-	testCommand("perl $prgdir/moirai2.pl -d test -R 0 daemon submit process|xargs cat","Hello Hasegawa");
+	testCommand("perl $program_directory/moirai2.pl -d test -R 0 daemon submit process|xargs cat","Hello Hasegawa");
 	unlink("test/submit.sh");
 	unlink("test/output.txt");
 	#Testing daemon functionality
 	mkdir("cron");
 	createFile("cron/hello.sh","#\$ -i \$id->message->\$message","#\$ -o \$id->output->\$output","#\$ -r output","#\$ message=test","#\$ output=test/\$id.txt","echo \"Hello \$message\">\$output");
 	createFile("test/message.txt","Akira\tHasegawa");
-	testCommand("perl $prgdir/moirai2.pl -d test -R 0 daemon cron process","test/Akira.txt");
+	testCommand("perl $program_directory/moirai2.pl -d test -R 0 daemon cron process","test/Akira.txt");
 	testCommand("cat test/output.txt","Akira\ttest/Akira.txt");
 	testCommand("cat test/Akira.txt","Hello Hasegawa");
-	testCommand("perl $prgdir/moirai2.pl -d test -R 0 daemon cron process","");
+	testCommand("perl $program_directory/moirai2.pl -d test -R 0 daemon cron process","");
 	unlink("test/Akira.txt");
 	unlink("test/output.txt");
 	unlink("test/message.txt");
@@ -4739,13 +4739,13 @@ sub test4{
 	createFile("test/input1.txt","Akira\tHello");
 	createFile("test/input2.txt","Akira\tWorld");
 	createFile("test/command.sh","#\$ -i \$name->input1->\$input1,\$name->input2->\$input2","#\$ -r stdout","echo \"\$input1 \$input2 \$name\"");
-	testCommand("perl $prgdir/moirai2.pl -d test test/command.sh","Hello World Akira");
+	testCommand("perl $program_directory/moirai2.pl -d test test/command.sh","Hello World Akira");
 	unlink("test/input1.txt");
 	unlink("test/input2.txt");
 	unlink("test/command.sh");
 	mkdir("test");
 	#Testing -i *
-	testCommand("perl $prgdir/moirai2.pl -i 'js/ah3q/*.js' exec 'wc -l <\$filepath>test/\$basename.txt'","");
+	testCommand("perl $program_directory/moirai2.pl -i 'js/ah3q/*.js' exec 'wc -l <\$filepath>test/\$basename.txt'","");
 	testCommandRegex("cat test/moirai2.txt","\\s+\\d+");
 	testCommandRegex("cat test/tab.txt","\\s+\\d+");
 	unlink("test/moirai2.txt");
@@ -4761,15 +4761,15 @@ sub test4{
 	system("mkdir -p test/out");
 	createFile("test/in/input1.txt","one");
 	createFile("test/in/input2.txt","two");
-	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input1.txt","test/out/input2.txt");
+	testCommand("perl $program_directory/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input1.txt","test/out/input2.txt");
 	testCommandRegex("cat test/out/input1.txt","\\s+\\d+");
 	testCommandRegex("cat test/out/input2.txt","\\s+\\d+");
-	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","");
+	testCommand("perl $program_directory/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","");
 	system("touch test/in/input1.txt");
-	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input1.txt");
+	testCommand("perl $program_directory/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input1.txt");
 	unlink("test/out/input2.txt");
-	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input2.txt");
-	testCommand("perl $prgdir/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","");
+	testCommand("perl $program_directory/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","test/out/input2.txt");
+	testCommand("perl $program_directory/moirai2.pl -t -r output -i 'test/in/*.txt' exec 'wc -l <\$filepath>\$output;' 'output=test/out/\$basename.txt'","");
 	unlink("test/in/input1.txt");
 	unlink("test/in/input2.txt");
 	unlink("test/out/input1.txt");
@@ -4781,16 +4781,16 @@ sub test4{
 sub test5{
 	createFile("test/C.json","{\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}");
 	my $name=`uname -s`;chomp($name);
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea test/C.json","^$name");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea test/C.json","^$name");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea -c ubuntu test/C.json","^Linux");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea -c ubuntu test/C.json","^Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -r unamea test/C.json","^$name");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -q qsub -s 1 -r unamea test/C.json","^$name");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -r unamea -c ubuntu test/C.json","^Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -q qsub -s 1 -r unamea -c ubuntu test/C.json","^Linux");
 	unlink("test/C.json");
 	createFile("test/D.json","{\"https://moirai2.github.io/schema/daemon/container\":\"ubuntu\",\"https://moirai2.github.io/schema/daemon/bash\":\"unamea=\$(uname -a)\",\"https://moirai2.github.io/schema/daemon/output\":\"\$unamea\"}");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea test/D.json","^Linux");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea test/D.json","^Linux");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -r unamea -c ubuntu test/D.json","^Linux");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -q qsub -s 1 -r unamea -c ubuntu test/D.json","^Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -r unamea test/D.json","^Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -q qsub -s 1 -r unamea test/D.json","^Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -r unamea -c ubuntu test/D.json","^Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -q qsub -s 1 -r unamea -c ubuntu test/D.json","^Linux");
 	unlink("test/D.json");
 }
 #Testing daemon across server
@@ -4803,9 +4803,9 @@ sub test6{
 	system("ssh $testserver \"cd moiraitest;perl moirai2.pl clear all\"");
 	# assign job at the server, copy job to local, and execute on a local daemon (-x)
 	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input.txt output=output.txt\"","^e\\d{14}\\w{4}\$");
-	system("perl $prgdir/moirai2.pl -j $testserver:moiraitest -s 1 -R 0 daemon");
+	system("perl $program_directory/moirai2.pl -j $testserver:moiraitest -s 1 -R 0 daemon");
 	testCommand("cat input.txt","Hello World");#copied from job server
-	system("perl $prgdir/moirai2.pl -s 1 -R 0 daemon process");
+	system("perl $program_directory/moirai2.pl -s 1 -R 0 daemon process");
 	testCommand("ssh $testserver 'cat moiraitest/input.txt'","Hello World");
 	system("ssh $testserver \"cd moiraitest;perl moirai2.pl -R 0 daemon\"");
 	testCommand("ssh $testserver 'cat moiraitest/input.txt'","Hello World");
@@ -4814,32 +4814,32 @@ sub test6{
 	testCommandRegex("ssh $testserver 'ls moiraitest/.moirai2/log/$datetime/*.txt'","moiraitest/.moirai2/log/\\d+/.+\\.txt");
 	# assign on a local daemon and execute on a remote server (-a)
 	createFile("input2.txt","Akira Hasegawa");
-	testCommand("perl $prgdir/moirai2.pl -r output -i input -o output -a $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
+	testCommand("perl $program_directory/moirai2.pl -r output -i input -o output -a $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
 	testCommand("cat output2.txt","15 input2.txt");
 	unlink("input2.txt");
 	unlink("output2.txt");
 	# assign job at server, copy and execute job in one command line (daemon process)
 	system("ssh $testserver 'echo \"Hello World\nAkira Hasegawa\">moiraitest/input3.txt'");
 	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input3.txt output=output3.txt\"","^e\\d{14}\\w{4}\$");
-	system("perl $prgdir/moirai2.pl -j $testserver:moiraitest -s 1 -R 1 daemon process");
+	system("perl $program_directory/moirai2.pl -j $testserver:moiraitest -s 1 -R 1 daemon process");
 	testCommand("ssh $testserver 'cat moiraitest/output3.txt'","       2 input3.txt");
 	# assign job to the server from local with -j option
 	createFile("input4.txt","Hello World\nAkira Hasegawa\nTsunami Channel");
-	testCommandRegex("perl $prgdir/moirai2.pl -x -j $testserver:moiraitest -i input -o output exec 'wc -l \$input > \$output;' input=input4.txt output=output4.txt","^e\\d{14}\\w{4}\$");
+	testCommandRegex("perl $program_directory/moirai2.pl -x -j $testserver:moiraitest -i input -o output exec 'wc -l \$input > \$output;' input=input4.txt output=output4.txt","^e\\d{14}\\w{4}\$");
 	system("ssh $testserver 'cd moiraitest;perl moirai2.pl -s 1 -R 0 daemon process'");
 	testCommand("ssh $testserver 'cat moiraitest/output4.txt'","3 input4.txt");
 	unlink("input4.txt");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver exec uname","Linux");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -c ubuntu exec uname -a","^Linux .+ x86_64 x86_64 x86_64 GNU/Linux\$");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -c singularity/lolcow.sif exec cowsay 'Hello World'"," _____________","< Hello World >"," -------------","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver exec hostname","^moirai\\d+-server");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver exec uname","Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver -c ubuntu exec uname -a","^Linux .+ x86_64 x86_64 x86_64 GNU/Linux\$");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver -c singularity/lolcow.sif exec cowsay 'Hello World'"," _____________","< Hello World >"," -------------","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver exec hostname","^moirai\\d+-server");
 	system("ssh $testserver 'rm -r moiraitest'");
 }
 #Testing Hokusai openstack (Takes about 5-10 minutes)
 sub test7{
 	my $testserver="ah3q\@172.18.91.78"; #My Hokusai server
-	testCommandRegex("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -q openstack exec hostname","^moirai\\d+-node-\\d+\$");
-	testCommand("perl $prgdir/moirai2.pl -d test -s 1 -a $testserver -c singularity/lolcow.sif -q openstack exec cowsay"," __","<  >"," --","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver -q openstack exec hostname","^moirai\\d+-node-\\d+\$");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver -c singularity/lolcow.sif -q openstack exec cowsay"," __","<  >"," --","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
 }
 ############################## testCommand ##############################
 sub testCommand{
@@ -5124,7 +5124,7 @@ sub touchFile{
 }
 ############################## unusedSubs ##############################
 sub unusedSubs{
-	my $path="$prgdir/$program_name";
+	my $path="$program_directory/$program_name";
 	my $reader=openFile($path);
 	my $names={};
 	while(<$reader>){
