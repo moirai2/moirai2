@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2022/08/27";
+my $program_version="2022/08/28";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:f:g:G:hi:qo:r:s:w:x');
@@ -2028,73 +2028,6 @@ sub queryResults{
 	#printTable("<RESULTS>",\@results,"</RESULTS>");
 	return @results;
 }
-############################## queryVariablesFileHandler ##############################
-sub queryVariablesFileHandler{
-	my $query=shift();
-	my $file=shift();
-	my $function=\&splitTriple;#default
-	my $fileSuffix;
-	foreach my $acceptedSuffix(sort{$b cmp $a}keys(%{$fileSuffixes})){
-		if($file=~/$acceptedSuffix/){
-			$fileSuffix=$acceptedSuffix;
-			$function=$fileSuffixes->{$acceptedSuffix};
-			last;
-		}
-	}
-	if(exists($query->{"variableAnchor"})){return \&splitTripleWithVariableAnchor;}
-	if(exists($query->{"isAnchor"})){return \&splitTripleWithAnchor;}
-	if(exists($query->{"isIndex"})){
-		#.txt default is triple, but if index is defined, tsv is used
-		if($fileSuffix eq "(\\.te?xt)(\\.gz(ip)?|\\.bz(ip)?2)?\$"){
-			$fileSuffix="(\\.tsv)(\\.gz(ip)?|\\.bz(ip)?2)?\$";
-			$function=\&splitTsv;
-		}
-	}
-	if(!exists($query->{"index"})){$query->{"index"}=$fileIndeces->{$fileSuffix};}
-	if(!exists($query->{"anchor"})){
-		$query->{"anchor"}={};
-		my $variables={};
-		foreach my $variable(@{$query->{"variables"}}){$variables->{$variable}=1;}
-		my $predicate=$query->{"predicate"};
-		my $object=$query->{"object"};
-		for(my $i=1;$i<scalar(@{$query->{"index"}});$i++){
-			my $key=$query->{"index"}->[$i];
-			$query->{"anchor"}->{$key}={"predicate"=>"$predicate#$key","object"=>$object};
-			handleTripleQueriesRegexpVars($query->{"anchor"}->{$key},"predicate",$variables);
-			handleTripleQueriesRegexpVars($query->{"anchor"}->{$key},"object",$variables);
-		}
-		my @keys=sort{$a cmp $b}keys(%{$variables});
-		$query->{"variables"}=\@keys;
-	}
-	return $function;
-}
-############################## queryVariablesInitiate ##############################
-sub queryVariablesInitiate{
-	my $query=shift();
-	my $reader=shift();
-	my $function=shift();
-	if(eof($reader)){return;}
-	if(!exists($query->{"index"})){return;}
-	my $index=$query->{"index"};
-	if(isArrayAllInteger($index)){return;}
-	if($function==\&splitCsv){
-		my $line=<$reader>;
-		while($line=~/^#/){
-			if(splitCsvTsvHandleLabel($query,$line,",")){return;};
-			if(eof($reader)){return;}
-			$line=<$reader>;
-		}
-		if(!splitCsvTsvHandleLabel($query,$line,",")){$query->{"previousLine"}=$line;}
-	}elsif($function==\&splitTsv){
-		my $line=<$reader>;
-		while($line=~/^#/){
-			if(splitCsvTsvHandleLabel($query,$line,"\t")){return;};
-			if(eof($reader)){return;}
-			$line=<$reader>;
-		}
-		if(!splitCsvTsvHandleLabel($query,$line,"\t")){$query->{"previousLine"}=$line;}
-	}
-}
 ############################## queryVariables ##############################
 # perl rdf.pl -d db query '$day->$id/json->$json' '$studyid->id2json->$json' '$studyid->$id/perJson#filesize->$filesize' '$studyid->$id/perJson#study->$study' '$studyid->$id/perJson#sample->$sample' '$studyid->$id/perJson#experiment->$experiment' '$studyid->$id/perJson#run->$run'
 sub queryVariables{
@@ -2250,6 +2183,73 @@ sub queryVariables{
 	if(defined($joinKeysFake)){return @array;}
 	if(defined($joinKeys)){return $hashtable;}
 	return @array;
+}
+############################## queryVariablesFileHandler ##############################
+sub queryVariablesFileHandler{
+	my $query=shift();
+	my $file=shift();
+	my $function=\&splitTriple;#default
+	my $fileSuffix;
+	foreach my $acceptedSuffix(sort{$b cmp $a}keys(%{$fileSuffixes})){
+		if($file=~/$acceptedSuffix/){
+			$fileSuffix=$acceptedSuffix;
+			$function=$fileSuffixes->{$acceptedSuffix};
+			last;
+		}
+	}
+	if(exists($query->{"variableAnchor"})){return \&splitTripleWithVariableAnchor;}
+	if(exists($query->{"isAnchor"})){return \&splitTripleWithAnchor;}
+	if(exists($query->{"isIndex"})){
+		#.txt default is triple, but if index is defined, tsv is used
+		if($fileSuffix eq "(\\.te?xt)(\\.gz(ip)?|\\.bz(ip)?2)?\$"){
+			$fileSuffix="(\\.tsv)(\\.gz(ip)?|\\.bz(ip)?2)?\$";
+			$function=\&splitTsv;
+		}
+	}
+	if(!exists($query->{"index"})){$query->{"index"}=$fileIndeces->{$fileSuffix};}
+	if(!exists($query->{"anchor"})){
+		$query->{"anchor"}={};
+		my $variables={};
+		foreach my $variable(@{$query->{"variables"}}){$variables->{$variable}=1;}
+		my $predicate=$query->{"predicate"};
+		my $object=$query->{"object"};
+		for(my $i=1;$i<scalar(@{$query->{"index"}});$i++){
+			my $key=$query->{"index"}->[$i];
+			$query->{"anchor"}->{$key}={"predicate"=>"$predicate#$key","object"=>$object};
+			handleTripleQueriesRegexpVars($query->{"anchor"}->{$key},"predicate",$variables);
+			handleTripleQueriesRegexpVars($query->{"anchor"}->{$key},"object",$variables);
+		}
+		my @keys=sort{$a cmp $b}keys(%{$variables});
+		$query->{"variables"}=\@keys;
+	}
+	return $function;
+}
+############################## queryVariablesInitiate ##############################
+sub queryVariablesInitiate{
+	my $query=shift();
+	my $reader=shift();
+	my $function=shift();
+	if(eof($reader)){return;}
+	if(!exists($query->{"index"})){return;}
+	my $index=$query->{"index"};
+	if(isArrayAllInteger($index)){return;}
+	if($function==\&splitCsv){
+		my $line=<$reader>;
+		while($line=~/^#/){
+			if(splitCsvTsvHandleLabel($query,$line,",")){return;};
+			if(eof($reader)){return;}
+			$line=<$reader>;
+		}
+		if(!splitCsvTsvHandleLabel($query,$line,",")){$query->{"previousLine"}=$line;}
+	}elsif($function==\&splitTsv){
+		my $line=<$reader>;
+		while($line=~/^#/){
+			if(splitCsvTsvHandleLabel($query,$line,"\t")){return;};
+			if(eof($reader)){return;}
+			$line=<$reader>;
+		}
+		if(!splitCsvTsvHandleLabel($query,$line,"\t")){$query->{"previousLine"}=$line;}
+	}
 }
 ############################## queryVariablesJoin ##############################
 sub queryVariablesJoin{
@@ -2427,51 +2427,6 @@ sub sortSubs{
 	close($writer);
 	return system("mv $file $path");
 }
-############################## splitSam ##############################
-sub splitSam{
-	my $reader=shift();
-	my $query=shift();
-	if(eof($reader)){return;}
-	my $line=<$reader>;
-	while($line=~/^\@/){$line=<$reader>;}
-	chomp($line);
-	my $hash={};
-	my ($qname,$flag,$rname,$pos,$mapq,$cigar,$rnext,$pnext,$tlen,$seq,$qual)=split(/\t/,$line);
-	my ($start,$end,$strand)=samStartEndStrand($flag,$pos,$cigar);
-	$hash->{"start"}=$start;
-	$hash->{"end"}=$end;
-	$hash->{"strand"}=$strand;
-	$hash->{"chromLength"}=$end-$start;
-	$hash->{"position"}="$qname:$start..$end:$strand";
-	$hash->{"qname"}=$qname;
-	$hash->{"flag"}=$flag;
-	$hash->{"rname"}=$rname;
-	$hash->{"pos"}=$pos;
-	$hash->{"mapq"}=$mapq;
-	$hash->{"cigar"}=$cigar;
-	$hash->{"rnext"}=$rnext;
-	$hash->{"pnext"}=$pnext;
-	$hash->{"tlen"}=$tlen;
-	$hash->{"seq"}=$seq;
-	$hash->{"qual"}=$qual;
-	$hash->{"line"}=$line;
-	$hash->{"0"}=$qname;
-	$hash->{"1"}=$flag;
-	$hash->{"2"}=$rname;
-	$hash->{"3"}=$pos;
-	$hash->{"4"}=$mapq;
-	$hash->{"5"}=$cigar;
-	$hash->{"6"}=$rnext;
-	$hash->{"7"}=$pnext;
-	$hash->{"8"}=$tlen;
-	$hash->{"9"}=$seq;
-	$hash->{"10"}=$qual;
-	my @output=();
-	my $indeces=$query->{"index"};
-	my ($key,@anchors)=@{$indeces};
-	foreach my $anchor(@anchors){push(@output,[$hash->{$key},$hash->{$anchor},$anchor]);}
-	return @output;
-}
 ############################## splitBed ##############################
 #chr22 1000 5000 cloneA 960 + 1000 5000 0 2 567,488, 0,3512
 #chr22 2000 6000 cloneB 900 - 2000 6000 0 2 433,399, 0,3601
@@ -2520,6 +2475,12 @@ sub splitBed{
 	foreach my $anchor(@anchors){push(@output,[$hash->{$key},$hash->{$anchor},$anchor]);}
 	return @output;
 }
+############################## splitCsv ##############################
+sub splitCsv{
+	my $reader=shift();
+	my $query=shift();
+	return splitCsvTsv($reader,$query,",");
+}
 ############################## splitCsvTsv ##############################
 sub splitCsvTsv{
 	my $reader=shift();
@@ -2545,63 +2506,23 @@ sub splitCsvTsv{
 	}
 	return @array;
 }
-############################## splitCsv ##############################
-sub splitCsv{
-	my $reader=shift();
+############################## splitCsvTsvHandleLabel ##############################
+sub splitCsvTsvHandleLabel{
 	my $query=shift();
-	return splitCsvTsv($reader,$query,",");
-}
-############################## splitTokenByComma ##############################
-sub splitTokenByComma{
 	my $line=shift();
-	my @tokens=();
-	my $singleQuote;
-	my $doubleQuote;
-	my $escapedKey;
-	my $token=undef;
-	my @bases=split(//,$line);
-	my $length=scalar(@bases);
-	for(my $i=0;$i<$length;$i++){
-		my $base=$bases[$i];
-		if($escapedKey){$token.="\\".$base;$escapedKey=undef;next;}
-		if($base eq "\\"){$escapedKey=1;next;}
-		if($base eq "\""){
-			if(!defined($token)){$singleQuote=1;}
-			elsif($i<$length||$bases[$i+1]eq","){
-				push(@tokens,$token);
-				$token=undef;
-				$singleQuote=undef;
-				$i+=1;
-			}else{
-				print STDERR "ERROR while parsing CSV line: $line\n";
-			}
-			next;
-		}
-		if($base eq "\'"){
-			if(!defined($token)){$singleQuote=1;}
-			elsif($i<$length||$bases[$i+1]eq","){
-				push(@tokens,$token);
-				$token=undef;
-				$singleQuote=undef;
-				$i+=1;
-			}else{
-				print STDERR "ERROR while parsing CSV line: $line\n";
-			}
-			next;
-		}
-		if($base eq ","){
-			if($doubleQuote||$singleQuote){$token.=$base;next;}
-			push(@tokens,$token);
-			$token=undef;
-			next;
-		}
-		$token.=$base;
-	}
-	if($doubleQuote||$singleQuote){
-		print STDERR "ERROR while parsing CSV line: $line\n";
-	}
-	if(defined($token)){push(@tokens,$token);}
-	return \@tokens;
+	my $delim=shift();
+	if(!defined($delim)){$delim="\t";}
+	if(exists($query->{"columns"})){return;}
+	chomp($line);
+	if($line=~/^\s+(.+)$/){$line=$1;}
+	my @columns=($delim eq ",")?@{splitTokenByComma($line)}:split(/$delim/,$line);
+	my $hash={};
+	for(my $i=0;$i<scalar(@columns);$i++){$hash->{$columns[$i]}=$i;}
+	my $hit=0;
+	foreach my $key(@{$query->{"index"}}){if($hash->{$key}){$hit++;}}
+	if($hit==0){return;}
+	$query->{"columns"}=\@columns;
+	return $hit;
 }
 ############################## splitFasta ##############################
 sub splitFasta{
@@ -2742,6 +2663,103 @@ sub splitRunInfo{
 	for(my $i=0;$i<scalar(@{$splitRunInfoLabels});$i++){$hash->{$splitRunInfoLabels->[$i]}=$tokens[$i];}
 	return [$hash->{$key},$hash->{$val}];
 }
+############################## splitSam ##############################
+sub splitSam{
+	my $reader=shift();
+	my $query=shift();
+	if(eof($reader)){return;}
+	my $line=<$reader>;
+	while($line=~/^\@/){$line=<$reader>;}
+	chomp($line);
+	my $hash={};
+	my ($qname,$flag,$rname,$pos,$mapq,$cigar,$rnext,$pnext,$tlen,$seq,$qual)=split(/\t/,$line);
+	my ($start,$end,$strand)=samStartEndStrand($flag,$pos,$cigar);
+	$hash->{"start"}=$start;
+	$hash->{"end"}=$end;
+	$hash->{"strand"}=$strand;
+	$hash->{"chromLength"}=$end-$start;
+	$hash->{"position"}="$qname:$start..$end:$strand";
+	$hash->{"qname"}=$qname;
+	$hash->{"flag"}=$flag;
+	$hash->{"rname"}=$rname;
+	$hash->{"pos"}=$pos;
+	$hash->{"mapq"}=$mapq;
+	$hash->{"cigar"}=$cigar;
+	$hash->{"rnext"}=$rnext;
+	$hash->{"pnext"}=$pnext;
+	$hash->{"tlen"}=$tlen;
+	$hash->{"seq"}=$seq;
+	$hash->{"qual"}=$qual;
+	$hash->{"line"}=$line;
+	$hash->{"0"}=$qname;
+	$hash->{"1"}=$flag;
+	$hash->{"2"}=$rname;
+	$hash->{"3"}=$pos;
+	$hash->{"4"}=$mapq;
+	$hash->{"5"}=$cigar;
+	$hash->{"6"}=$rnext;
+	$hash->{"7"}=$pnext;
+	$hash->{"8"}=$tlen;
+	$hash->{"9"}=$seq;
+	$hash->{"10"}=$qual;
+	my @output=();
+	my $indeces=$query->{"index"};
+	my ($key,@anchors)=@{$indeces};
+	foreach my $anchor(@anchors){push(@output,[$hash->{$key},$hash->{$anchor},$anchor]);}
+	return @output;
+}
+############################## splitTokenByComma ##############################
+sub splitTokenByComma{
+	my $line=shift();
+	my @tokens=();
+	my $singleQuote;
+	my $doubleQuote;
+	my $escapedKey;
+	my $token=undef;
+	my @bases=split(//,$line);
+	my $length=scalar(@bases);
+	for(my $i=0;$i<$length;$i++){
+		my $base=$bases[$i];
+		if($escapedKey){$token.="\\".$base;$escapedKey=undef;next;}
+		if($base eq "\\"){$escapedKey=1;next;}
+		if($base eq "\""){
+			if(!defined($token)){$singleQuote=1;}
+			elsif($i<$length||$bases[$i+1]eq","){
+				push(@tokens,$token);
+				$token=undef;
+				$singleQuote=undef;
+				$i+=1;
+			}else{
+				print STDERR "ERROR while parsing CSV line: $line\n";
+			}
+			next;
+		}
+		if($base eq "\'"){
+			if(!defined($token)){$singleQuote=1;}
+			elsif($i<$length||$bases[$i+1]eq","){
+				push(@tokens,$token);
+				$token=undef;
+				$singleQuote=undef;
+				$i+=1;
+			}else{
+				print STDERR "ERROR while parsing CSV line: $line\n";
+			}
+			next;
+		}
+		if($base eq ","){
+			if($doubleQuote||$singleQuote){$token.=$base;next;}
+			push(@tokens,$token);
+			$token=undef;
+			next;
+		}
+		$token.=$base;
+	}
+	if($doubleQuote||$singleQuote){
+		print STDERR "ERROR while parsing CSV line: $line\n";
+	}
+	if(defined($token)){push(@tokens,$token);}
+	return \@tokens;
+}
 ############################## splitTriple ##############################
 sub splitTriple{
 	my $reader=shift();
@@ -2785,24 +2803,6 @@ sub splitTsv{
 	my $reader=shift();
 	my $query=shift();
 	return splitCsvTsv($reader,$query,"\t");
-}
-############################## splitCsvTsvHandleLabel ##############################
-sub splitCsvTsvHandleLabel{
-	my $query=shift();
-	my $line=shift();
-	my $delim=shift();
-	if(!defined($delim)){$delim="\t";}
-	if(exists($query->{"columns"})){return;}
-	chomp($line);
-	if($line=~/^\s+(.+)$/){$line=$1;}
-	my @columns=($delim eq ",")?@{splitTokenByComma($line)}:split(/$delim/,$line);
-	my $hash={};
-	for(my $i=0;$i<scalar(@columns);$i++){$hash->{$columns[$i]}=$i;}
-	my $hit=0;
-	foreach my $key(@{$query->{"index"}}){if($hash->{$key}){$hit++;}}
-	if($hit==0){return;}
-	$query->{"columns"}=\@columns;
-	return $hit;
 }
 ############################## test ##############################
 sub test{
