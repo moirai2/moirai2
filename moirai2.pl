@@ -5,12 +5,13 @@ use File::Basename;
 use File::Temp qw/tempfile tempdir/;
 use FileHandle;
 use Getopt::Std;
+use IO::File;
 use Time::localtime;
 ############################## HEADER ##############################
 my ($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=Cwd::abs_path($program_directory);
 my $program_path="$program_directory/$program_name";
-my $program_version="2022/08/09";
+my $program_version="2022/08/28";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -324,7 +325,7 @@ sub bashCommand{
 	my $execid=$vars->{"execid"};
 	my $url=$command->{$urls->{"daemon/command"}};
 	my $suffixs=$command->{$urls->{"daemon/suffix"}};
-	my $options=$command->{$urls->{"options"}};
+	my $options=$command->{$urls->{"daemon/command/option"}};
 	my $hash=exists($vars->{"singularity"})?$vars->{"singularity"}:exists($vars->{"docker"})?$vars->{"docker"}:exists($vars->{"server"})?$vars->{"server"}:$vars->{"base"};
 	my $bashsrc=$vars->{"base"}->{"bashfile"};
 	my $bashfile=$hash->{"bashfile"};
@@ -1178,7 +1179,7 @@ sub controlProcess{
 sub controlUpdate{
 	my @files=getFiles($updatedir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv upate";
+	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv update";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1979,7 +1980,6 @@ sub getQueryResults{
 	my @queries=ref($query)eq"ARRAY"?@{$query}:split(/,/,$query);
 	foreach my $line(@queries){if(ref($line)eq"ARRAY"){$line=join("->",@{$line});}}
 	my $command="perl $program_directory/rdf.pl -d $dir -f json query '".join("' '",@queries)."'";
-	#print STDERR ">$command\n";
 	my $result=`$command`;chomp($result);
 	my $hashs=jsonDecode($result);
 	my $keys=retrieveKeysFromQueries($query);
@@ -2075,7 +2075,7 @@ sub handleInputOutput{
 			if(defined($userdefined)){
 				while(my($key,$val)=each(%{$userdefined})){$tokens[1]=~s/\$$key/$val/g;}
 			}
-			if($tokens[2]=~/^\$(\w+)(\.\w{3,4})/){
+			if($tokens[2]=~/^\$(\w+)(\.\w{2,4})/){
 				if(!defined($suffixs)){$suffixs={};}
 				$suffixs->{$1}=$2;
 				$tokens[2]="\$$1";
@@ -2101,7 +2101,7 @@ sub handleInputOutput{
 				if(!defined($fileKeys)){$fileKeys=[];}
 				push(@{$fileKeys},$variable);
 				next LINE;
-			}elsif($variable=~/^\$(\w+)(\.\w{3,4})/){
+			}elsif($variable=~/^\$(\w+)(\.\w{2,4})/){
 				if(!defined($suffixs)){$suffixs={};}
 				$variable=$1;
 				$suffixs->{$1}=$2;
@@ -2117,7 +2117,7 @@ sub handleKeys{
 	my @keys=split(/,/,$line);
 	foreach my $key(@keys){
 		if($key=~/^\$(.+)$/){$key=$1;}
-		if($key=~/^(\w+)(\.\w{3,4})$/){$key=$1;}
+		if($key=~/^(\w+)(\.\w{2,4})$/){$key=$1;}
 	}
 	return \@keys;
 }
@@ -2164,7 +2164,7 @@ sub handleSuffix{
 	my $suffixs=shift();
 	if(!defined($suffixs)){$suffixs={};}
 	my @lines=split(/,/,$string);
-	foreach my $line(@lines){if($line=~/^(\w+)(\.\w{3,4})$/){$suffixs->{$1}=$2;}}
+	foreach my $line(@lines){if($line=~/^(\w+)(\.\w{2,4})$/){$suffixs->{$1}=$2;}}
 	return $suffixs;
 }
 ############################## helpMenu ##############################
@@ -2820,7 +2820,7 @@ sub loadAllUnfinishedJobs{
 ############################## loadCommandFromOptions ##############################
 sub loadCommandFromOptions{
 	my $command=shift();
-	if(defined($opt_b)){$command->{$urls->{"daemon/command/option"}}=jsonDecode($opt_b);}
+	if(defined($opt_b)){$command->{$urls->{"daemon/command/option"}}=setCommandOptions($opt_b);}
 	if(defined($opt_c)){$command->{$urls->{"daemon/container"}}=$opt_c;}
 	if(defined($opt_V)){$command->{$urls->{"daemon/container/flavor"}}=$opt_V;}
 	if(defined($opt_I)){$command->{$urls->{"daemon/container/image"}}=$opt_I;}
@@ -4338,6 +4338,18 @@ sub seqcount{
 		return $count;
 	}else{return 0;}
 }
+############################## setCommandOptions ##############################
+sub setCommandOptions{
+	my $line=shift();
+	my $hash={};
+	my @tokens=split(/,/,$line);
+	foreach my $token(@tokens){
+		my @t=split(/:/,$token);
+		if($t[0]=~/^\$(.+)$/){$t[0]=$1;}
+		$hash->{$t[0]}=$t[1];
+	}
+	return $hash;
+}
 ############################## setInputsOutputsFromCommand ##############################
 sub setInputsOutputsFromCommand{
 	my $command=shift();
@@ -4439,11 +4451,11 @@ sub setInputsOutputsFromCommand{
 		if($type eq "input"){
 			$name="in".(scalar(@inputs)+1);
 			$variables->{$name}=$type;
-			if($file=~/(\.\w{3,4})$/){$suffixs->{$name}=$1;}
+			if($file=~/(\.\w{2,4})$/){$suffixs->{$name}=$1;}
 		}elsif($type eq "output"){
 			$name="out".(scalar(@outputs)+1);
 			$variables->{$name}=$type;
-			if($file=~/(\.\w{3,4})$/){$suffixs->{$name}=$1;}
+			if($file=~/(\.\w{2,4})$/){$suffixs->{$name}=$1;}
 		}else{next;}
 		foreach my $line(@outlines){$line=~s/$file/\$$name/g;}
 		$userdefined->{$name}=$file;
