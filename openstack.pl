@@ -137,6 +137,8 @@ sub help{
 	print "  transfer keys        Transfer .ssh/authorized_keys from ubuntu user to user\n";
 	print "  upload openstack.pl  Upload this script to the server\n";
 	print "\n";
+	print "Example:\n";
+	print "openstack.pl run hostname\n";
 }
 ############################## MAIN ##############################
 if(defined($opt_h)){helpMenu();exit();}
@@ -2604,6 +2606,7 @@ sub sortSubs{
 	foreach my $line(@headers){print $writer "$line\n";}
 	foreach my $key(sort{$a cmp $b}@orders){foreach my $line(@{$blocks->{$key}}){print $writer "$line\n";}}
 	close($writer);
+	executeCommands(undef,["chmod 755 $file"]);
 	return executeCommands(undef,["mv $file $path"]);
 }
 ############################## startServer ##############################

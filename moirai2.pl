@@ -11,7 +11,7 @@ use Time::localtime;
 my ($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=Cwd::abs_path($program_directory);
 my $program_path="$program_directory/$program_name";
-my $program_version="2022/08/28";
+my $program_version="2022/09/02";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -184,7 +184,7 @@ if(defined($opt_q)){if($opt_q eq "qsub"){$opt_q="sge";}elsif($opt_q eq "squeue")
 if(!defined($opt_s)){$opt_s=10;}
 if(!defined($opt_m)){$opt_m=1;}
 my $sleeptime=$opt_s;
-my $maximumJob=$opt_m;
+my $maxThread=defined($opt_M)?$opt_M:5;
 my $cmdpaths={};
 my $md5cmd=which('md5sum',$cmdpaths);
 if(!defined($md5cmd)){$md5cmd=which('md5',$cmdpaths);}
@@ -729,6 +729,27 @@ sub bashCommandHasOptions{
 	elsif(scalar(@{$command->{$urls->{"daemon/output"}}}>0)){return 1;}
 	elsif(exists($command->{$urls->{"daemon/query/in"}})){return 1;}
 	elsif(exists($command->{$urls->{"daemon/query/out"}})){return 1;}
+}
+############################## c ##############################
+sub moiraiFinally{
+	my @execids=@_;
+	my $commands=shift(@execids);
+	my $processes=shift(@execids);
+	my $result=0;
+	foreach my $execid(@execids){
+		my $process=$processes->{$execid};
+		if(returnError($execid)eq"error"){$result=1;}
+		my $cmdurl=$process->{$urls->{"daemon/command"}};
+		my $command=$commands->{$cmdurl};
+		foreach my $returnvalue(@{$command->{$urls->{"daemon/return"}}}){
+			my $match="$cmdurl#$returnvalue";
+			if($returnvalue eq "stdout"){$match="stdout";}
+			elsif($returnvalue eq "stderr"){$match="stderr";}
+			returnResult($execid,$match);
+		}
+	}
+	if(defined($opt_Z)){touchFile($opt_Z);}
+	if($result==1){exit(1);}
 }
 ############################## checkDatabaseDirectory ##############################
 sub checkDatabaseDirectory{
@@ -1711,6 +1732,8 @@ sub getBash{
 		elsif($line=~/^#\$\s?-r\s+?(.+)$/){$command->{$urls->{"daemon/return"}}=handleKeys($1);}#-r
 		elsif($line=~/^#\$\s?-s\s+?(.+)$/){$command->{$urls->{"daemon/sleeptime"}}=$1;}#-s
 		elsif($line=~/^#\$\s?-S\s+?(.+)$/){if(defined($script)){$script.=",";}$script.=$1;}#-S
+		elsif($line=~/^#\$\s?-S\s+?(.+)$/){if(defined($script)){$script.=",";}$script.=$1;}#-S
+		elsif($line=~/^#\$\s?-T$/){$command->{$urls->{"daemon/singlethread"}}="true";}#-T
 		elsif($line=~/^#\$\s?-X\s+?(.+)$/){$command->{$urls->{"daemon/suffix"}}=handleSuffix($1);}#-X
 		elsif($line=~/^#\$\s?(.+)\=(.+)$/){
 			if(!exists($command->{$urls->{"daemon/userdefined"}})){$command->{$urls->{"daemon/userdefined"}}={};}
@@ -1936,6 +1959,19 @@ sub getJobFiles{
 		my $serverpath=dirname(dirname(dirname($jobdir)));
 		@jobfiles=downloadJobFiles($serverpath,@files);
 		#@jobfiles are currently under /tmp
+	}elsif(defined($execids)){
+		opendir(DIR,$jobdir);
+		foreach my $file(readdir(DIR)){
+			if($file=~/^\./){next;}
+			my $path="$jobdir/$file";
+			if(-d $path){next;}
+			if(defined($execids)){
+				my $execid=basename($path,".txt");
+				if(!exists($execids->{$execid})){next;}
+			}
+			push(@jobfiles,$path);
+		}
+		closedir(DIR);
 	}else{
 		opendir(DIR,$jobdir);
 		foreach my $file(readdir(DIR)){
@@ -1969,7 +2005,7 @@ sub getNumberOfJobsRemaining{
 }
 ############################## getNumberOfJobsRunning ##############################
 sub getNumberOfJobsRunning{
-	my @files=getFiles($processdir);
+	my @files=getFiles($throwdir);
 	return scalar(@files);
 }
 ############################## getQueryResults ##############################
@@ -2224,7 +2260,8 @@ sub helpCommand{
 	print "         -I  (I)mage of OpenStack instance.\n";
 	print "         -j  Job server to get jobs from.\n";
 	print "         -l  Show (l)ogs from moirai.pl.\n";
-	print "         -m  (M)ax number of jobs to throw (default='5').\n";
+	print "         -m  (m)ax number of jobs per throw (default='1').\n";
+	print "         -M  (M)ax number of threads (default='5').\n";
 	print "         -o  (O)utput query for insert to database in '\$sub->\$pred->\$obj' format.\n";
 	print "         -O  Ignore STD(O)UT if specific regexp is found.\n";
 	print "         -p  (P)rint command lines instead of executing.\n";
@@ -2285,8 +2322,7 @@ sub helpDaemon{
 	print "         -H  Show update (h)istory.\n";
 	print "         -j  Retrieve jobs from a (j)ob server instead of retrieving from a local.\n";
 	print "         -l  Show (l)ogs from moirai.pl.\n";
-	print "         -m  (M)ax number of jobs to throw (default='5').\n";
-	print "         -M  (M)ax number of nodes to deploy with openstack (default='5').\n";
+	print "         -M  (M)ax number of threads (default='5').\n";
 	print "         -r  Number of time to (r)epeat loop (default=-1='infinite').\n";
 	print "         -s  Loop (s)econd (default='10').\n";
 	print "\n";
@@ -2836,6 +2872,7 @@ sub loadCommandFromOptions{
 	if(defined($opt_r)){$command->{$urls->{"daemon/return"}}=handleKeys($opt_r);}
 	if(defined($opt_S)){$command->{$urls->{"daemon/script"}}=$opt_S;loadScripts($command);}
 	if(defined($opt_s)){$command->{$urls->{"daemon/sleeptime"}}=$opt_s;}
+	if(defined($opt_T)){$command->{$urls->{"daemon/singlethread"}}="true";}
 	my $userdefined={};
 	my $suffixs={};
 	my $inputKeys={};
@@ -3174,20 +3211,29 @@ sub mainProcess{
 	my $commands=shift();
 	my $executes=shift();
 	my $processes=shift();
-	my $available=shift();
+	my $jobslot=shift();
 	my $thrown=0;
 	my $url;
-	for(my $i=0;($i<$available)&&(scalar(@{$execurls})>0);$i++){
-		$url=shift(@{$execurls});
+	my @handled=();#handled URls
+	for(my $i=0;($i<$jobslot)&&(scalar(@{$execurls})>0);$i++){
+		$url=shift(@{$execurls});#get first URL
 		my $command=$commands->{$url};
-		my $singlethread=(exists($command->{$urls->{"daemon/singlethread"}})&&$command->{$urls->{"daemon/singlethread"}} eq "true");
-		my $maxjob=$command->{$urls->{"daemon/maxjob"}};
-		if(!defined($maxjob)){$maxjob=1;}
+		if(exists($command->{$urls->{"daemon/singlethread"}})&&$command->{$urls->{"daemon/singlethread"}} eq "true"){
+			my $singleThreadOnGoing=0;#single-thread job still on going?
+			foreach my $execid(keys(%{$processes})){
+				my $process=$processes->{$execid};
+				if($process->{$urls->{"daemon/execute"}}eq"completed"){next;}#completed
+				if($url eq $process->{$urls->{"daemon/command"}}){$singleThreadOnGoing=1;last;}
+			}
+			if($singleThreadOnGoing){push(@handled,$url);next;}
+		}
+		my $maxjob=$command->{$urls->{"daemon/maxjob"}};#number of max jobs per throw
+		if(!defined($maxjob)){$maxjob=1;}#default is one job per throw
 		my @variables=();
-		if(exists($command->{$urls->{"daemon/bash"}})){
+		if(exists($command->{$urls->{"daemon/bash"}})&&exists($executes->{$url})){
 			my $count=0;
 			foreach my $execid(sort{$a cmp $b}keys(%{$executes->{$url}})){
-				if(!$singlethread&&$count>=$maxjob){last;}
+				if($count>=$maxjob){last;}
 				my $vars=$executes->{$url}->{$execid};
 				initExecute($command,$vars);
 				bashCommand($command,$vars);
@@ -3196,24 +3242,12 @@ sub mainProcess{
 				$count++;
 				$thrown++;
 			}
-		}
-		if(defined($opt_p)){
-			foreach my $var(@variables){
-				my $execid=$var->{"execid"};
-				my $bashsrc=$var->{"base"}->{"bashfile"};
-				my $logfile="$jobdir/$execid.txt";
-				open(IN,$bashsrc);
-				while(<IN>){print;}
-				close(IN);
-				unlink($bashsrc);
-				unlink($logfile);
-				rmdir("$moiraidir/$execid");
-			}
-			exit(0);
+			if(scalar(keys(%{$executes->{$url}}))>0){unshift(@{$execurls},$url);}# Still remains jobs
+			else{delete($executes->{$url});}
 		}
 		throwJobs($url,$command,$processes,@variables);
-		if(scalar(keys(%{$executes->{$url}}))>0){unshift(@{$execurls},$url);}
 	}
+	push(@{$execurls},@handled);#put to the last
 	return $thrown;
 }
 ############################## mkdirs ##############################
@@ -3235,27 +3269,6 @@ sub mkdirs{
 		}
 	}
 	return 1;
-}
-############################## moiraiFinally ##############################
-sub moiraiFinally{
-	my @execids=@_;
-	my $commands=shift(@execids);
-	my $processes=shift(@execids);
-	my $result=0;
-	foreach my $execid(@execids){
-		my $process=$processes->{$execid};
-		if(returnError($execid)eq"error"){$result=1;}
-		my $cmdurl=$process->{$urls->{"daemon/command"}};
-		my $command=$commands->{$cmdurl};
-		foreach my $returnvalue(@{$command->{$urls->{"daemon/return"}}}){
-			my $match="$cmdurl#$returnvalue";
-			if($returnvalue eq "stdout"){$match="stdout";}
-			elsif($returnvalue eq "stderr"){$match="stderr";}
-			returnResult($execid,$match);
-		}
-	}
-	if(defined($opt_Z)){touchFile($opt_Z);}
-	if($result==1){exit(1);}
 }
 ############################## moiraiMain ##############################
 sub moiraiMain{
@@ -3314,7 +3327,7 @@ sub moiraiMain{
 		if(defined($opt_x)){print join(" ",@execids)."\n";exit(0);}
 	}else{
 		if(defined($opt_x)){print join(" ",@execids)."\n";exit(0);}
-		my $processes=moiraiRunExecute($commands,@execids);
+		my $processes=moiraiRunExecute($commands,$opt_p,@execids);
 		moiraiFinally($commands,$processes,@execids);
 	}
 }
@@ -3502,6 +3515,7 @@ sub moiraiProcessQuery{
 sub moiraiRunExecute{
 	my @execids=@_;
 	my $commands=shift(@execids);
+	my $printMode=shift(@execids);
 	my $executes={};
 	my $processes={};
 	my $execurls=[];
@@ -3509,18 +3523,28 @@ sub moiraiRunExecute{
 	if(scalar(@execids)>0){$ids={};foreach my $execid(@execids){$ids->{$execid}=1;}}
 	while(true){
 		controlWorkflow($processes,$commands);
+		if(scalar(@{$execurls})==0&&scalar(keys(%{$executes}))==0&&scalar(keys(%{$processes}))>0){
+			my $completed=1;#check all processes are completed
+			foreach my $execid(keys(%{$processes})){
+				my $process=$processes->{$execid};
+				if($process->{$urls->{"daemon/execute"}}eq"completed"){next;}#completed
+				$completed=0;
+			}
+			if($completed){last;}# completed all jobs
+		}
 		my $jobs_running=getNumberOfJobsRunning();
-		if($jobs_running>=$maximumJob){sleep($opt_s);next;}
+		if($jobs_running>=$maxThread){sleep($opt_s);next;}# no slot to throw job
 		my $job_remaining=getNumberOfJobsRemaining(@execids);
-		if($jobs_running==0&&$job_remaining==0){controlWorkflow($processes,$commands);last;}
-		if($job_remaining==0){sleep($opt_s);next;}
-		my $jobSlot=$maximumJob-$jobs_running;
+		if($job_remaining==0){sleep($opt_s);next;}# no more job to handle
+		my $jobSlot=$maxThread-$jobs_running;
 		while(jobOfferStart($jobdir)){if(defined($opt_l)){"#Waiting for job slot\n"}}
 		my @jobfiles=getJobFiles($jobdir,$jobSlot,$ids);
 		jobOfferEnd($jobdir);
 		loadExecutes($commands,$executes,$execurls,@jobfiles);
+		if(defined($printMode)){printJobs($execurls,$commands,$executes);exit(0);}
 		mainProcess($execurls,$commands,$executes,$processes,$jobSlot);
 	}
+	controlWorkflow($processes,$commands);
 	return $processes;
 }
 ############################## mvProcessFromTmpToJobdir ##############################
@@ -3578,7 +3602,7 @@ sub printCommand{
 	else{my $index=0;foreach my $line(@{$command->{$urls->{"daemon/bash"}}}){if($index++>0){print STDOUT "         :"}print STDOUT "$line\n";}}
 	if(exists($command->{$urls->{"daemon/description"}})){print STDOUT "#Summary :".join(", ",@{$command->{$urls->{"daemon/description"}}})."\n";}
 	if($command->{$urls->{"daemon/maxjob"}}>1){print STDOUT "#Maxjob  :".$command->{$urls->{"daemon/maxjob"}}."\n";}
-	if(exists($command->{$urls->{"daemon/singlethread"}})){print STDOUT "#Single  :".($command->{$urls->{"daemon/singlethread"}}?"true":"false")."\n";}
+	if(exists($command->{$urls->{"daemon/singlethread"}})){print STDOUT "#SingleThread  :".($command->{$urls->{"daemon/singlethread"}}?"true":"false")."\n";}
 	if(exists($command->{$urls->{"daemon/qjobopt"}})){print STDOUT "#qjobopt :".$command->{$urls->{"daemon/qjobopt"}}."\n";}
 	if(exists($command->{$urls->{"daemon/script"}})){
 		foreach my $script(@{$command->{$urls->{"daemon/script"}}}){
@@ -3596,6 +3620,32 @@ sub printCommand{
 		}
 	}
 	print STDOUT "\n";
+}
+############################## printJobs ##############################
+sub printJobs{
+	my $execurls=shift();
+	my $commands=shift();
+	my $executes=shift();
+	for(my $i=0;$i<scalar(@{$execurls});$i++){
+		my $url=$execurls->[$i];
+		my $command=$commands->{$url};
+		if(!exists($command->{$urls->{"daemon/bash"}})){next;}
+		foreach my $execid(sort{$a cmp $b}keys(%{$executes->{$url}})){
+			print "============================== $execid ==============================\n";
+			my $vars=$executes->{$url}->{$execid};
+			initExecute($command,$vars);
+			bashCommand($command,$vars);
+			my $bashsrc=$vars->{"base"}->{"bashfile"};
+			my $jobfile="$jobdir/$execid.txt";
+			open(IN,$bashsrc);
+			while(<IN>){print;}
+			close(IN);
+			unlink($bashsrc);
+			unlink($jobfile);
+			rmdir("$moiraidir/$execid");
+			delete($executes->{$url}->{$execid});
+		}
+	}
 }
 ############################## printRows ##############################
 sub printRows{
@@ -4150,7 +4200,7 @@ sub runDaemon{
 		}
 		if(defined($processMode)){# main mode local
 			my $jobs_running=getNumberOfJobsRunning();
-			my $jobSlot=$maximumJob-$jobs_running;
+			my $jobSlot=$maxThread-$jobs_running;
 			if($jobSlot<=0){sleep($opt_s);next;}
 			while(jobOfferStart($jobdir)){if(defined($opt_l)){"#Waiting for job slot\n"}}
 			my @jobFiles=getJobFiles($jobdir,$jobSlot);
@@ -4160,7 +4210,7 @@ sub runDaemon{
 		}
 		if(defined($jobserver)){#get job from the server
 			my $jobs_running=getNumberOfJobsRunning();
-			my $jobSlot=$maximumJob-$jobs_running;
+			my $jobSlot=$maxThread-$jobs_running;
 			if($jobSlot<=0){sleep($opt_s);next;}
 			retrieveServerJobs($jobserver,$commands,$jobSlot);
 		}
@@ -4173,7 +4223,7 @@ sub runDaemon{
 		while(true){
 			controlWorkflow($processes,$commands);
 			my $jobs_running=getNumberOfJobsRunning();
-			if($jobs_running>=$maximumJob){sleep(opt_s);next;}
+			if($jobs_running>=$maxThread){sleep(opt_s);next;}
 			my $job_remaining=getNumberOfJobsRemaining();
 			if($jobs_running==0&&$job_remaining==0){controlWorkflow($processes,$commands);last;}
 			if($job_remaining==0){sleep(opt_s);}
@@ -4226,8 +4276,9 @@ sub saveCommand{
 	print $writer saveCommandSub($command,$urls->{"daemon/remotepath"});#-a
 	print $writer saveCommandSub($command,$urls->{"daemon/serverpath"});#-a
 	print $writer saveCommandSub($command,$urls->{"daemon/return"});#-r
-	print $writer saveCommandSub($command,$urls->{"daemon/script"});#-S
 	print $writer saveCommandSub($command,$urls->{"daemon/sleeptime"});#-s
+	print $writer saveCommandSub($command,$urls->{"daemon/script"});#-S
+	print $writer saveCommandSub($command,$urls->{"daemon/singlethread"});#-T
 	print $writer saveCommandSub($command,$urls->{"daemon/suffix"});#-X
 	print $writer saveCommandSub($command,$urls->{"daemon/userdefined"});
 	print $writer "}\n";
@@ -4507,6 +4558,7 @@ sub sortSubs{
 	foreach my $line(@headers){print $writer "$line\n";}
 	foreach my $key(sort{$a cmp $b}@orders){foreach my $line(@{$blocks->{$key}}){print $writer "$line\n";}}
 	close($writer);
+	chmod(0755,$file);
 	return system("mv $file $path");
 }
 ############################## splitServerPath ##############################

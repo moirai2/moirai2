@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2022/08/28";
+my $program_version="2022/09/02";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:f:g:G:hi:qo:r:s:w:x');
@@ -139,7 +139,7 @@ if(defined($opt_h)||scalar(@ARGV)==0){
 }
 my $command=shift(@ARGV);
 my $rootdir=absolutePath(".");
-my $dbdir=defined($opt_d)?checkDatabaseDirectory($opt_d):".";
+my $dbdir=defined($opt_d)?checkDirPathIsSafe($opt_d):".";
 my $moiraidir=".moirai2";
 my $cmdHash={};
 my $md5cmd=which('md5sum',$cmdHash);
@@ -188,6 +188,30 @@ sub absolutePath {
 	$path=~s/\/\.$//g;
 	return $path
 }
+############################## basenames ##############################
+sub basenames{
+	my $path=shift();
+	my $delim=shift();
+	if(!defined($delim)){$delim="[\\W_]+";}
+	my $directory=dirname($path);
+	my $filename=basename($path);
+	my $basename;
+	my $suffix;
+	my $hash={};
+	if($filename=~/^(.+)\.([^\.]+)$/){$basename=$1;$suffix=$2;}
+	else{$basename=$filename;}
+	$hash->{"filepath"}="$directory/$filename";
+	$hash->{"directory"}=$directory;
+	$hash->{"filename"}=$filename;
+	$hash->{"basename"}=$basename;
+	if(defined($suffix)){$hash->{"suffix"}=$suffix;}
+	my @dirs=split(/\//,$directory);
+	if($dirs[0] eq ""){shift(@dirs);}
+	for(my $i=0;$i<scalar(@dirs);$i++){$hash->{"dir$i"}=$dirs[$i];}
+	my @bases=split(/$delim/,$basename);
+	for(my $i=0;$i<scalar(@bases);$i++){$hash->{"base$i"}=$bases[$i];}
+	return $hash;
+}
 ############################## checkBinary ##############################
 sub checkBinary{
 	my $file=shift();
@@ -195,14 +219,17 @@ sub checkBinary{
 	my $result=`file --mime $file`;
 	if($result=~/charset\=binary/){return 1;}
 }
-############################## checkDatabaseDirectory ##############################
-sub checkDatabaseDirectory{
+############################## checkDirPathIsSafe ##############################
+sub checkDirPathIsSafe{
 	my $directory=shift();
 	if($directory=~/\.\./){
-		print STDERR "ERROR: Please don't use '..' for moirai database directory\n";
+		print STDERR "ERROR: Please don't use '..' for a directory path '$directory'\n";
 		exit(1);
 	}elsif($directory=~/^\//){
-		print STDERR "ERROR??: moirai directory '$directory' have to be relative to a root directory\n";
+		print STDERR "ERROR: Please don't use absolute path for a directory path '$directory'\n";
+		exit(1);
+	}elsif($directory=~/\|/){
+		print STDERR "ERROR: Please don't use pipe for a directory path '$directory'\n";
 		exit(1);
 	}
 	return $directory;
@@ -1745,6 +1772,35 @@ sub listFiles{
 	}
 	return sort{$a cmp $b}@inputfiles;
 }
+############################## listFilesRecursively ##############################
+sub listFilesRecursively{
+	my @directories=@_;
+	my $filegrep=shift(@directories);
+	my $fileungrep=shift(@directories);
+	my $recursivesearch=shift(@directories);
+	my @inputfiles=();
+	foreach my $directory (@directories){
+		if(-f $directory){push(@inputfiles,$directory);next;}
+		elsif(-l $directory){push(@inputfiles,$directory);next;}
+		opendir(DIR,$directory);
+		foreach my $file(readdir(DIR)){
+			if($file eq "."){next;}
+			if($file eq ".."){next;}
+			if($file eq ""){next;}
+			if($file=~/^\./){next;}
+			my $path="$directory/$file";
+			if(-d $path){
+				if($recursivesearch!=0){push(@inputfiles,listFilesRecursively($filegrep,$fileungrep,$recursivesearch-1,$path));}
+				next;
+			}
+			if(defined($filegrep)&&$file!~/$filegrep/){next;}
+			if(defined($fileungrep)&&$file=~/$fileungrep/){next;}
+			push(@inputfiles,$path);
+		}
+		closedir(DIR);
+	}
+	return wantarray?sort{$a cmp $b}@inputfiles:$inputfiles[0];
+}
 ############################## loadDbToArray ##############################
 sub loadDbToArray{
 	my $directory=shift();	
@@ -1976,7 +2032,7 @@ sub queryResults{
 		my $query=$queries[$i];
 		#printTable("<query>",$query,"</query>");
 		if($i==0){
-			@results=queryVariables($query);
+			@results=@{queryVariables($query)};
 			#printTable("<results>",\@results,"</results>");
 			($joinKeys,$currentKeys)=sharedKeys($currentKeys,$query->{"variables"});
 			next;
@@ -2035,6 +2091,7 @@ sub queryVariables{
 	my $joinKeys=shift();
 	my $dir=$dbdir;
 	my $subject=$query->{"subject"};
+	if($subject eq "system"){return queryVariablesSystem($query,$joinKeys);}
 	my $subjectR=$query->{"subject.regexp"};
 	my $predicate=$query->{"predicate"};
 	my $predicateR=$query->{"predicate.regexp"};
@@ -2180,9 +2237,9 @@ sub queryVariables{
 			close($reader);
 		}
 	}
-	if(defined($joinKeysFake)){return @array;}
+	if(defined($joinKeysFake)){return \@array;}
 	if(defined($joinKeys)){return $hashtable;}
-	return @array;
+	return \@array;#just in case
 }
 ############################## queryVariablesFileHandler ##############################
 sub queryVariablesFileHandler{
@@ -2235,7 +2292,8 @@ sub queryVariablesInitiate{
 	if(isArrayAllInteger($index)){return;}
 	if($function==\&splitCsv){
 		my $line=<$reader>;
-		while($line=~/^#/){
+		while($line=~/^#\s*(.+)$/){
+			$line=$1;
 			if(splitCsvTsvHandleLabel($query,$line,",")){return;};
 			if(eof($reader)){return;}
 			$line=<$reader>;
@@ -2244,6 +2302,7 @@ sub queryVariablesInitiate{
 	}elsif($function==\&splitTsv){
 		my $line=<$reader>;
 		while($line=~/^#/){
+			while($line=~/^#\s*(.+)$/){$line=$1;}
 			if(splitCsvTsvHandleLabel($query,$line,"\t")){return;};
 			if(eof($reader)){return;}
 			$line=<$reader>;
@@ -2274,6 +2333,46 @@ sub queryVariablesJoin{
 		}
 		if(existsArray($h2->{$key},$val)){next;}
 		push(@{$h2->{$key}},$val);
+	}
+}
+############################## queryVariablesSystem ##############################
+sub queryVariablesSystem{
+	my $query=shift();
+	my $joinKeys=shift();
+	my $predicate=$query->{"predicate"};
+	if($predicate=~/^ls\s(.+)$/){
+		my $directory=checkDirPathIsSafe($1);
+		if(-d $directory){$directory="$directory/*";}
+		my @files=`ls $directory`;
+		foreach my $file(@files){chomp($file);}
+		my @variables=@{$query->{"object.variables"}};
+		my $size=scalar(@variables);
+		my @array=();
+		if($size==0){print STDERR "ERROR: Please specify variables for object";exit(1);}
+		if(defined($joinKeys)){
+			my $hashtable={};
+			foreach my $file(@files){
+				my $h={};
+				my $basenames=basenames($file);
+				if($size==1){$h={$variables[0]=>$basenames->{"filepath"}};}
+				if($size==2){$h={$variables[0]=>$basenames->{"directory"},$variables[1]=>$basenames->{"filename"}};}
+				if($size==3){$h={$variables[0]=>$basenames->{"directory"},$variables[1]=>$basenames->{"basename"},$variables[2]=>$basenames->{"suffix"}};}
+				my $joinKey=constructJoinKey($joinKeys,$h);
+				$hashtable->{$joinKey}=$h;
+			}
+			return $hashtable;
+		}else{
+			my @array=();
+			if($size>4){print STDERR "ERROR: Please specify four variables for object at most";exit(1);}
+			foreach my $file(@files){
+				my $basenames=basenames($file);
+				if($size==1){push(@array,{$variables[0]=>$basenames->{"filepath"}});}
+				if($size==2){push(@array,{$variables[0]=>$basenames->{"filepath"},$variables[1]=>$basenames->{"directory"}});}
+				if($size==3){push(@array,{$variables[0]=>$basenames->{"filepath"},$variables[1]=>$basenames->{"directory"},$variables[2]=>$basenames->{"basename"}});}
+				if($size==4){push(@array,{$variables[0]=>$basenames->{"filepath"},$variables[1]=>$basenames->{"directory"},$variables[2]=>$basenames->{"basename"},$variables[3]=>$basenames->{"suffix"}});}
+			}
+			return \@array;
+		}
 	}
 }
 ############################## readHash ##############################
@@ -2425,6 +2524,7 @@ sub sortSubs{
 	foreach my $line(@headers){print $writer "$line\n";}
 	foreach my $key(sort{$a cmp $b}@orders){foreach my $line(@{$blocks->{$key}}){print $writer "$line\n";}}
 	close($writer);
+	chmod(0755,$file);
 	return system("mv $file $path");
 }
 ############################## splitBed ##############################
@@ -2637,6 +2737,10 @@ sub splitQueries{
 			}
 		}elsif($count<2){$query=$token;}
 	}
+	if(defined($query)){
+		print STDERR "'$query' doesn't have subject, predicate, object\n";
+		exit(1);
+	}
 	return @queries;
 }
 ############################## splitRunInfo ##############################
@@ -2821,6 +2925,10 @@ sub test{
 }
 #Test test
 sub test0{
+	testCommand("perl $program_directory/rdf.pl -f json query 'system->ls css->\$filepath'","[{\"filepath\":\"css/classic.css\"},{\"filepath\":\"css/clean.css\"},{\"filepath\":\"css/flex.css\"},{\"filepath\":\"css/tab.css\"}]");
+	testCommand("perl $program_directory/rdf.pl -f json query 'system->ls css->\$filepath:\$dir'","[{\"dir\":\"css\",\"filepath\":\"css/classic.css\"},{\"dir\":\"css\",\"filepath\":\"css/clean.css\"},{\"dir\":\"css\",\"filepath\":\"css/flex.css\"},{\"dir\":\"css\",\"filepath\":\"css/tab.css\"}]");
+	testCommand("perl $program_directory/rdf.pl -f json query 'system->ls css->\$file:\$dir:\$filename'","[{\"dir\":\"css\",\"file\":\"css/classic.css\",\"filename\":\"classic\"},{\"dir\":\"css\",\"file\":\"css/clean.css\",\"filename\":\"clean\"},{\"dir\":\"css\",\"file\":\"css/flex.css\",\"filename\":\"flex\"},{\"dir\":\"css\",\"file\":\"css/tab.css\",\"filename\":\"tab\"}]");
+	testCommand("perl $program_directory/rdf.pl -f json query 'system->ls css->\$file:\$dir:\$filename:\$suffix'","[{\"dir\":\"css\",\"file\":\"css/classic.css\",\"filename\":\"classic\",\"suffix\":\"css\"},{\"dir\":\"css\",\"file\":\"css/clean.css\",\"filename\":\"clean\",\"suffix\":\"css\"},{\"dir\":\"css\",\"file\":\"css/flex.css\",\"filename\":\"flex\",\"suffix\":\"css\"},{\"dir\":\"css\",\"file\":\"css/tab.css\",\"filename\":\"tab\",\"suffix\":\"css\"}]");
 }
 #Test sub functions
 sub test1{
@@ -3229,6 +3337,10 @@ sub test4{
 	testCommand("perl $program_directory/rdf.pl query '\$id->test/input.gtf->\$value'","id\tvalue","GL000213.1:138767..139287\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"1\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\"; protein_id \"ENSP00000329990\";","GL000213.1:139285..139287\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"1\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";","GL000213.1:134276..134390\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"2\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";","GL000213.1:134276..134390\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"2\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\"; protein_id \"ENSP00000329990\";","GL000213.1:133943..134116\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"3\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";");
 	testCommand("perl $program_directory/rdf.pl query '\$id->test/input.gtf#position:gene_id:transcript_id->\$geneId:\$transcriptId'","geneId\tid\ttranscriptId","ENSG00000237375\tGL000213.1:138767..139287\tENST00000327822","ENSG00000237375\tGL000213.1:139285..139287\tENST00000327822","ENSG00000237375\tGL000213.1:134276..134390\tENST00000327822","ENSG00000237375\tGL000213.1:133943..134116\tENST00000327822");
 	unlink("test/input.gtf");
+	#Testing multiple objects
+	createFile("test/input.tsv","#id\tposition","Akira\t1 2","Akita\t3 4","Akisa\t5 6");
+	testCommand("perl $program_directory/rdf.pl -d test query '\$id->input#id:position->\$x \$y'","id\tx\ty","Akira\t1\t2","Akita\t3\t4","Akisa\t5\t6");
+	unlink("test/input.tsv");
 }
 ############################## testCommand ##############################
 sub testCommand{
