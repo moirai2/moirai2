@@ -1,0 +1,124 @@
+<!DOCTYPE>
+<html>
+	<head>
+		<title>cytoscape-cola.js demo</title>
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1">
+		<script src="js/cytoscape/cytoscape.min.js"></script>
+		<script src="js/cytoscape/cola.min.js"></script>
+		<script src="js/cytoscape/cytoscape-cola.js"></script>
+		<script src="js/jquery/jquery-3.4.1.min.js"></script>
+		<script src="js/ah3q/dnd.js"></script>
+		<style>
+			body {font-family:helvetica;font-size:14px;}
+			h1 {opacity:0.5;font-size:1em;}
+			#cy {
+				width:100%;
+				height:100%;
+				position:absolute;
+				left:0;
+				top:0;
+				z-index:999;
+			}
+		</style>
+		<script>
+			var cy;
+			var dnd;
+			var nodes={};
+			var edges=[];
+			var elements={nodes:[],edges:[]};
+			function addTriple(triples){
+				triples.forEach(triple=>{
+					var nodes=triple.split("->");
+					addEdge(nodes[0],nodes[1],nodes[2]);
+				});
+			}
+			function addNode(node){
+				if(nodes[node]!=null)return nodes[node];
+				var id="n"+Object.keys(nodes).length;
+				var hash={"data":{"id":id,"label":node}};
+				nodes[node]=id;
+				elements["nodes"].push(hash);
+				return id;
+			}
+			function addEdge(from,edge,to){
+				var f=addNode(from);
+				var t=addNode(to);
+				var id="e"+elements["edges"].length;
+				var hash={"data":{"id":id,"source":f,"target":t,"label":edge}};
+				elements["edges"].push(hash);
+			}
+			function readWorkflow(text){
+				const moirai2re=new RegExp('moirai2.pl');
+				const inputre=new RegExp("-i '(.+?)'");
+				const outputre=new RegExp("-o '(.+?)'");
+				text.split("\n").forEach(line=>{
+					if(line.search(moirai2re)>0){
+						var input=line.match(inputre);
+						if(input!=null){
+							for(var j=1;j<input.length;j++){
+								var triples=input[j].split(',');
+								addTriple(triples);
+							}
+						}
+						var output=line.match(outputre);
+						if(output!=null){
+							for(var j=1;j<output.length;j++){
+								var triples=output[j].split(',');
+								addTriple(triples);
+							}
+						}
+					}
+				});
+				console.log(elements);
+				cy.json({"elements":elements});
+				cy.layout({name:'cola'}).run();
+			}
+			$(document).ready(function(){
+				dnd=new DnD("cy").whenFileIsDroppedRead().whenUrlIsDroppedRead().addEventListener("textWasRead",function(e){
+					readWorkflow(e.detail.text);
+				});
+			});
+			document.addEventListener('DOMContentLoaded', function(){
+				cy = window.cy = cytoscape({
+					container:document.getElementById('cy'),
+					autounselectify:true,
+					boxSelectionEnabled:false,
+					layout:{name:'cola'},
+					style:[
+						{
+							selector:'node',
+							css:{'background-color':'#f92411'},
+							style:{'label':'data(label)'}
+						},{
+							selector:'edge',
+							css:{'line-color':'#f92411'}
+						}
+					]
+					
+				});
+				cy.on("tap","edge",function(evt){
+					console.log("tap edge",evt);
+				});
+				cy.on("tap","node",function(evt){
+					console.log("tap node",evt);
+				});
+				cy.on("dbltap","edge",function(evt){
+					console.log("dbltap edge",evt);
+				});
+				cy.on("dbltap","node",function(evt){
+					console.log("dbltap node",evt);
+				});
+				cy.on("taphold","edge",function(evt){
+					console.log("taphold edge",evt);
+				});
+				cy.on("taphold","node",function(evt){
+					console.log("taphold node",evt);
+				});
+			});
+		</script>
+	</head>
+	<body id="main">
+		<h1>Workflow Browser</h1>
+		<div id="cy"></div>
+	</body>
+</html>
