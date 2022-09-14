@@ -11,7 +11,7 @@ use Time::localtime;
 my ($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=Cwd::abs_path($program_directory);
 my $program_path="$program_directory/$program_name";
-my $program_version="2022/09/11";
+my $program_version="2022/09/14";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
 getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
@@ -181,7 +181,7 @@ my $homeDir=absolutePath(`echo ~`);
 my $hostname=`hostname`;chomp($hostname);
 my $prgmode=shift(@ARGV);
 if(defined($opt_q)){if($opt_q eq "qsub"){$opt_q="sge";}elsif($opt_q eq "squeue"){$opt_q="slurm";}}
-if(!defined($opt_s)){$opt_s=10;}#sleeptime
+if(!defined($opt_s)){$opt_s=1;}#sleeptime
 if(!defined($opt_m)){$opt_m=1;}#maxjob
 my $sleeptime=$opt_s;
 my $maxThread=defined($opt_M)?$opt_M:5;
@@ -3446,6 +3446,7 @@ sub moiraiRunExecute{
 	my $execurls=[];
 	my $ids;
 	if(scalar(@execids)>0){$ids={};foreach my $execid(@execids){$ids->{$execid}=1;}}
+	elsif(getNumberOfJobsRemaining()==0){return $processes;}
 	while(true){
 		controlWorkflow($processes,$commands);
 		if(scalar(@{$execurls})==0&&scalar(keys(%{$executes}))==0&&scalar(keys(%{$processes}))>0){
@@ -3453,14 +3454,15 @@ sub moiraiRunExecute{
 			foreach my $execid(keys(%{$processes})){
 				my $process=$processes->{$execid};
 				if($process->{$urls->{"daemon/execute"}}eq"completed"){next;}#completed
+				if($process->{$urls->{"daemon/execute"}}eq"error"){next;}#completed
 				$completed=0;
 			}
 			if($completed){last;}# completed all jobs
 		}
 		my $jobs_running=getNumberOfJobsRunning();
-		if($jobs_running>=$maxThread){sleep($opt_s);next;}# no slot to throw job
+		if($jobs_running>=$maxThread){if(scalar(@{$execurls})>0){sleep($opt_s);}next;}# no slot to throw job
 		my $job_remaining=getNumberOfJobsRemaining(@execids);
-		if($job_remaining==0){sleep($opt_s);next;}# no more job to handle
+		if($job_remaining==0){if(scalar(@{$execurls})>0){sleep($opt_s);}next;}# no more job to handle
 		my $jobSlot=$maxThread-$jobs_running;
 		while(jobOfferStart($jobdir)){if(defined($opt_l)){"#Waiting for job slot\n"}}
 		my @jobfiles=getJobFiles($jobdir,$jobSlot,$ids);
@@ -4685,8 +4687,8 @@ sub test3{
 sub test4{
 	# Testing build
 	createFile("test/1.sh","ls \$input > \$output");
-	testCommand("perl $program_directory/moirai2.pl -d test -i '\$input' -o '\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\"}");
-	testCommand("perl $program_directory/moirai2.pl -d test -i 'root->directory->\$input' -o 'root->content->\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/query/in\":\"root->directory->\$input\",\"https://moirai2.github.io/schema/daemon/query/out\":\"root->content->\$output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\"}");
+	testCommand("perl $program_directory/moirai2.pl -d test -i '\$input' -o '\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
+	testCommand("perl $program_directory/moirai2.pl -d test -i 'root->directory->\$input' -o 'root->content->\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/query/in\":\"root->directory->\$input\",\"https://moirai2.github.io/schema/daemon/query/out\":\"root->content->\$output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
 	unlink("test/1.sh");
 	#Testing ls
 	#mkdir("test/dir");
