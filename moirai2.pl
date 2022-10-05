@@ -11,16 +11,16 @@ use Time::localtime;
 my ($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=Cwd::abs_path($program_directory);
 my $program_path="$program_directory/$program_name";
-my $program_version="2022/09/14";
+my $program_version="2022/10/06";
 ############################## OPTIONS ##############################
-use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_Z);
-getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:xX:Z:');
+use vars qw($opt_a $opt_b $opt_c $opt_d $opt_D $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_m $opt_M $opt_o $opt_O $opt_p $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_T $opt_u $opt_U $opt_v $opt_V $opt_w $opt_X $opt_Z);
+getopts('a:b:c:d:D:E:f:F:g:G:hHi:j:I:lm:M:o:O:pq:Q:R:r:s:S:tTuUv:V:w:X:Z:');
 ############################## HELP ##############################
 sub help{
 	print "\n";
 	print "############################## HELP ##############################\n";
 	print "\n";
-	print "Program: Handles Moirai2 workflow/command using triple database.\n";
+	print "Program: Handles Moirai2 workflow/command using Directed acyclic graph database.\n";
 	print "Version: $program_version\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
@@ -28,11 +28,11 @@ sub help{
 	print "\n";
 	print "Commands:\n";
 	print "             build  Build a command json from command lines and script files\n";
-	print "       clear/clean  Clean all command log and history by removing .moirai2 directory\n";
-	print "           command  Execute user specified command from STDIN\n";
-	print "            daemon  Checks and runs the submitted and automated scripts/jobs\n";
+	print "       clear/clean  Clean command, log, and error from .moirai2 directory\n";
+	print "           command  Execute command lines from STDIN\n";
+	print "            daemon  Periodically process crontab scripts and submitted jobs\n";
 	print "             error  Check error logs\n";
-	print "              exec  Execute user specified command from ARGUMENTS\n";
+	print "              exec  Execute command lines from arguments\n";
 	print "              html  Output HTML files of command/logs/database\n";
 	print "           history  List up executed commands\n";
 	print "               log  Print out logs information of processes\n";
@@ -40,7 +40,7 @@ sub help{
 	print "         newdaemon  Setup a new daemon specified server\n";
 	print "         openstack  Use openstack.pl to create new instance to process jobs\n";
 	print "          sortsubs  For reorganizing this script(test commands)\n";
-	print "            submit  Submit job with command URL and parameters specified in STDIN\n";
+	print "            submit  Submit a job file OR submit user command(s), but don't execute\n";
 	print "              test  For development purpose (test commands)\n";
 	print "\n";
 	print "############################## Default Usage ##############################\n";
@@ -55,7 +55,7 @@ sub help{
 		print "2022/09/02  Create daemon at specified server\n";
 		print "2022/07/30  Added flag handler where as soon as jobs are created, flags are removed from db\n";
 		print "2022/07/24  Added user and group for docker run\n";
-		print "2022/07/11  Refactored moirai2.pl and rdf.pl\n";
+		print "2022/07/11  Refactored moirai2.pl and dag.pl\n";
 		print "2022/05/25  Update mode added where input/output relation is ignored\n";
 		print "2022/05/14  Added error command functionality to view error logs\n";
 		print "2022/05/10  Added a function to stop jobs ended with error\n";
@@ -83,7 +83,7 @@ sub help{
 		print "2020/12/14  Create and keep json file from user defined command\n";
 		print "2020/12/13  'empty output' and 'ignore stderr/stout' functions added.\n";
 		print "2020/12/12  stdout and stderr reports are appended to a log file.\n";
-		print "2020/12/01  Adapt to new rdf.pl which doens't user sqlite3 database.\n";
+		print "2020/12/01  Adapt to new dag.pl which doens't user sqlite3 database.\n";
 		print "2020/11/20  Import and execute workflow bash file.\n";
 		print "2020/11/11  Added 'singularity' to container function.\n";
 		print "2020/11/06  Updated help and daemon functionality.\n";
@@ -102,18 +102,18 @@ sub help{
 		print "2019/02/07  'rm','rmdir','import' functions were added to batch routine.\n";
 		print "2019/01/21  'mv' functionality added to move temporary files to designated locations.\n";
 		print "2019/01/18  'process' functionality added to execute command from a control json.\n";
-		print "2019/01/17  Subdivide triple database, revised execute flag to have instance in between.\n";
+		print "2019/01/17  Subdivide DAG database, revised execute flag to have instance in between.\n";
 		print "2018/12/12  'singlethread' added for NCBI/BLAST query.\n";
 		print "2018/12/10  Remove unnecessary files when completed.\n";
 		print "2018/12/04  Added 'maxjob' and 'nolog' to speed up processed.\n";
 		print "2018/11/27  Separating loading, selection, and execution and added 'maxjob'.\n";
 		print "2018/11/19  Improving database updates by speed.\n";
 		print "2018/11/17  Making daemon faster by collecting individual database accesses.\n";
-		print "2018/11/16  Making updating/importing database faster by using improved rdf.pl.\n";
+		print "2018/11/16  Making updating/importing database faster by using improved dag.pl.\n";
 		print "2018/11/09  Added import function where user udpate databse through specified file(s).\n";
 		print "2018/09/14  Changed to a ticket system.\n";
 		print "2018/02/06  Added qsub functionality.\n";
-		print "2018/02/01  Created to throw jobs registered in triple database.\n";
+		print "2018/02/01  Created to throw jobs registered in DAG database.\n";
 		print "\n";
 	}
 }
@@ -151,7 +151,7 @@ $urls->{"daemon/qjob"}="https://moirai2.github.io/schema/daemon/qjob";
 $urls->{"daemon/qjob/opt"}="https://moirai2.github.io/schema/daemon/qjob/opt";
 $urls->{"daemon/query/in"}="https://moirai2.github.io/schema/daemon/query/in";
 $urls->{"daemon/query/out"}="https://moirai2.github.io/schema/daemon/query/out";
-$urls->{"daemon/rdfdb"}="https://moirai2.github.io/schema/daemon/rdfdb";
+$urls->{"daemon/dagdb"}="https://moirai2.github.io/schema/daemon/dagdb";
 $urls->{"daemon/remotepath"}="https://moirai2.github.io/schema/daemon/remotepath";
 $urls->{"daemon/return"}="https://moirai2.github.io/schema/daemon/return";
 $urls->{"daemon/rootdir"}="https://moirai2.github.io/schema/daemon/rootdir";
@@ -722,6 +722,10 @@ sub bashCommand{
 	print OUT "sleep 1\n";
 	print OUT "touch \$workdir/status.txt\n";
 	close(OUT);
+	if(checkBashScript($bashsrc)!=0){
+		print STDERR "There is an error in a bash script\n";
+		exit(1);
+	}
 }
 ############################## bashCommandHasOptions ##############################
 sub bashCommandHasOptions{
@@ -753,6 +757,32 @@ sub moiraiFinally{
 	if(defined($opt_Z)){touchFile($opt_Z);}
 	if($result==1){exit(1);}
 }
+############################## calculateProcessTime ##############################
+sub calculateProcessTime{
+	my $log=shift();
+	my $statusfile=shift();
+	my $timestarted;
+	my $timeended;
+	my $reader=openFile($statusfile);
+	while(<$reader>){
+		chomp;my ($key,$time)=split(/\t/);
+		if($key eq "start"){$log->{$urls->{"daemon/timestarted"}}=$time;$timestarted=$time;}
+		elsif($key eq "end"){$log->{$urls->{"daemon/timeended"}}=$time;$timeended=$time;}
+		elsif($key eq "completed"){$log->{$urls->{"daemon/timecompleted"}}=$time;$log->{$urls->{"daemon/execute"}}="completed";}
+		elsif($key eq "error"){$log->{$urls->{"daemon/timecompleted"}}=$time;$log->{$urls->{"daemon/execute"}}="error";}
+	}
+	close($reader);
+	$log->{$urls->{"daemon/processtime"}}=$timeended-$timestarted;
+	return $log;
+}
+############################## checkBashScript ##############################
+sub checkBashScript{
+	my $path=shift();
+	#https://qiita.com/_ydah/items/effeed302800e586d7b5
+	#https://stackoverflow.com/questions/7080434/getting-perl-to-return-the-correct-exit-code
+	my $exitCode=system("bash -n $path");
+	return $exitCode;
+}
 ############################## checkDatabaseDirectory ##############################
 sub checkDatabaseDirectory{
 	my $directory=shift();
@@ -760,12 +790,13 @@ sub checkDatabaseDirectory{
 		print STDERR "ERROR: Please don't use '..' for moirai database directory\n";
 		exit(1);
 	}elsif($directory=~/^\//){
-		print STDERR "ERROR: moirai directory '$directory' have to be relative to a root directory\n";
+		print STDERR "ERROR: moirai directory '$directory' have to be relative to current directory\n";
 		exit(1);
 	}
 	my $absolutePath=Cwd::abs_path($directory);
 	if(isHomeDirectory($absolutePath)){
-		print STDERR "ERROR: Deploying moirai2 triple database on a home directory  is not recommended\n";
+		print STDERR "ERROR: Deploying moirai2 DAG database on a home directory is not recommended\n";
+		print STDERR "       Please create a directory and deploy moirai2 system there\n";
 		exit(1);
 	}
 	return $directory;
@@ -989,7 +1020,7 @@ sub completeProcess{
 	my $logfile="$workdir/log.txt";
 	my $bashfile="$workdir/run.sh";
 	my $processfile="$processdir/$execid.txt";
-	my $rdfdb=exists($command->{$urls->{"daemon/rdfdb"}})?$command->{$urls->{"daemon/rdfdb"}}."/":defined($dbdir)?"$dbdir/":undef;
+	my $dagdb=exists($command->{$urls->{"daemon/dagdb"}})?$command->{$urls->{"daemon/dagdb"}}."/":defined($dbdir)?"$dbdir/":undef;
 	if(exists($process->{$urls->{"daemon/hostname"}})){$processfile="$processdir/".$process->{$urls->{"daemon/hostname"}}."/$execid.txt";}
 	my $dirname=substr(substr($execid,-18),0,8);
 	my $serverpath=$process->{$urls->{"daemon/serverpath"}};
@@ -1005,7 +1036,7 @@ sub completeProcess{
 		uploadOutputs($command,$process);
 		removeInputsOutputs($command,$process);
 		system("scp $tmpfile $statusTo 2>&1 1>/dev/null");
-		unlink($tmpfile);
+		system("mv $tmpfile $statusFrom");
 		# Moirai daemon looks for a string "completed" in a status file and proceed to completion.
 		# If output files are huge, there is a chance complete process is executed before uploads are completed.
 		# To avoid this, we temporary move the status file to /tmp directory and upload all files beforehand.
@@ -1024,12 +1055,6 @@ sub completeProcess{
 	}
 	close($reader);
 	if(defined($opt_l)){print "#Completing: $execid with '$status' status\n";}
-	$stderrfile="$workdir/stderr.txt";
-	$stdoutfile="$workdir/stdout.txt";
-	$statusfile="$workdir/status.txt";
-	$logfile="$workdir/log.txt";
-	$bashfile="$workdir/run.sh";
-	#logfile
 	my $log=loadProcessFile($logfile);
 	$log->{$urls->{"daemon/timeregistered"}}=$timeregistered;
 	while(my ($key,$val)=each(%{$process})){
@@ -1047,19 +1072,8 @@ sub completeProcess{
 		removeFilesFromServer($command,$process);
 		unlink("$localdir/run.sh");
 	}
-	#statusfile
-	my $timestarted;
-	my $timeended;
-	$reader=openFile($statusfile);
-	while(<$reader>){
-		chomp;my ($key,$time)=split(/\t/);
-		if($key eq "start"){$log->{$urls->{"daemon/timestarted"}}=$time;$timestarted=$time;}
-		elsif($key eq "end"){$log->{$urls->{"daemon/timeended"}}=$time;$timeended=$time;}
-		elsif($key eq "completed"){$log->{$urls->{"daemon/timecompleted"}}=$time;$log->{$urls->{"daemon/execute"}}="completed";}
-		elsif($key eq "error"){$log->{$urls->{"daemon/timecompleted"}}=$time;$log->{$urls->{"daemon/execute"}}="error";}
-	}
-	close($reader);
-	$log->{$urls->{"daemon/processtime"}}=$timeended-$timestarted;
+	#calculate process time
+	calculateProcessTime($log,$statusfile);
 	#write logfile
 	my ($logwriter,$logoutput)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	print $logwriter "######################################## $execid ########################################\n";
@@ -1088,9 +1102,9 @@ sub completeProcess{
 	my $updatecount=0;
 	while(<$reader>){
 		chomp;
-		if(/insert\s+(.+)\-\>(.+)\-\>(.+)/i){print $insertwriter "$1\t$rdfdb$2\t$3\n";$insertcount++;next;}
-		if(/delete\s+(.+)\-\>(.+)\-\>(.+)/i){print $deletewriter "$1\t$rdfdb$2\t$3\n";$deletecount++;next;}
-		if(/update\s+(.+)\-\>(.+)\-\>(.+)/i){print $updatewriter "$1\t$rdfdb$2\t$3\n";$updatecount++;next;}
+		if(/insert\s+(.+)\-\>(.+)\-\>(.+)/i){print $insertwriter "$1\t$dagdb$2\t$3\n";$insertcount++;next;}
+		if(/delete\s+(.+)\-\>(.+)\-\>(.+)/i){print $deletewriter "$1\t$dagdb$2\t$3\n";$deletecount++;next;}
+		if(/update\s+(.+)\-\>(.+)\-\>(.+)/i){print $updatewriter "$1\t$dagdb$2\t$3\n";$updatecount++;next;}
 		if($stdoutcount==0){print $logwriter "######################################## stdout ########################################\n";}
 		print $logwriter "$_\n";$stdoutcount++;
 	}
@@ -1163,7 +1177,7 @@ sub completeProcess{
 sub controlDelete{
 	my @files=getFiles($deletedir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv delete";
+	my $command="cat ".join(" ",@files)."|perl $program_directory/dag.pl -q -f tsv delete";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1174,7 +1188,7 @@ sub controlDelete{
 sub controlInsert{
 	my @files=getFiles($insertdir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv insert";
+	my $command="cat ".join(" ",@files)."|perl $program_directory/dag.pl -q -f tsv insert";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1207,7 +1221,7 @@ sub controlProcess{
 sub controlUpdate{
 	my @files=getFiles($updatedir);
 	if(scalar(@files)==0){return 0;}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/rdf.pl -q -f tsv update";
+	my $command="cat ".join(" ",@files)."|perl $program_directory/dag.pl -q -f tsv update";
 	my $count=`$command`;
 	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
@@ -1476,11 +1490,11 @@ sub createHtmlDatabase{
 	print "<script type=\"text/javascript\" src=\"js/jquery/jquery-3.4.1.min.js\"></script>\n";
 	print "<script type=\"text/javascript\" src=\"js/jquery/jquery.columns.min.js\"></script>\n";
 	print "<script type=\"text/javascript\">\n";
-	#my $network=`perl $program_directory/rdf.pl -d $dbdir export network`;
+	#my $network=`perl $program_directory/dag.pl -d $dbdir export network`;
 	#chomp($network);
-	my $db=`perl $program_directory/rdf.pl export db`;
+	my $db=`perl $program_directory/dag.pl export db`;
 	chomp($db);
-	my $log=`perl $program_directory/rdf.pl export log`;
+	my $log=`perl $program_directory/dag.pl export log`;
 	chomp($log);
 	#print "var network=$network;\n";
 	print "var db=$db;\n";
@@ -1551,14 +1565,14 @@ sub daemonCheckTimestamp{
 	my $cmdurl=$command->{$urls->{"daemon/command"}};
 	my $queries=$command->{$urls->{"daemon/query/in"}};
 	if(!defined($queries)){return 1;}
-	my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
+	my $dagdb=$command->{$urls->{"daemon/dagdb"}};
 	my $time1=$command->{$urls->{"daemon/timestamp"}};
 	my $hit=0;
 	foreach my $query(@{$queries}){
 		my @tokens=split(/\-\>/,$query);
 		my $predicate=$tokens[1];
 		$predicate=~s/\$\w+/%/g;
-		my $time2=`perl $program_directory/rdf.pl -d $rdfdb timestamp '$predicate'`;
+		my $time2=`perl $program_directory/dag.pl -d $dagdb timestamp '$predicate'`;
 		chomp($time2);
 		if($time1<$time2){$hit=1;last;}
 	}
@@ -1656,6 +1670,35 @@ sub downloadOutputs{
 		system("scp $fromfile $tofile 2>&1 1>/dev/null");
 	}
 }
+############################## equals ##############################
+sub equals{
+	my $obj1=shift();
+	my $obj2=shift();
+	my $ref1=ref($obj1);
+	my $ref2=ref($obj2);
+	if($ref1 ne $ref2){return;}
+	if($ref1 eq "ARRAY"){
+		my $len1=scalar(@{$obj1});
+		my $len2=scalar(@{$obj2});
+		if($len1!=$len2){return;}
+		for(my $i=0;$i<$len1;$i++){if(!equals($obj1->[$i],$obj2->[$i])){return;}}
+		return 1;
+	}elsif($ref1 eq "HASH"){
+		my @keys1=keys(%{$obj1});
+		my @keys2=keys(%{$obj2});
+		my $len1=scalar(@keys1);
+		my $len2=scalar(@keys2);
+		if($len1!=$len2){return;}
+		foreach my $key(@keys1){
+			if(!exists($obj2->{$key})){return;}
+			my $val1=$obj1->{$key};
+			my $val2=$obj2->{$key};
+			if(!equals($val1,$val2)){return;}
+		}
+		return 1;
+	}
+	if($obj1 eq $obj2){return 1;}
+}
 ############################## existsArray ##############################
 sub existsArray{
 	my $array=shift();
@@ -1735,7 +1778,7 @@ sub getBash{
 		elsif($line=~/^#\$\s?-o\s+?(.+)$/){if(defined($output)){$output.=",";}$output.=$1;}#-o
 		elsif($line=~/^#\$\s?-q\s+?(.+)$/){$command->{$urls->{"daemon/qjob"}}=$1;}#-q
 		elsif($line=~/^#\$\s?-Q\s+?(.+)$/){$command->{$urls->{"daemon/qjob/opt"}}=$1;}#-Q
-		elsif($line=~/^#\$\s?-d\s+?(.+)$/){$command->{$urls->{"daemon/rdfdb"}}=checkDatabaseDirectory($1);}#-d
+		elsif($line=~/^#\$\s?-d\s+?(.+)$/){$command->{$urls->{"daemon/dagdb"}}=checkDatabaseDirectory($1);}#-d
 		elsif($line=~/^#\$\s?-a\s+?(.+)$/){$command->{$urls->{"daemon/remotepath"}}=handleServer($1);}#-a
 		elsif($line=~/^#\$\s?-r\s+?(.+)$/){$command->{$urls->{"daemon/return"}}=handleKeys($1);}#-r
 		elsif($line=~/^#\$\s?-s\s+?(.+)$/){$command->{$urls->{"daemon/sleeptime"}}=$1;}#-s
@@ -2035,7 +2078,7 @@ sub getQueryResults{
 	if(!defined($dir)){$dir=".";}
 	my @queries=ref($query)eq"ARRAY"?@{$query}:split(/,/,$query);
 	foreach my $line(@queries){if(ref($line)eq"ARRAY"){$line=join("->",@{$line});}}
-	my $command="perl $program_directory/rdf.pl -d $dir -f json query '".join("' '",@queries)."'";
+	my $command="perl $program_directory/dag.pl -d $dir -f json query '".join("' '",@queries)."'";
 	my $result=`$command`;chomp($result);
 	my $hashs=jsonDecode($result);
 	my $keys=retrieveKeysFromQueries($query);
@@ -2083,6 +2126,12 @@ sub handleArguments{
 	}
 	for(my $i=0;$i<=$index;$i++){push(@array,$arguments[$i]);}
 	return (\@array,$variables);
+}
+############################## handleDagdbOption ##############################
+sub handleDagdbOption{
+	my $command=shift();
+	if(defined($opt_d)){$command->{$urls->{"daemon/dagdb"}}=checkDatabaseDirectory($opt_d);}
+	elsif(!exists($command->{$urls->{"daemon/dagdb"}})){$command->{$urls->{"daemon/dagdb"}}=".";}
 }
 ############################## handleInputOutput ##############################
 # split ,
@@ -2177,12 +2226,6 @@ sub handleKeys{
 	}
 	return \@keys;
 }
-############################## handleRdfdbOption ##############################
-sub handleRdfdbOption{
-	my $command=shift();
-	if(defined($opt_d)){$command->{$urls->{"daemon/rdfdb"}}=checkDatabaseDirectory($opt_d);}
-	elsif(!exists($command->{$urls->{"daemon/rdfdb"}})){$command->{$urls->{"daemon/rdfdb"}}=".";}
-}
 ############################## handleScript ##############################
 sub handleScript{
 	my $command=shift();
@@ -2269,7 +2312,7 @@ sub helpCommand{
 	print "         -a  (A)ccess remote server for computation\n";
 	print "         -b  Specify (b)oolean options when running a command line (example -a:\$optionA,-b:\$optionB).\n\n";
 	print "         -c  Use (c)ontainer image for execution [docker|singularity].\n";
-	print "         -d  Triple (d)atabase directory (default='.').\n";
+	print "         -d  Directed acyclic graph (d)atabase directory (default='.').\n";
 	print "         -D  Delim character used to split sub->pre->obj file\n";
 	print "         -E  Ignore STD(E)RR if specific regexp is found.\n";
 	print "         -f  Record (f)ilestats[linecount/seqcount/md5/filesize/utime] of input/output files.\n";
@@ -2294,10 +2337,9 @@ sub helpCommand{
 	print "         -T  Run in single (T)hread mode meaning only one process can run per computer.\n";
 	print "         -v  (v)olume to rsync.\n";
 	print "         -V  Fla(v)or of Openstack instance to create.\n";
-	print "         -u  Run in (U)ser mode where input parameters are prompted.\n";
+	print "         -u  Run in (u)ser mode where input parameters are prompted.\n";
 	print "         -U  (U)pdate by forcing a command process.\n";
-	print "         -w  Assign (w)ork id (e=exec, c=cron, s=submit).\n";
-	print "         -x  Dont execute.\n";
+	print "         -w  Assign (w)ork id (default is e=exec, c=cron, s=submit).\n";
 	print "         -X  Set suffixs (like '\$output.txt').\n";
 	print "         -Z  Create done file to signal completion to daemon.\n";
 	print "\n";
@@ -2337,7 +2379,7 @@ sub helpDaemon{
 	print "Options:\n";
 	print "         -a  (A)ccess remote server and process jobs there instead of using local.\n";
 	print "         -b  (B)uild daemon on specified server instead of local.\n";
-	print "         -d  Triple (d)atabase directory (default='.').\n";
+	print "         -d  Directed acyclic graph (d)atabase directory (default='.').\n";
 	print "         -h  Show (h)elp message.\n";
 	print "         -H  Show update (h)istory.\n";
 	print "         -j  Retrieve jobs from a (j)ob server instead of retrieving from a local.\n";
@@ -2374,27 +2416,27 @@ sub helpExec{
 	print "       CMD  One line command like 'ls'.\n";
 	print "\n";
 	print "Options:\n";
-	print "         -a  (A)ccess remote server for computation.\n";
+	print "         -a  (a)ccess remote server for computation.\n";
 	print "         -c  Use (c)ontainer image for execution [docker|singularity].\n";
-	print "         -d  Triple (d)atabase directory (default='.').\n";
-	print "         -D  Delim character used to split sub->pre->obj file\n";
+	print "         -d  Directed acyclic graph (d)atabase directory (default='.').\n";
+	print "         -D  (D)elim character used to split sub->pre->obj file\n";
 	print "         -f  Record (f)ilestats[linecount/seqcount/md5/filesize/utime] of input/output files.\n";
-	print "         -F  If specified output (f)ile is empty, record as error.\n";
+	print "         -F  If specified output (F)ile is empty, record as error.\n";
 	print "         -h  Show (h)elp message.\n";
-	print "         -H  Show update (h)istory.\n";
-	print "         -i  (I)nput query for select from database in '\$sub->\$pred->\$obj' format.\n";
+	print "         -H  Show update (H)istory.\n";
+	print "         -i  (i)nput query for select from database in '\$sub->\$pred->\$obj' format.\n";
 	print "         -I  (I)mage of Openstack instance to create.\n";
 	print "         -l  Show (l)ogs from moirai.pl.\n";
-	print "         -m  (M)ax number of jobs to throw (default='5').\n";
-	print "         -o  (O)utput query for insert to database in '\$sub->\$pred->\$obj' format.\n";
-	print "         -p  (P)rint command lines instead of executing.\n";
+	print "         -m  (m)ax number of jobs to throw (default='5').\n";
+	print "         -o  (o)utput query for insert to database in '\$sub->\$pred->\$obj' format.\n";
+	print "         -p  (p)rint command lines instead of executing.\n";
 	print "         -q  Use (q)sub or slurm for throwing jobs [qsub|slurm|openstack].\n";
 	print "         -Q  (Q)sub/slurm options [qsub/sge/squeue/slurm].\n";
 	print "         -r  Print (r)eturn value (in exec mode, stdout is default).\n";
 	print "         -s  Loop (s)econd (default='10').\n";
-	print "         -S  Implement/import (s)cript code to a command json file.\n";
-	print "         -V  Fla(v)or of Openstack instance to create.\n";
-	print "         -u  Run in (U)ser mode where input parameters are prompted.\n";
+	print "         -S  Implement/import (S)cript code to a command json file.\n";
+	print "         -V  Fla(V)or of Openstack instance to create.\n";
+	print "         -u  Run in (u)ser mode where input parameters are prompted.\n";
 	print "         -w  Assign (w)ork id (e=exec, c=cron, s=submit).\n";
 	print "\n";
 	print "Note: Log file (including execution time, STDOUT, STDERR) stored under moirai/log/YYYYMMDD/ directory\n";
@@ -2441,7 +2483,7 @@ sub helpHtml{
 	print "       HTML  HTML page displaying information of the database\n";
 	print "\n";
 	print "Options:\n";
-	print "         -d  Triple (d)atabase directory (default='.').\n";
+	print "         -d  Directed acyclic graph (d)atabase directory (default='.').\n";
 	print "\n";
 }
 sub helpRsync{
@@ -2841,7 +2883,7 @@ sub loadCommandFromOptions{
 	if(defined($opt_m)){$command->{$urls->{"daemon/maxjob"}}=$opt_m;}
 	if(defined($opt_q)){$command->{$urls->{"daemon/qjob"}}=$opt_q;}
 	if(defined($opt_Q)){$command->{$urls->{"daemon/qjob/opt"}}=$opt_Q;}
-	if(defined($opt_d)){$command->{$urls->{"daemon/rdfdb"}}=$opt_d;}
+	if(defined($opt_d)){$command->{$urls->{"daemon/dagdb"}}=$opt_d;}
 	if(defined($opt_a)){$command->{$urls->{"daemon/remotepath"}}=handleServer($opt_a);}
 	if(defined($opt_r)){$command->{$urls->{"daemon/return"}}=handleKeys($opt_r);}
 	if(defined($opt_S)){$command->{$urls->{"daemon/script"}}=$opt_S;loadScripts($command);}
@@ -2874,7 +2916,7 @@ sub loadCommandFromOptions{
 		my @array=sort{$a cmp $b}keys(%{$hash});
 		$command->{$urls->{"daemon/output"}}=\@array;
 	}
-	handleRdfdbOption($command);
+	handleDagdbOption($command);
 	if(defined($opt_X)){handleInputOutput($opt_X,$userdefined,$suffixs);}
 	if(scalar(keys(%{$suffixs}))>0){$command->{$urls->{"daemon/suffix"}}=$suffixs;}
 	if(scalar(keys(%{$userdefined}))>0){$command->{$urls->{"daemon/userdefined"}}=$userdefined;}
@@ -2967,6 +3009,7 @@ sub loadExecutes{
 	my $executes=shift(@jobFiles);
 	my $execurls=shift(@jobFiles);
 	my $newjob=0;
+	my @execids=();
 	foreach my $file(@jobFiles){
 		if(!-e $file){next;}
 		my $id=basename($file,".txt");
@@ -2998,8 +3041,9 @@ sub loadExecutes{
 				else{$executes->{$url}->{$id}->{$key}=[$executes->{$url}->{$id}->{$key},$val]}
 			}
 		}
+		push(@execids,$id);
 	}
-	return $newjob;
+	return @execids;
 }
 ############################## loadOnGoingVars ##############################
 sub loadOnGoingVars{
@@ -3059,19 +3103,16 @@ sub loadScripts{
 sub loadSubmit{
 	my $path=shift();
 	my $commands=shift();
-	if(!-e $path){
-		print STDERR "ERROR: Submit file '$path' doesn't exist.\n";
-		exit(1);
-	}
+	if(!-e $path){print STDERR "ERROR: Submit file '$path' doesn't exist.\n";exit(1);}
 	my $reader=openFile($path);
 	my $hash={};
 	my $url;
-	my $rdfdb;
+	my $dagdb;
 	while(<$reader>){
 		chomp;
 		my ($key,$val)=split(/\t/);
 		if($key eq "url"){$url=$val;}
-		elsif($key eq "rdfdb"){$rdfdb=$val;}
+		elsif($key eq "dagdb"){$dagdb=$val;}
 		else{$hash->{$key}=$val;}
 	}
 	close($reader);
@@ -3080,7 +3121,7 @@ sub loadSubmit{
 		exit(1);
 	}
 	my $command=loadCommandFromURL($url,$commands);
-	if(defined($rdfdb)){$command->{$urls->{"daemon/rdfdb"}}=$rdfdb;}
+	if(defined($dagdb)){$command->{$urls->{"daemon/dagdb"}}=$dagdb;}
 	my $inputKeys=$command->{$urls->{"daemon/input"}};
 	my $userdefined=$command->{$urls->{"daemon/userdefined"}};
 	my $inputHash={};
@@ -3196,9 +3237,17 @@ sub moiraiMain{
 	my $commands={};
 	my $command;
 	my $queryResults;
+	my $submitOnly;
 	if($mode=~/^submit$/i){
-		if(scalar(@{$arguments})==0){print STDERR "Submit file doesn't exist\n";exit(1);}
-		($command,$queryResults)=loadSubmit($arguments->[0],$commands);
+		$submitOnly=1;
+		if(scalar(@{$arguments})==1&&fileExists($arguments->[0])){#Load submit file
+			my $submitfile=shift(@{$arguments});
+			($command,$queryResults)=loadSubmit($submitfile,$commands);
+		}else{$mode="exec";}#submit only
+	}
+	if($mode=~/^exec$/i){if(scalar(@{$arguments})==0){$mode="command";}}
+	if($mode=~/^submit$/){
+		#pass
 	}elsif($mode=~/\.json$/){
 		$command=loadCommandFromURL($mode,$commands);
 	}elsif($mode=~/\.(ba)?sh$/){
@@ -3212,13 +3261,18 @@ sub moiraiMain{
 		while(<STDIN>){chomp;push(@cmdlines,$_);}
 		$command=createNewCommandFromLines(@cmdlines);
 	}elsif($mode=~/^exec$/i){
-		if(scalar(@{$arguments})==0){print STDERR "ERROR: Please specify command line\n";exit(1);}
 		my $cmdline=join(" ",@{$arguments});
 		push(@cmdlines,$cmdline);
 		$command=createNewCommandFromLines(@cmdlines);
 		$arguments=[];
-		if(!defined($opt_r)){$opt_r="\$stdout";}#Print out stdout for exec
+		if(!defined($opt_r)){$opt_r="stdout";}#Print out stdout for exec
 		$opt_s=1;#To get the result as soon as command is completed.
+	}elsif(!defined($mode)){
+		my $processes=reloadProcesses($commands);
+		controlWorkflow($processes,$commands);
+		my $serverProcesses=reloadServerProcesses($commands);
+		controlWorkflow($serverProcesses,$commands);
+		exit(1);
 	}else{
 		print STDERR "ERROR: '$mode' not recognized\n";
 		help();
@@ -3241,9 +3295,9 @@ sub moiraiMain{
 	if(defined($opt_j)){
 		my $serverpath=handleServer($opt_j);
 		my $processes=copyToJobServer($serverpath,$commands,@execids);
-		if(defined($opt_x)){print join(" ",@execids)."\n";exit(0);}
+		if(defined($submitOnly)){print join(" ",@execids)."\n";exit(0);}
 	}else{
-		if(defined($opt_x)){print join(" ",@execids)."\n";exit(0);}
+		if(defined($submitOnly)){print join(" ",@execids)."\n";exit(0);}
 		my $processes=moiraiRunExecute($commands,$opt_p,@execids);
 		moiraiFinally($commands,$processes,@execids);
 	}
@@ -3295,8 +3349,8 @@ sub moiraiPrepare{
 		print "Proceed running ".scalar(@jobs)." jobs [y/n]? ";
 		if(!getYesOrNo()){exit(1);}
 	}
-	my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
-	moiraiPrepareRemoveFlag($rdfdb,$queryKeys,$queryResults);
+	my $dagdb=$command->{$urls->{"daemon/dagdb"}};
+	moiraiPrepareRemoveFlag($dagdb,$queryKeys,$queryResults);
 	my @execids=writeJobHash(@jobs);
 	return @execids;
 }
@@ -3342,14 +3396,14 @@ sub moiraiPrepareMatch{
 }
 ############################## moiraiPrepareRemoveFlag ##############################
 sub moiraiPrepareRemoveFlag{
-	my $rdfdb=shift();
+	my $dagdb=shift();
 	my $queryKeys=shift();
 	my $queryResults=shift();
 	my @queries=();
 	foreach my $query(@{$queryKeys}){
 		my @tokens=split(/\-\>/,$query);
 		if($tokens[1]!~/flag\/(\w+)$/){next;}
-		push(@queries,$tokens[0]."\t$rdfdb/".$tokens[1]."\t".$tokens[2]);
+		push(@queries,$tokens[0]."\t$dagdb/".$tokens[1]."\t".$tokens[2]);
 	}
 	my ($writer,$file)=tempfile(DIR=>"/tmp",SUFFIX=>".txt",UNLINK=>0);
 	my $count=0;
@@ -3413,9 +3467,9 @@ sub moiraiPrepareVars{
 sub moiraiProcessQuery{
 	my $command=shift();
 	my $queryResults;
-	my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
+	my $dagdb=$command->{$urls->{"daemon/dagdb"}};
 	if(exists($command->{$urls->{"daemon/query/in"}})){
-		$queryResults=getQueryResults($rdfdb,$command->{$urls->{"daemon/query/in"}});
+		$queryResults=getQueryResults($dagdb,$command->{$urls->{"daemon/query/in"}});
 	}elsif(exists($command->{$urls->{"daemon/ls"}})){
 		my @keys=();
 		my $query=$command->{$urls->{"daemon/ls"}};
@@ -3819,10 +3873,10 @@ sub removeSlash{
 sub removeUnnecessaryExecutes{
 	my $inputs=shift();
 	my $command=shift();
-	my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
+	my $dagdb=$command->{$urls->{"daemon/dagdb"}};
 	if(!exists($command->{$urls->{"daemon/query/out"}})){return;}
 	my $query=$command->{$urls->{"daemon/query/out"}};
-	my $outputs=getQueryResults($rdfdb,$query);
+	my $outputs=getQueryResults($dagdb,$query);
 	my $inputTemp={};
 	foreach my $input(@{$inputs->[0]}){$inputTemp->{$input}=1;}
 	my $commonTemp={};
@@ -4032,6 +4086,20 @@ sub runDaemon{
 		if($argument=~/^stop$/i){$stopMode=1;}
 	}
 	if(defined($opt_b)){
+		if($opt_b=~/^openstack\:?(.+)$/i){
+			my $directory=$1;
+			my $flavor=defined($opt_V)?$opt_V:"1Core-8GiB-36GiB";
+			my $image=defined($opt_I)?$opt_I:"snapshot-singularity";
+			my $command="openstack.pl -q -i $image -f $flavor add node";
+			my $ip=`$command`;
+			chomp($ip);
+			if($ip!~/[\d\.]+/){
+				print STDERR "ERROR: Failed to $command\n";exit(1);
+				exit(1);
+			}
+			if(defined($directory)){$opt_b="$ip:$directory";}
+			else{$opt_b=$ip;}
+		}
 		my $serverpath=handleServer($opt_b);
 		my ($username,$servername,$serverdir)=splitServerPath($serverpath);
 		my $stopFile="$username\@$servername:$serverdir/$moiraidir/stop.txt";
@@ -4052,7 +4120,7 @@ sub runDaemon{
 		if(defined($processMode)){$command.=" process";}
 		if(defined($deployMode)){$command.=" deploy";}
 		scpFileIfNecessary("moirai2.pl","$serverpath/moirai2.pl");
-		scpFileIfNecessary("rdf.pl","$serverpath/rdf.pl");
+		scpFileIfNecessary("dag.pl","$serverpath/dag.pl");
 		$command="ssh $username\@$servername 'cd $serverdir;nohup $command &>/dev/null &'";
 		if(defined($opt_l)){print ">$command\n";}
 		system($command);
@@ -4090,11 +4158,10 @@ sub runDaemon{
 		if(defined($submitMode)){
 			foreach my $file(getFiles($submitdir)){
 				my $cmdline="perl $program_directory/moirai2.pl";
-				$cmdline.=" -x -w s";
+				$cmdline.=" -w s";
 				$cmdline.=" submit $file";
 				if(defined($opt_l)){print ">$cmdline\n";}
 				my @ids=`$cmdline`;
-				if(defined($runCount)){foreach my $id(@ids){chomp($id);push(@execids,$id);}}
 			}
 		}
 		if(defined($cronMode)){# handle cron
@@ -4104,7 +4171,7 @@ sub runDaemon{
 				foreach my $url(@crons){
 					my $command=loadCommandFromURL($url,$commands);
 					if(exists($command->{$urls->{"daemon/timestamp"}})){next;}
-					handleRdfdbOption($command);
+					handleDagdbOption($command);
 					$command->{$urls->{"daemon/timestamp"}}=0;
 				}
 				$cronTime=$time;
@@ -4113,14 +4180,14 @@ sub runDaemon{
 				my $command=$commands->{$url};
 				if(daemonCheckTimestamp($command)){
 					if(bashCommandHasOptions($command)){
-						my $rdfdb=$command->{$urls->{"daemon/rdfdb"}};
+						my $dagdb=$command->{$urls->{"daemon/dagdb"}};
 						my $cmdline="perl $program_directory/moirai2.pl";
-						$cmdline.=" -d $rdfdb";
-						$cmdline.=" -x -w c";
+						$cmdline.=" -d $dagdb";
+						$cmdline.=" -w c";
 						$cmdline.=" $url";
 						if(defined($opt_l)){print ">$cmdline\n";}
-						my @ids=`$cmdline`;
-						if(defined($runCount)){foreach my $id(@ids){chomp($id);push(@execids,$id);}}
+						if(defined($runCount)){my @lines=`$cmdline`;foreach my $line(@lines){print $line;}}
+						else{system($cmdline);}
 					}else{
 						my ($writer,$script)=tempfile(DIR=>"/tmp",SUFFIX=>".sh");
 						print $writer "bash $url\n";
@@ -4137,7 +4204,8 @@ sub runDaemon{
 			while(jobOfferStart($jobdir)){if(defined($opt_l)){"#Waiting for job slot\n"}}
 			my @jobFiles=getJobFiles($jobdir,$jobSlot);
 			jobOfferEnd($jobdir);
-			loadExecutes($commands,$executes,$execurls,@jobFiles);
+			my @ids=loadExecutes($commands,$executes,$execurls,@jobFiles);
+			if(defined($runCount)){push(@execids,@ids);}
 			mainProcess($execurls,$commands,$executes,$processes,$jobSlot);
 		}
 		if(defined($jobserver)){#get job from the server
@@ -4205,7 +4273,7 @@ sub saveCommand{
 	print $writer saveCommandSub($command,$urls->{"daemon/qjob/opt"});#-Q
 	print $writer saveCommandSub($command,$urls->{"daemon/query/in"});#-i
 	print $writer saveCommandSub($command,$urls->{"daemon/query/out"});#-o
-	print $writer saveCommandSub($command,$urls->{"daemon/rdfdb"});#-d
+	print $writer saveCommandSub($command,$urls->{"daemon/dagdb"});#-d
 	print $writer saveCommandSub($command,$urls->{"daemon/remotepath"});#-a
 	print $writer saveCommandSub($command,$urls->{"daemon/serverpath"});#-a
 	print $writer saveCommandSub($command,$urls->{"daemon/return"});#-r
@@ -4562,18 +4630,18 @@ sub test1{
 	testSubs("handleInputOutput(\"{'\\\$input':{'default':'something','suffix':'.txt'}}\")",["input"],undef,undef,{"input"=>".txt"});
 	testSubs("handleArguments(\"line1\",\"line2\",\"input=input.txt\",\"output=output.txt\")",["line1","line2"],{"input"=>"input.txt","output"=>"output.txt"});
 	testSubs("handleArguments(\"line=`line1`;\",\"input=input.txt\",\"output=output.txt\")",["line=`line1`"],{"input"=>"input.txt","output"=>"output.txt"});
-	testSubs("handleKeys(\"\\\$input\")",["input"]);
-	testSubs("handleKeys(\"\\\$input1,\\\$input2\")",["input1","input2"]);
-	testSubs("handleKeys(\"\\\$input1.txt,input2.html\")",["input1","input2"]);
+	testSub("handleKeys(\"\\\$input\")",["input"]);
+	testSub("handleKeys(\"\\\$input1,\\\$input2\")",["input1","input2"]);
+	testSub("handleKeys(\"\\\$input1.txt,input2.html\")",["input1","input2"]);
 }
 #Testing basic json functionality
 sub test2{
 	#testing input/output 1
 	createFile("test/Akira.txt","A","B","C","D","A","D","B");
-	testCommand("perl $program_directory/rdf.pl -d test insert root file test/Akira.txt","inserted 1");
+	testCommand("perl $program_directory/dag.pl -d test insert root file test/Akira.txt","inserted 1");
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i 'root->file->\$file' exec 'sort \$file'","A","A","B","B","C","D","D");
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i 'root->file->\$file' -r 'output' exec 'sort \$file|uniq -c>\$output' '\$output=test/output.txt'","test/output.txt");
-	testCommand("perl $program_directory/rdf.pl -d test delete root file test/Akira.txt","deleted 1");
+	testCommand("perl $program_directory/dag.pl -d test delete root file test/Akira.txt","deleted 1");
 	unlink("test/output.txt");
 	unlink("test/Akira.txt");
 	#testing input/output 2
@@ -4581,18 +4649,18 @@ sub test2{
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -r '\$output' test/A.json 'Akira Hasegawa' test/output.txt","test/output.txt");
 	testCommand("cat test/output.txt","Akira Hasegawa");
 	unlink("test/output.txt");
-	testCommand("perl $program_directory/rdf.pl -d test insert case1 'string' 'Akira Hasegawa'","inserted 1");
+	testCommand("perl $program_directory/dag.pl -d test insert case1 'string' 'Akira Hasegawa'","inserted 1");
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->string->\$string' -o '\$id->text->\$output' test/A.json 'output=test/\$id.txt'","");
 	testCommand("cat test/case1.txt","Akira Hasegawa");
-	testCommand("perl $program_directory/rdf.pl -d test select case1 text","case1\ttext\ttest/case1.txt");
+	testCommand("perl $program_directory/dag.pl -d test select case1 text","case1\ttext\ttest/case1.txt");
 	unlink("test/A.json");
 	#testing input/output 3
 	createFile("test/B.json","{\"https://moirai2.github.io/schema/daemon/input\":\"\$input\",\"https://moirai2.github.io/schema/daemon/bash\":[\"sort \$input > \$output\"],\"https://moirai2.github.io/schema/daemon/output\":\"\$output\"}");
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->text->\$input' -o '\$input->sorted->\$output' test/B.json '\$output=test/\$id.sort.txt'","");
 	testCommand("cat test/case1.sort.txt","Akira Hasegawa");
-	testCommand("perl $program_directory/rdf.pl -d test select % 'sorted'","test/case1.txt\tsorted\ttest/case1.sort.txt");
+	testCommand("perl $program_directory/dag.pl -d test select % 'sorted'","test/case1.txt\tsorted\ttest/case1.sort.txt");
 	createFile("test/case2.txt","Hasegawa","Akira","Chiyo","Hasegawa");
-	testCommand("perl $program_directory/rdf.pl -d test insert case2 'text' test/case2.txt","inserted 1");
+	testCommand("perl $program_directory/dag.pl -d test insert case2 'text' test/case2.txt","inserted 1");
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -i '\$id->text->\$input' -o '\$input->sorted->\$output' test/B.json '\$output=test/\$id.sort.txt'","");
 	testCommand("cat test/case2.sort.txt","Akira","Chiyo","Hasegawa","Hasegawa");
 	unlink("test/case1.txt");
@@ -4632,8 +4700,8 @@ sub test3{
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -r output exec 'ls -lt > \$output' '\$output=test/list.txt'","test/list.txt");
 	unlink("test/list.txt");
 	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -o '$moiraidir/ctrl->file->\$output' exec 'output=(`ls $moiraidir/ctrl`);'","");
-	testCommand("perl $program_directory/rdf.pl -d test select $moiraidir/ctrl file","$moiraidir/ctrl\tfile\tconfig","$moiraidir/ctrl\tfile\tdelete","$moiraidir/ctrl\tfile\tinsert","$moiraidir/ctrl\tfile\tjob","$moiraidir/ctrl\tfile\tprocess","$moiraidir/ctrl\tfile\tsubmit","$moiraidir/ctrl\tfile\tupdate");
-	testCommand("perl $program_directory/rdf.pl -d test delete % % %","deleted 7");
+	testCommand("perl $program_directory/dag.pl -d test select $moiraidir/ctrl file","$moiraidir/ctrl\tfile\tconfig","$moiraidir/ctrl\tfile\tdelete","$moiraidir/ctrl\tfile\tinsert","$moiraidir/ctrl\tfile\tjob","$moiraidir/ctrl\tfile\tprocess","$moiraidir/ctrl\tfile\tsubmit","$moiraidir/ctrl\tfile\tupdate");
+	testCommand("perl $program_directory/dag.pl -d test delete % % %","deleted 7");
 	#Testing exec2
 	createFile("test/hello.txt","A","B","C","A");
 	testCommand("perl $program_directory/moirai2.pl -r output -i input -o output exec 'sort -u \$input > \$output;' input=test/hello.txt output=test/output.txt","test/output.txt");
@@ -4646,7 +4714,7 @@ sub test3{
 	#Testing bash functionality
 	createFile("test/test.sh","#\$-i \$id->input->\$input","#\$-o \$id->output->\$output.txt","sort \$input | uniq -c > \$output");
 	createFile("test/input.txt","A","B","D","C","F","E","G","A","A","A");
-	testCommand("perl $program_directory/rdf.pl -d test/db insert idA input test/input.txt","inserted 1");
+	testCommand("perl $program_directory/dag.pl -d test/db insert idA input test/input.txt","inserted 1");
 	testCommand("perl $program_directory/moirai2.pl -d test/db -s 1 -r '\$output' test/test.sh output=test/uniq.txt","test/uniq.txt");
 	testCommand("perl $program_directory/moirai2.pl -d test/db -s 1 -r '\$output' test/test.sh output=test/uniq.txt","");
 	testCommand("cat test/uniq.txt","   4 A","   1 B","   1 C","   1 D","   1 E","   1 F","   1 G");
@@ -4687,8 +4755,8 @@ sub test3{
 sub test4{
 	# Testing build
 	createFile("test/1.sh","ls \$input > \$output");
-	testCommand("perl $program_directory/moirai2.pl -d test -i '\$input' -o '\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
-	testCommand("perl $program_directory/moirai2.pl -d test -i 'root->directory->\$input' -o 'root->content->\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/query/in\":\"root->directory->\$input\",\"https://moirai2.github.io/schema/daemon/query/out\":\"root->content->\$output\",\"https://moirai2.github.io/schema/daemon/rdfdb\":\"test\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
+	testCommand("perl $program_directory/moirai2.pl -d test -i '\$input' -o '\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/dagdb\":\"test\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
+	testCommand("perl $program_directory/moirai2.pl -d test -i 'root->directory->\$input' -o 'root->content->\$output' build < test/1.sh|xargs cat","{\"https://moirai2.github.io/schema/daemon/bash\":\"ls \$input > \$output\",\"https://moirai2.github.io/schema/daemon/input\":\"input\",\"https://moirai2.github.io/schema/daemon/output\":\"output\",\"https://moirai2.github.io/schema/daemon/query/in\":\"root->directory->\$input\",\"https://moirai2.github.io/schema/daemon/query/out\":\"root->content->\$output\",\"https://moirai2.github.io/schema/daemon/dagdb\":\"test\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
 	unlink("test/1.sh");
 	#Testing ls
 	#mkdir("test/dir");
@@ -4702,14 +4770,15 @@ sub test4{
 	#testCommand("perl $program_directory/moirai2.pl -d test -g txt -o '\$filepath' ls test/dir","test/dir/A.txt","test/dir/C.txt");
 	#testCommand("perl $program_directory/moirai2.pl -d test -G txt -o '\$base0' ls test/dir","B");
 	#testCommand("perl $program_directory/moirai2.pl -d test -l -o 'root->file->\$filepath' ls test/dir","inserted 3");
-	#testCommand("perl $program_directory/rdf.pl -d test insert root directory test/dir","inserted 1");
+	#testCommand("perl $program_directory/dag.pl -d test insert root directory test/dir","inserted 1");
 	#testCommand("perl $program_directory/moirai2.pl -d test -i 'root->directory->\$input' ls","test/dir/A.txt","test/dir/B.gif","test/dir/C.txt");
-	#testCommand("perl $program_directory/rdf.pl -d test delete % % %","deleted 4");
+	#testCommand("perl $program_directory/dag.pl -d test delete % % %","deleted 4");
 	#system("rm -r test/dir");
 	#Testing submit function
 	createFile("test/submit.json","{\"https://moirai2.github.io/schema/daemon/bash\":[\"ls test\"],\"https://moirai2.github.io/schema/daemon/return\":\"stdout\",\"https://moirai2.github.io/schema/daemon/sleeptime\":\"1\"}");
 	createFile("test/submit.txt","url\ttest/submit.json");
-	testCommand("perl $program_directory/moirai2.pl -d test submit test/submit.txt","submit.json");
+	testCommandRegex("perl $program_directory/moirai2.pl -w s submit test/submit.txt","^s\\d+\$");
+	testCommand("perl $program_directory/moirai2.pl -R 0 daemon process","submit.json");
 	#Testing submit function with daemon
 	createFile(".moirai2/ctrl/submit/submit.txt","url\ttest/submit.json");
 	testCommand("perl $program_directory/moirai2.pl -d test -R 0 daemon submit process","submit.json");
@@ -4752,12 +4821,16 @@ sub test4{
 	testCommandRegex("cat test/tab.txt","\\s+\\d+");
 	unlink("test/moirai2.txt");
 	unlink("test/tab.txt");
+	unlink("test/dnd.txt");
+	unlink("test/graphnet.txt");
 	#Testing -i * with $tmpdir
 	testCommand("perl /Users/ah3q/Sites/moirai2/moirai2.pl -i 'js/ah3q/*.js' exec 'wc -l <\$filepath>\$tmpdir/tmp.txt;uniq -c \$tmpdir/tmp.txt > test/\$basename.txt;rm \$tmpdir/tmp.txt'","");
 	testCommandRegex("cat test/moirai2.txt","\\s+\\d+");
 	testCommandRegex("cat test/tab.txt","\\s+\\d+");
 	unlink("test/moirai2.txt");
 	unlink("test/tab.txt");
+	unlink("test/dnd.txt");
+	unlink("test/graphnet.txt");
 	#Testing -i * with $opt_t
 	system("mkdir -p test/in");
 	system("mkdir -p test/out");
@@ -4801,10 +4874,10 @@ sub test6{
 	system("ssh $testserver 'mkdir -p moiraitest'");
 	system("ssh $testserver 'echo \"Hello World\">moiraitest/input.txt'");
 	system("scp moirai2.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
-	system("scp rdf.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
+	system("scp dag.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
 	system("ssh $testserver \"cd moiraitest;perl moirai2.pl clear all\"");
 	# assign job at the server, copy job to local, and execute on a local daemon (-x)
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input.txt output=output.txt\"","^e\\d{14}\\w{4}\$");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -i input -o output submit 'wc -l \\\$input > \\\$output;' input=input.txt output=output.txt\"","^e\\d{14}\\w{4}\$");
 	exit();
 	system("perl $program_directory/moirai2.pl -j $testserver:moiraitest -s 1 -R 0 daemon");
 	testCommand("cat input.txt","Hello World");#copied from job server
@@ -4823,12 +4896,12 @@ sub test6{
 	unlink("output2.txt");
 	# assign job at server, copy and execute job in one command line (daemon process)
 	system("ssh $testserver 'echo \"Hello World\nAkira Hasegawa\">moiraitest/input3.txt'");
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i input -o output exec 'wc -l \\\$input > \\\$output;' input=input3.txt output=output3.txt\"","^e\\d{14}\\w{4}\$");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -i input -o output submit 'wc -l \\\$input > \\\$output;' input=input3.txt output=output3.txt\"","^e\\d{14}\\w{4}\$");
 	system("perl $program_directory/moirai2.pl -j $testserver:moiraitest -s 1 -R 1 daemon process");
 	testCommand("ssh $testserver 'cat moiraitest/output3.txt'","       2 input3.txt");
 	# assign job to the server from local with -j option
 	createFile("input4.txt","Hello World\nAkira Hasegawa\nTsunami Channel");
-	testCommandRegex("perl $program_directory/moirai2.pl -x -j $testserver:moiraitest -i input -o output exec 'wc -l \$input > \$output;' input=input4.txt output=output4.txt","^e\\d{14}\\w{4}\$");
+	testCommandRegex("perl $program_directory/moirai2.pl -j $testserver:moiraitest -i input -o output submit 'wc -l \$input > \$output;' input=input4.txt output=output4.txt","^e\\d{14}\\w{4}\$");
 	system("ssh $testserver 'cd moiraitest;perl moirai2.pl -s 1 -R 0 daemon process'");
 	testCommand("ssh $testserver 'cat moiraitest/output4.txt'","3 input4.txt");
 	unlink("input4.txt");
@@ -4846,21 +4919,20 @@ sub test7{
 	system("ssh $testserver 'echo \"two\">moiraitest/input2.txt'");
 	system("ssh $testserver 'echo \"three\">moiraitest/input3.txt'");
 	system("scp moirai2.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
-	system("scp rdf.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
+	system("scp dag.pl $testserver:moiraitest/. 2>&1 1>/dev/null");
 	system("ssh $testserver \"cd moiraitest;perl moirai2.pl clear all\"");
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i 'system->ls *.txt->\\\$input' exec 'ls -lt \\\$input'\"","e\\w{18} e\\w{18} e\\w{18}");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -i 'system->ls *.txt->\\\$input' submit 'ls -lt \\\$input'\"","e\\w{18} e\\w{18} e\\w{18}");
 	testCommandRegex("perl moirai2.pl -R 1 -j $testserver:moiraitest daemon process","");
 	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -R 0 daemon\"","");
 	my $date=getDate("");
 	testCommandRegex("ssh $testserver \"ls moiraitest/.moirai2/log/$date/\"","e\\w{18}.txt\\ne\\w{18}.txt\\ne\\w{18}.txt");
 	system("ssh $testserver \"cd moiraitest;perl moirai2.pl clear all\"");
-
 	system("ssh $testserver 'mkdir -p moiraitest/dir'");
 	system("ssh $testserver 'echo \"one\">moiraitest/dir/input1.txt'");
 	system("ssh $testserver 'echo \"two\">moiraitest/dir/input2.txt'");
 	system("ssh $testserver 'echo \"three\">moiraitest/dir/input3.txt'");
 	system("ssh $testserver \"cd moiraitest;perl moirai2.pl clear all\"");
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i 'system->ls dir/*.txt->\\\$input' exec 'ls -lt \\\$input'\"","e\\w{18} e\\w{18} e\\w{18}");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -i 'system->ls dir/*.txt->\\\$input' submit 'ls -lt \\\$input'\"","e\\w{18} e\\w{18} e\\w{18}");
 	testCommandRegex("perl moirai2.pl -R 1 -j $testserver:moiraitest daemon process","");
 	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -R 0 daemon\"","");
 	$date=getDate("");
@@ -4869,7 +4941,7 @@ sub test7{
 
 	system("ssh $testserver 'mkdir -p moiraitest/dir2'");
 	system("ssh $testserver 'cd moiraitest/dir2;ln -s ../dir/* .'");
-	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -x -i 'system->ls dir2/*.txt->\\\$input' exec 'ls -lt \\\$input'\"","e\\w{18} e\\w{18} e\\w{18}");
+	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -i 'system->ls dir2/*.txt->\\\$input' submit 'ls -lt \\\$input'\"","e\\w{18} e\\w{18} e\\w{18}");
 	testCommandRegex("perl moirai2.pl -R 1 -j $testserver:moiraitest daemon process","");
 	testCommandRegex("ssh $testserver \"cd moiraitest;perl moirai2.pl -R 0 daemon\"","");
 	$date=getDate("");

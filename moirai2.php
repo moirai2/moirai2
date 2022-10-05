@@ -19,8 +19,8 @@ if($command=="submit"){
 	if($db==null)exit(1);
 	$file=tmpData($_POST["data"]);
 	if($file==null)exit(1);
-	print_r("perl rdf.pl -q -d $db -f json insert < $file");
-	system("perl rdf.pl -q -d $db -f json insert < $file");
+	print_r("perl dag.pl -q -d $db -f json insert < $file");
+	system("perl dag.pl -q -d $db -f json insert < $file");
 	unlink($file);
 //############################## delete.php ##############################
 }else if($command=="delete"){
@@ -28,7 +28,7 @@ if($command=="submit"){
 	if($db==null)exit(1);
 	$json=tmpData($_POST["data"]);
 	if($json==null)exit(1);
-	system("perl rdf.pl -d $db -f json delete < $json");
+	system("perl dag.pl -d $db -f json delete < $json");
 	unlink($json);
 	//############################## update.php ##############################
 }else if($command=="update"){
@@ -36,7 +36,7 @@ if($command=="submit"){
 	if($db==null)exit(1);
 	$json=tmpData($_POST["data"]);
 	if($json==null)exit(1);
-	system("perl rdf.pl -d $db -f json update < $json");
+	system("perl dag.pl -d $db -f json update < $json");
 	unlink($json);
 //############################## select.php ##############################
 }else if($command=="select"){
@@ -44,14 +44,14 @@ if($command=="submit"){
 	if($db==null)exit(1);
 	$json=tmpData($_POST["query"]);
 	if($json==null)exit(1);
-	exec("perl rdf.pl -d $db -f json select < $json",$array);
+	exec("perl dag.pl -d $db -f json select < $json",$array);
 	unlink($json);
 	foreach($array as $line){echo "$line\n";}
 //############################## progress.php ##############################
 }else if($command=="progress"){
 	$db=filterDatabasePath($_POST["rdfdb"]);
 	if($db==null)exit(1);
-	exec("perl rdf.pl -d $db progress",$array);
+	exec("perl dag.pl -d $db progress",$array);
 	foreach($array as $line){echo "$line\n";}
 //############################## query.php ##############################
 }else if($command=="query"){
@@ -59,7 +59,7 @@ if($command=="submit"){
 	if($db==null)exit(1);
 	$json=tmpData($_POST["query"]);
 	if($json==null)exit(1);
-	exec("perl rdf.pl -d $db -f json query < $json",$array);
+	exec("perl dag.pl -d $db -f json query < $json",$array);
 	unlink($json);
 	if(empty($array))echo "[]";
 	else foreach($array as $line){echo "$line\n";}

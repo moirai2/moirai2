@@ -7,7 +7,7 @@ MOIRAI2 is a very simple [scientific workflow system](https://en.wikipedia.org/w
 - usability - Can execute workflow from a command line or from web page.
 - reprodusibility - Just by adding options (-c), can execute with singularity/Docker container.
 - scalability - Easy to expand computational power using virtual environment like [Hokusa-Sailing Ship](https://i.riken.jp/en/data-sci/).
-- flexibility - Workflow processes are loosly connected with [semantic triples](https://en.wikipedia.org/wiki/Semantic_triple)
+- flexibility - Workflow processes are loosly connected with Subject-Predicate-Object (SPO) in [directed acyclic graph](https://en.wikipedia.org/wiki/Directed_acyclic_graph).
 
 Let's me explain these concepts with examples:
 
@@ -38,7 +38,7 @@ Next, let's me explain how a workflow is handled by MOIRAI2 with examples.
     example-->|file|helloworld.txt
 ```
 
-This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220424224158meiw.txt) with execution information.  It will also record a simple triple (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded as a basename of a file).
+This will execute a command 'echo hello world > $output' and create an [output file](example/text/output) with a content "hello world" with a [log file](example/log/e20220424224158meiw.txt) with execution information.  It will also record a simple subject-predicate-object(SPO) format (subject=example, predicate=file, and object=filepath to output) in text based [database file](example/db/file.txt) (predicate is recorded as a basename of a file).
 
 Reason why 'echo hello world > $output'
 is quoted with a single quote (') is because a command contains redirect (>) and variable with dollar sign.  If a command line is not quoted, redirect to a file will be handled by the unix system and not by moirai2 system.  A single quote (') is used instead of double quote ("), because a variable quoted with double quote (") will be replaced by the value by unix system before passing to moirai2.  Single quote is recommended for wrapping a command line passed to moirai2 because of this reason.  If you want to use double quote ("), you can escape $'' with '\' like "echo hello world > \$output".
@@ -51,9 +51,9 @@ is quoted with a single quote (') is because a command contains redirect (>) and
     helloworld.txt-->|count|id1[1 helloworld.txt]
 ```
 
-Using an output file with content 'hello world' from the previous execution, moirai2 will execute a word count (wc) command and store its result in $output file.   An [output file](example/text/count), a [log file](example/log/e20220424224235CQWg.txt) and a metadata [triple file](example/db/count.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Moirai2 checks for output triple before executing a command line.  If an output triple is found (meaning it's been executed before), wc process will not be executed.
+Using an output file with content 'hello world' from the previous execution, moirai2 will execute a word count (wc) command and store its result in $output file.   An [output file](example/text/count), a [log file](example/log/e20220424224235CQWg.txt) and a metadata [DAG file](example/db/count.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Moirai2 checks for output SPO before executing a command line.  If an output SPO is found (meaning it's been executed before), wc process will not be executed.
 
-> perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
+> perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$charcount' exec 'wc -c $input > $charcount'
 
 ```mermaid
   flowchart LR
@@ -62,7 +62,7 @@ Using an output file with content 'hello world' from the previous execution, moi
     helloworld.txt-->|charcount|id2[12 helloworld.txt]
 ```
 
-An [output file](example/text/charcount), a [log file](example/log/e202205171203279pKn.txt) and a metadata [triple file](example/db/charcount.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Chain of commands can be connected by linking in/out triples like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by triples which gives flexibility to a workflow, since a triple can be edited by user directly (text edit), or through web interface (php or flask), or through moirai computation (daemon).
+An [output file](example/text/charcount), a [log file](example/log/e202205171203279pKn.txt) and a metadata [DAG file](example/db/charcount.txt) (subject=filepath to hello world text file, predicate=count, object=1) will be created.  Chain of commands can be connected by linking in/out SPOs like example above.  This is how moirai2.pl handles a scientific workflow.  Processes are loosely linked by SPOs which gives flexibility to a workflow, since a SPO can be edited by user directly (text edit), or through web interface (php or flask), or through moirai computation (daemon).
 
 ## Structure
 ```
@@ -82,7 +82,7 @@ moirai2/
 ├── moirai2.php - Used for MOIRAI2 manipulation through a browser interface.
 ├── moirai2.pl - Assign and process MOIRAI2 commands.
 ├── openstack.pl - A collection of commands to run Openstack for moirai2.
-└── rdf.pl - Script to handle a text-based triple (sub,pre,obj) database.
+└── dag.pl - Script to handle a text-based SPO (sub,pre,obj) database.
 ```
 
 ## Install
@@ -116,7 +116,6 @@ Commands:
           exec  Execute user specified command from ARGUMENTS
           html  Output HTML files of command/logs/database
        history  List up executed commands
-            ls  Create triples from directories/files and show or store them in triple database
            log  Print out logs information of processes
           open  Open .moirai2 directory (for Mac only)
      newdaemon  Setup a new daemon specified server
@@ -142,7 +141,7 @@ These files will be deleted after execution and all the results will be summariz
 A summary file is divided into these section:
 - execid - a command URL, input and output parameters, and status.
 - time - registered, start, end, and completed datetime
-- insert/update/delete - edit log of triple database
+- insert/update/delete - edit log of DAG database
 - stdout - STDOUT of command if exists
 - stderr - STDERR of command if exists
 - bash - actual command lines used for processing
@@ -259,9 +258,9 @@ rm $tmpdir/output.txt
 EOF
 ```
 
-#### Input/Output Triples
+#### Input/Output SPOs
 
-MOIRAI2 uses [semantic triple](https://en.wikipedia.org/wiki/Semantic_triple) to link between command lines to construct a [scientific workflow](https://en.wikipedia.org/wiki/Scientific_workflow_system) (as explained in Introduction section).
+MOIRAI2 uses [directed acyclic graph](https://en.wikipedia.org/wiki/Directed_acyclic_graph) to link between command lines to construct a [scientific workflow](https://en.wikipedia.org/wiki/Scientific_workflow_system) (as explained in Introduction section).
 
 ```
 > perl moirai2.pl -o 'example->file->$output' exec 'echo hello world > $output'
@@ -269,7 +268,7 @@ MOIRAI2 uses [semantic triple](https://en.wikipedia.org/wiki/Semantic_triple) to
 > perl moirai2.pl -i '$input->count->$count' -o '$input->charcount->$count' exec 'wc -c $input > $count'
 ```
 
-A triple network created by this example looks like this:
+A DAG network created by this example looks like this:
 
 ```mermaid
   flowchart LR
@@ -278,7 +277,7 @@ A triple network created by this example looks like this:
     hello.txt-->|charcount|charcount
 ```
 
-It is possible to walk through multiple triples by sharing the same variable name.  If you want to access root(example) and charcount, use $file to connect both triple. For example:
+It is possible to walk through multiple SPOs by sharing the same variable name.  If you want to access root(example) and charcount, use $file to connect both SPO. For example:
 
 ```
 > perl moirai2.pl -i '$id->file->$file,$file->count->$path1,$file->charcount->$path2' exec 'echo $id charcount results are $path1 and $path2'
@@ -286,8 +285,8 @@ It is possible to walk through multiple triples by sharing the same variable nam
 example charcount results are .moirai2/e20220523160029WyQX/tmp/count and .moirai2/e20220523160029WyQX/tmp/count
 ```
 
-Walkint through the triple branches will become useful when processing STAR alignment.
-For example, a triple network for STAR alignment:
+Walkint through the SPO branches will become useful when processing STAR alignment.
+For example, a DAG network for STAR alignment:
 
 ```mermaid
   flowchart LR
@@ -304,7 +303,7 @@ Command for STAR alignment:
 > perl moirai2.pl -i '$library->input1->$input1,$library->input2->$input2,$library->species->$species,$species->latestAssembly->$assembly,$assembly->starIndex->$genomdir' -o '$library->result->$outdir' exec 'STAR --runThreadN 4 --genomeDir $genomdir --readFilesIn $input1 $input2 --outFileNamePrefix $outdir;' 'outdir=/home/ah3q/data/$library/'
 ```
 
-After successful processing, a result triple will be added to a network.
+After successful processing, a result SPO will be added to a network.
 
 ```mermaid
   flowchart LR
@@ -316,7 +315,7 @@ After successful processing, a result triple will be added to a network.
     libraryA-->|result|/home/ah3q/data/libraryA/
 ```
 
-Strength of triple notation is flexibility.  For example, libraries with mixed species (human and mouse) can be handles with a single command line explained in previous example.
+Strength of DAG notation is flexibility.  For example, libraries with mixed species (human and mouse) can be handles with a single command line explained in previous example.
 
 ```mermaid
   flowchart LR
@@ -367,7 +366,7 @@ By specifying Homo_sapiens for $species variable in first line will handle only 
 
 #### Input Array
 
-Let's say we have three triples pointing to three files "hello.txt", "world.txt", "akira.txt" with predicate=file.
+Let's say we have three SPOs pointing to three files "hello.txt", "world.txt", "akira.txt" with predicate=file.
 
 ```mermaid
   flowchart LR
@@ -376,7 +375,7 @@ Let's say we have three triples pointing to three files "hello.txt", "world.txt"
     example-->|file|akira.txt
 ```
 
-If triple 'example->file->$input' is used to execute command, variable $input will be assigned three times.  Which means commands will be executed three times.
+If SPO 'example->file->$input' is used to execute command, variable $input will be assigned three times.  Which means commands will be executed three times.
 
 ```
 > perl moirai2.pl -i 'example->file->$input' exec 'ls -lt $input'
@@ -385,7 +384,7 @@ If triple 'example->file->$input' is used to execute command, variable $input wi
 [3] ls -lt akira.txt
 ```
 
-If you want to retrieve all files in one array and execute in one command line, use parenthesis () around the variable of triple.  Retrieved data will be assigned as BASH array.  To access array data, use [BASH array notation](https://opensource.com/article/18/5/you-dont-know-bash-intro-bash-arrays).
+If you want to retrieve all files in one array and execute in one command line, use parenthesis () around the variable of SPO.  Retrieved data will be assigned as BASH array.  To access array data, use [BASH array notation](https://opensource.com/article/18/5/you-dont-know-bash-intro-bash-arrays).
 
 ```
 > perl moirai2.pl -i 'example->file->($input)' exec 'ls -lt ${input[@]}'
@@ -424,7 +423,7 @@ There are cases where you want to use array for output.  You can just use BASH a
 perl moirai2.pl -o 'name->test->$output' exec 'output=("Akira" "Ben" "Chris" "David");'
 ```
 
-These four entries will be added to a triple database.
+These four entries will be added to a DAG database.
   * name->test->Akira
   * name->test->Ben
   * name->test->Chris
@@ -441,7 +440,7 @@ EOF
 ```
 
 Let assume splitByBarcode.pl takes in input.fq and split by barcodes and write files (e.g. ATCG.fq AACG.fq CGAA.fq TTAC.fq) to $outdir.
-Filepaths are stored to $split variable with "split=(`ls $outdir`)" and four entries will be added to a triple database with "-o '$input->split->$split'".
+Filepaths are stored to $split variable with "split=(`ls $outdir`)" and four entries will be added to a DAG database with "-o '$input->split->$split'".
   * input.fq->split->ATCG.fq
   * input.fq->split->AACG.fq
   * input.fq->split->CGAA.fq
@@ -546,9 +545,9 @@ output=`wc -l $input`
   * Options are set by using "#$".  Notations (-i, -r, etc) are same as options from a command line.
   * This will be useful for writing cron jobs.
 
-#### Manipulating triple database from STDOUT
+#### Manipulating DAG database from STDOUT
 
-  * It's possible to insert/update/delete triples from database through STDOUT of the command.
+  * It's possible to insert/update/delete SPOs from database through STDOUT of the command.
 
 ```
 INSERT A->B->C
@@ -556,7 +555,7 @@ UPDATE D->E->F
 DELETE G->H->I
 ```
 
-  * Using the notation above, moirai2 will extract these lines from STDOUT and insert, update, or delete triples from the database.
+  * Using the notation above, moirai2 will extract these lines from STDOUT and insert, update, or delete SPOs from a DAG database.
   * Example of insert/update/delete:
 ```
 #!/bin/sh
@@ -575,7 +574,7 @@ A104->xmlFile->xml/A104.xml
 xml/A104.xml->flag/needProcess->true
 ```
 
-  * When predicate is found under '/flag' directory (as example above,'flag/needProcess'), a triple be processed as a control flag and will be treated differently from a common predicate where AS SOON AS moirai2 creates a job, flag will automatically removed from the database.
+  * When predicate is found under '/flag' directory (as example above,'flag/needProcess'), a SPO be processed as a control flag and will be treated differently from a common predicate where AS SOON AS moirai2 creates a job, flag will automatically removed from the database.
   * For example, using above example:
 
 ```
@@ -587,33 +586,33 @@ echo "UPDATE $file->lineCount->$lineCount"
 echo "INSERT $file->processed->true"
 ```
 
-  * As soon as a job is created, flag "xml/A104.xml->flag/needProcess->true" will be removed from the triple database.  This will be useful for specifying(flaggin) which file(s) you want moirai2 to process.
+  * As soon as a job is created, flag "xml/A104.xml->flag/needProcess->true" will be removed from the DAG database.  This will be useful for specifying(flaggin) which file(s) you want moirai2 to process.
 
-### rdf.pl
-Script name is "rdf.pl" where RDF stands for "[resouce description framework](https://en.wikipedia.org/wiki/Resource_Description_Framework)".  But script doesn't not follow a strict RDF rules, but uses only the concept of triple semantics only.
-moirai2.pl queries through rdf.pl when accessing triple database information.  Here is a command lines
+### dag.pl
+Script name is "dag.pl" where DAG stands for "[directed acyclic graph](https://en.wikipedia.org/wiki/Directed_acyclic_graph)".
+moirai2.pl queries through dag.pl when accessing database information.  Here is a command lines
 
 ```
-Usage: perl rdf.pl [Options] COMMAND
+Usage: perl dag.pl [Options] COMMAND
 
-Commands:    assign  Assign triple if sub+pre doesn't exist
+Commands:    assign  Assign SPO if sub+pre doesn't exist
              config  Load config setting to the database
-             delete  Delete triple(s)
+             delete  Delete SPO(s)
              export  export database content to moirai2.pl HTML from html()
-             import  Import triple(s)
-             insert  Insert triple(s)
+             import  Import SPO(s)
+             insert  Insert SPO(s)
              prompt  Prompt value from user if necessary
               query  Query with my original format (example: $a->B->$c)
-             select  Select triple(s)
+             select  Select SPO(s)
               split  split GTF and other files
                test  For development purpose
-             update  Update triple(s)
+             update  Update SPO(s)
 ```
 
-#### Triple database
-A rdf.pl's triple database is a very simple text-based database.
-Triple informations are stored in a file with predicate as basename.
-For example, example(subject)->inputfile(predicate)->input.txt(object) triple will be stored in a file "inputfile.txt" with subject and object separated by tab delim.
+#### DAG database
+A dag.pl's DAG database is a very simple text-based database.
+SPO informations are stored in a file with predicate as basename.
+For example, example(subject)->inputfile(predicate)->input.txt(object) SPO will be stored in a file "inputfile.txt" with subject and object separated by tab delim.
 
 ```mermaid
   flowchart LR
@@ -625,7 +624,7 @@ For example, example(subject)->inputfile(predicate)->input.txt(object) triple wi
 example input.txt
 ```
 
-If additional triple is added, for example, "example->inputfile->input2.txt", a content of "inputfile.txt" will look like this:
+If additional SPO is added, for example, "example->inputfile->input2.txt", a content of "inputfile.txt" will look like this:
 
 ```mermaid
   flowchart LR
@@ -640,9 +639,9 @@ example input2.txt
 ```
 
 File content will be sorted alphabetically with each update.
-This text-based triple databse is not meant to be used for a large-scale database.
+This text-based DAG database is not meant to be used for a large-scale database.
 This predicate text file can be gunzipped, if no additional update is necessary.
-Meaning 'inputfile.txt.gz' is read only and rdf.pl can't write/update anymore.
+Meaning 'inputfile.txt.gz' is read only and dag.pl can't write/update anymore.
 
 #### Directory predicate
 Normally predicate is defined with basename of a text file.  In case of 'inputfile.txt', predicate is 'inputfile'.  It's possible to have directory structure.  For example, in case of 'example/inputfile.txt', predicate will be 'example/inputfile'.
@@ -659,41 +658,41 @@ example/datacontent/
 ├── 000.txt
 └── 001.txt
 ```
-It's possible to query all triples of 000.txt and 001.txt simply with "$key->example/datacontent->$value".
+It's possible to query all SPOs of 000.txt and 001.txt simply with "$key->example/datacontent->$value".
 If you want to access 001.txt only, you can simply query with "$key->example/datacontent/001->$value".
 
-#### Insert triple
+#### Insert SPO
 
-If you want to insert new triple to database, use a command:
+If you want to insert new SPO to DAG database, use a command:
 ```
-perl rdf.pl insert A B C
+perl dag.pl insert A B C
 ```
 This will basically creates B.txt with a content "A\tC".
 
 ```
-perl rdf.pl -d test insert A B C
+perl dag.pl -d test insert A B C
 ```
-By adding -d option to specify database root, new triple file "test/B.txt" will be created with a content "A\tC".  This is basically same as:
+By adding -d option to specify database root, new SPO file "test/B.txt" will be created with a content "A\tC".  This is basically same as:
 
 ```
-perl rdf.pl insert A test/B C
+perl dag.pl insert A test/B C
 ```
 
-#### Accessing triples on the web http
+#### Accessing SPOs on the web http
 Since the database are in text formats, you can upload those files to a public server and anyone will be able to access your database.
 
 Theoretically, it'll be possible to merge multiple data on different servers into one by specifying predicate like example below.
 
 ```
-perl rdf.pl A->https://aaa.bbb.ccc/ddd->B,B->https://eee.fff.ggg/hhh->C
+perl dag.pl A->https://aaa.bbb.ccc/ddd->B,B->https://eee.fff.ggg/hhh->C
 ```
 
 #### gzipped file
-Gzipped files can be read by the database.  For example, "input.txt.gz" can be read as "input" predicate by the triple database.  This gets handy when database becomes too big and want to save hard-disk spaces.  The down-side is query process will be slowed a bit, since program has to unzip.  Also program will not be able to insert/add new entries to that gunzipped predicate file.
+Gzipped files can be read by the database.  For example, "input.txt.gz" can be read as "input" predicate by the DAG database.  This gets handy when database becomes too big and want to save hard-disk spaces.  The down-side is query process will be slowed a bit, since program has to unzip.  Also program will not be able to insert/add new entries to that gunzipped predicate file.
 
 #### Editing by hands
 
-Since all the triple data are recorded in text files, user can easily edit database through common text editors.  Also by deleting a file, the whole predicate can be deleted too.  For example, if you delete "input.txt", a whole data where predicate is input will be deleted from the database.
+Since all the SPO data are recorded in text files, user can easily edit database through common text editors.  Also by deleting a file, the whole predicate can be deleted too.  For example, if you delete "input.txt", a whole data where predicate is input will be deleted from the database.
 
 ### Web interface
 #### flask docker-compose
@@ -724,7 +723,7 @@ bash scripts/down.sh
 ### Daemon
 >perl moirai2.pl daemon
 Moirai2 can run in daemon mode where program checks for jobs in background and process when found.  Jobs can be assigned in two mode:
-- crontab  moirai2 checks for updates in triple database and process jobs when applicable changes are found.  This is used for an automation of data production.
+- crontab  moirai2 checks for updates in DAG database and process jobs when applicable changes are found.  This is used for an automation of data production.
 - submit  moirai2 checks for a text file under .moirai2/ctrl/submit directory.  A text file contains which command json to use and its parameters.  This is a gateway for a web interface.
 
 #### crontab
@@ -732,7 +731,7 @@ Moirai2 can run in daemon mode where program checks for jobs in background and p
 perl moirai2.pl daemon crontab
 ```
 
-By placing a bash file with input triple (root->input->$input) information in .moirai2/crontab/ directory, moirai2 periodically checks for new entry in predicate=input and process if found.
+By placing a bash file with input SPO (root->input->$input) information in .moirai2/crontab/ directory, moirai2 periodically checks for new entry in predicate=input and process if found.
 
 ```
 #$-i root->input->$input
@@ -741,7 +740,7 @@ output=`wc -l < $input`
 ```
 
 Let's say we a file example.txt with just "Hello World", for example.
-If a new triple 'root->input->example.txt' is added to the database (equivalent of 'root  example.txt' line is added to input.txt), moirai2.pl execute 'output=`wc -l < example.txt`' and stores the result in triple database 'example.txt->count->1' (equivalent of 'example.txt 1' in count.txt).
+If a new SPO 'root->input->example.txt' is added to the database (equivalent of 'root  example.txt' line is added to input.txt), moirai2.pl execute 'output=`wc -l < example.txt`' and stores the result in DAG database 'example.txt->count->1' (equivalent of 'example.txt 1' in count.txt).
 
 #### submit
 ```

@@ -51,7 +51,7 @@ def query():
 
 ############################## db ##############################
 def db(path):
-    cp=subprocess.run(['perl','bin/rdf.pl','-d','static/db','-f','json','query',path],stdout=subprocess.PIPE)
+    cp=subprocess.run(['perl','bin/dag.pl','-d','static/db','-f','json','query',path],stdout=subprocess.PIPE)
     content=cp.stdout
     return path
 
