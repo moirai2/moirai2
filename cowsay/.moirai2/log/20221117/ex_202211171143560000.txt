@@ -1,0 +1,50 @@
+######################################## ex_202211171143560000 ########################################
+https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/285c4b66ffabc235c5792c8f11d2992a_309.json
+https://moirai2.github.io/schema/daemon/execid	ex_202211171143560000
+https://moirai2.github.io/schema/daemon/execute	completed
+https://moirai2.github.io/schema/daemon/localdir	.moirai2/ex_202211171143560000
+https://moirai2.github.io/schema/daemon/processtime	0
+https://moirai2.github.io/schema/daemon/rootdir	/home/ah3q
+https://moirai2.github.io/schema/daemon/timecompleted	1668653048
+https://moirai2.github.io/schema/daemon/timeended	1668653048
+https://moirai2.github.io/schema/daemon/timeregistered	1668653039
+https://moirai2.github.io/schema/daemon/timestarted	1668653048
+https://moirai2.github.io/schema/daemon/workdir	ah3q@172.18.88.57:/home/ah3q/.moirai2remote/ex_202211171143560000
+######################################## time ########################################
+registered	2022/11/17 11:43:59
+start	2022/11/17 11:44:08
+end	2022/11/17 11:44:08
+completed	2022/11/17 11:44:08
+######################################## stdout ########################################
+Linux
+######################################## bash ########################################
+#!/bin/bash
+export PATH=/home/ah3q/.moirai2remote/ex_202211171143560000/bin:/home/ah3q/bin:/home/ah3q/.moirai2remote/bin:$PATH
+cmdurl=".moirai2/cmd/285c4b66ffabc235c5792c8f11d2992a_309.json"
+execid="ex_202211171143560000"
+workdir="/home/ah3q/.moirai2remote/ex_202211171143560000"
+rootdir="/home/ah3q"
+jobfile=".moirai2/ctrl/job/ex_202211171143560000.txt"
+########## init ##########
+cd $rootdir
+touch $workdir/status.txt
+touch $workdir/log.txt
+function status() { echo "$1	"`date +%s` >> $workdir/status.txt ; }
+function record() { echo "$1	$2" >> $workdir/log.txt ; }
+status start
+########## command ##########
+uname
+#############################
+status end
+status=""
+if [ -z "$status" ]; then
+if [ -s $workdir/stderr.txt ]; then
+status=error
+fi
+fi
+if [ -z "$status" ]; then
+status=completed
+fi
+status $status
+sleep 1
+touch $workdir/status.txt

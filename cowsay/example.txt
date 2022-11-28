@@ -1,0 +1,22 @@
+docker run docker/whalesay cowsay hello world
+docker run docker/whalesay cowsay -f dragon hello world
+docker run --rm -i docker/whalesay cowsay -l
+docker run docker/whalesay cowsay -f turkey hello world
+ssh ah3q@172.18.88.57
+docker run docker/whalesay cowsay -f turkey hello world
+
+
+perl moirai2.pl -c 'docker/whalesay' exec 'name=`uname -a`;cowsay $name;'
+
+perl moirai2.pl exec 'uname -a'
+perl moirai2.pl -a 172.18.88.57 exec 'uname -a'
+
+perl moirai2.pl -c 'docker/whalesay' exec cowsay hello world
+
+perl moirai2.pl -S listAnimals.pl -c docker/whalesay -o 'cowsay->character->$animal' -d db exec 'animal=(`cowsay -l | listAnimals.pl`);'
+
+perl moirai2.pl -m 10 -c docker/whalesay -i 'cowsay->character->$animal' -o '$animal->output->$output' -d db exec 'cowsay -f $animal "hello world" > $output' 'output=out/$animal.txt'
+
+perl moirai2.pl -l -d db -i '?->output->($output)' exec 'ls ${output[*]}'
+
+perl moirai2.pl -l -d db -i '?->output->($output)' exec 'cat ${output[*]} > output.txt'

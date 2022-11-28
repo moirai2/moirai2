@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2022/11/19";
+my $program_version="2022/11/15";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:D:f:g:G:hi:qo:r:s:w:x');
@@ -1608,27 +1608,10 @@ sub getFiles{
 	foreach my $file(readdir(DIR)){
 		if($file=~/^\./){next;}
 		if($file eq ""){next;}
-		if($directory eq"."){push(@files,$file);}
-		else{push(@files,"$directory/$file");}
+		push(@files,"$directory/$file");
 	}
 	closedir(DIR);
 	return @files;
-}
-############################## getFilesByLs ##############################
-sub getFilesByLs{
-	my $directory=shift();
-	if(-d $directory){$directory="$directory/*";}
-	my @files=`ls $directory`;
-	my @outs=();
-	my $isDir=0;
-	foreach my $file(@files){
-		chomp($file);
-		if($file=~/^(.+):$/){$file=$1;$isDir=1;}
-		elsif($file eq ""){$isDir=0;next;}
-		elsif($isDir==1){next;}
-		push(@outs,$file);
-	}
-	return sort{$a cmp $b}@outs;
 }
 ############################## getFilesFromQuery ##############################
 sub getFilesFromQuery{
@@ -3055,10 +3038,11 @@ sub queryVariablesSystem{
 	my $query=shift();
 	my $joinKeys=shift();
 	my $predicate=$query->{"predicate"};
-	if($predicate eq "ls"){$predicate="ls *";}
 	if($predicate=~/^ls\s(.+)$/){
 		my $directory=checkDirPathIsSafe($1);
-		my @files=getFilesByLs($directory);
+		if(-d $directory){$directory="$directory/*";}
+		my @files=`ls $directory`;
+		foreach my $file(@files){chomp($file);}
 		my @objVars=exists($query->{"object.variables"})?@{$query->{"object.variables"}}:undef;
 		my $objectR=$query->{"object.regexp"};
 		my $size=scalar(@objVars);
@@ -3672,7 +3656,6 @@ sub splitTriple{
 		chomp;
 		my @tokens=split(/\t/);
 		if(scalar(@tokens)==3){next;}
-		elsif(scalar(@tokens)==1){return ["root",$tokens[0]];}
 		else{return [$tokens[0],$tokens[1]];}
 	}
 	return;
@@ -3776,10 +3759,6 @@ sub test{
 }
 #Test test
 sub test0{
-	#createFile("test/single.txt","A","B","C","D");
-	#testCommand("perl $program_directory/dag.pl query 'root->test/single->\$var'","var","A","B","C","D");
-	#testCommand("perl $program_directory/dag.pl query '*->test/single->\$var'","var","A","B","C","D");
-	#testCommand("perl $program_directory/dag.pl query '?->test/single->\$var'","var","A","B","C","D");
 }
 #Test sub functions
 sub test1{

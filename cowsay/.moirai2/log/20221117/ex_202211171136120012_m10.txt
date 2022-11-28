@@ -1,0 +1,73 @@
+######################################## ex_202211171136120012_m10 ########################################
+.moirai2/cmd/35eaab120933fd8b4db6576f06594f0c_698.json#animal	kiss
+.moirai2/cmd/35eaab120933fd8b4db6576f06594f0c_698.json#output	out/kiss.txt
+https://moirai2.github.io/schema/daemon/command	.moirai2/cmd/35eaab120933fd8b4db6576f06594f0c_698.json
+https://moirai2.github.io/schema/daemon/execid	ex_202211171136120012_m10
+https://moirai2.github.io/schema/daemon/execute	completed
+https://moirai2.github.io/schema/daemon/processtime	0
+https://moirai2.github.io/schema/daemon/rootdir	/root
+https://moirai2.github.io/schema/daemon/timecompleted	1668652616
+https://moirai2.github.io/schema/daemon/timeended	1668652616
+https://moirai2.github.io/schema/daemon/timeregistered	1668652574
+https://moirai2.github.io/schema/daemon/timestarted	1668652616
+https://moirai2.github.io/schema/daemon/workdir	.moirai2/ex_202211171136120012_m10
+######################################## time ########################################
+registered	2022/11/17 11:36:14
+start	2022/11/17 11:36:56
+end	2022/11/17 11:36:56
+completed	2022/11/17 11:36:56
+######################################## insert ########################################
+kiss	db/output	out/kiss.txt
+######################################## bash ########################################
+#!/bin/bash
+export PATH=/root:/root/bin:/root/.moirai2/bin:$PATH
+cmdurl=".moirai2/cmd/35eaab120933fd8b4db6576f06594f0c_698.json"
+execid="ex_202211171136120012_m10"
+workdir="/root/.moirai2/ex_202211171136120012_m10"
+rootdir="/root"
+tmpdir="/root/.moirai2/ex_202211171136120012_m10/tmp"
+animal="kiss"
+jobfile=".moirai2/ctrl/job/ex_202211171136120012_m10.txt"
+output=$tmpdir/output
+########## init ##########
+cd $rootdir
+touch $workdir/status.txt
+touch $workdir/log.txt
+function status() { echo "$1	"`date +%s` >> $workdir/status.txt ; }
+function record() { echo "$1	$2" >> $workdir/log.txt ; }
+mkdir -p /tmp/$execid
+ln -s /tmp/$execid $tmpdir
+status start
+########## command ##########
+cowsay -f $animal "hello world" > $output
+#############################
+status end
+mv $output out/$animal.txt
+output=out/$animal.txt
+if [[ "$(declare -p output)" =~ "declare -a" ]]; then
+for out in ${output[@]} ; do
+record "$cmdurl#output" "$out"
+echo "insert $animal->output->$out"
+done
+else
+record "$cmdurl#output" "$output"
+echo "insert $animal->output->$output"
+fi
+rm $workdir/tmp
+if [ -z "$(ls -A /tmp/$execid)" ]; then
+rmdir /tmp/$execid
+else
+mv /tmp/$execid $workdir/tmp
+fi
+status=""
+if [ -z "$status" ]; then
+if [ -s $workdir/stderr.txt ]; then
+status=error
+fi
+fi
+if [ -z "$status" ]; then
+status=completed
+fi
+status $status
+sleep 1
+touch $workdir/status.txt
