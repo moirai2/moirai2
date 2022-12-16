@@ -123,7 +123,7 @@ my $fileSuffixes={
 	"\\.db?\$"=>\&splitSqlite3
 };
 my $fileIndeces={
-	"(\\.te?xt)(\\.gz(ip)?|\\.bz(ip)?2)?\$"=>undef,
+	#"(\\.te?xt)(\\.gz(ip)?|\\.bz(ip)?2)?\$"=>undef,
 	"(\\.f(ast)?a)(\\.gz(ip)?|\\.bz(ip)?2)?\$"=>["id","sequence"],
 	"(\\.f(ast)?q)(\\.gz(ip)?|\\.bz(ip)?2)?\$"=>["id","sequence"],
 	"(\\.tsv)(\\.gz(ip)?|\\.bz(ip)?2)?\$"=>[0,1],
@@ -616,7 +616,7 @@ sub commandImport{
 				elsif($file=~/\.bz2$/){$writers->{$p}=undef;}
 				elsif(-d $file){$writers->{$p}=undef;}
 				elsif(keys(%{$writers})<$limit-2){
-					my ($writer,$tempfile)=tempfile(UNLINK=>1);
+					my ($writer,$tempfile)=tempfile();
 					if(-e $file){
 						my $reader=openFile($file);
 						while(<$reader>){chomp;print $writer "$_\n";}
@@ -647,7 +647,7 @@ sub commandImport{
 		if($file=~/\.gz$/){next;}
 		elsif($file=~/\.bz2$/){next;}
 		elsif(-d $file){next;}
-		my ($writer,$tempfile)=tempfile(UNLINK=>1);
+		my ($writer,$tempfile)=tempfile();
 		if(-e $file){
 			my $reader=openFile($file);
 			while(<$reader>){chomp;print $writer "$_\n";}
@@ -1009,6 +1009,7 @@ sub commandTimestamp{
 	foreach my $predicate(@predicates){
 		$predicate=~s/\$\w+/\*/g;
 		$predicate=~s/\%/\*/g;
+		$predicate=~s/\#\w+$//g;
 		my @files=`ls $dbdir/$predicate.* 2>/dev/null`;
 		foreach my $file(@files){chomp($file);}
 		foreach my $file(@files){
@@ -2464,7 +2465,8 @@ sub moveTempToDest{
 	my $file=shift();
 	my $dest=shift();
 	mkdir(dirname($dest));
-	rename($file,$dest);
+	system("mv $file $dest");
+	#rename($file,$dest);
 	chmod(0755,$dest);
 }
 ############################## narrowDownByPredicate ##############################
@@ -2685,6 +2687,7 @@ sub queryResults{
 	my $values={};
 	my @tripleAnchors=();
 	@queries=handleTripleQueries(@queries);
+	my $joined;
 	my $joinKeys=[];
 	my $currentKeys=[];
 	if(!defined($results)){$results=[];}
@@ -2698,13 +2701,20 @@ sub queryResults{
 		if(scalar(@{$results})==0){
 			$results=queryVariables($query);
 			if(scalar(@{$results}==0)){return @{$results};}
-			($joinKeys,$currentKeys)=sharedKeys($currentKeys,$query->{"variables"});
+			($joinKeys,$currentKeys,$joined)=sharedKeys($currentKeys,$query);
 			next;
 		}
-		($joinKeys,$currentKeys)=sharedKeys($currentKeys,$query->{"variables"});
-		if(scalar(@{$joinKeys})==0){
+		($joinKeys,$currentKeys,$joined)=sharedKeys($currentKeys,$query);
+		if($joined!=1){
 			print STDERR "Please make sure variables specified in queries are connected\n";
 			exit(1);
+		}
+		if(scalar(@{$joinKeys})==0){
+			#Very special case where variables only exists in predicates
+			#In this case, there is no need to combine previous array and current hash
+			$results=queryVariables($query,undef,$results);
+			if(scalar(@{$results}==0)){return @{$results};}
+			next;
 		}
 		my $joinHash=queryVariables($query,$joinKeys,$results,$expand);
 		my @temp=();
@@ -2769,9 +2779,9 @@ sub queryVariables{
 	my $object=$query->{"object"};
 	my $objectR=$query->{"object.regexp"};
 	my $objVars=$query->{"object.variables"};
-	my $anchor=$query->{"anchor"};
-	my $anchorR=$query->{"anchor.regexp"};
-	my $anchorVars=$query->{"anchor.variables"};
+	my $anchor=exists($query->{"anchor"})?$query->{"anchor"}:undef;
+	my $anchorR=exists($query->{"anchor.regexp"})?$query->{"anchor.regexp"}:undef;
+	my $anchorVars=exists($query->{"anchor.variables"})?$query->{"anchor.variables"}:undef;
 	my @files=getFilesFromQuery($predicate,$dir,$results);
 	my @array=();
 	my $hashtable={};
@@ -2908,20 +2918,21 @@ sub queryVariablesFileHandler{
 		}
 	}
 	#Set default index for all file types
-	if(!exists($query->{"index"})){$query->{"index"}=$fileIndeces->{$fileSuffix};}
+	if(!exists($query->{"index"})&&exists($fileIndeces->{$fileSuffix})){$query->{"index"}=$fileIndeces->{$fileSuffix};}
 	if(!exists($query->{"anchor"})){#Set up anchor from variable and index information
-		$query->{"anchor"}={};
+		my $anchor={};
 		my $variables={};
 		foreach my $variable(@{$query->{"variables"}}){$variables->{$variable}=1;}
 		my $predicate=$query->{"predicate"};
 		my $object=$query->{"object"};
 		for(my $i=1;$i<scalar(@{$query->{"index"}});$i++){
 			my $key=$query->{"index"}->[$i];
-			$query->{"anchor"}->{$key}={"predicate"=>"$predicate#$key","object"=>$object};
-			handleTripleQueriesRegexpVars($query->{"anchor"}->{$key},"predicate",$variables);
-			handleTripleQueriesRegexpVars($query->{"anchor"}->{$key},"object",$variables);
+			$anchor->{$key}={"predicate"=>"$predicate#$key","object"=>$object};
+			handleTripleQueriesRegexpVars($anchor->{$key},"predicate",$variables);
+			handleTripleQueriesRegexpVars($anchor->{$key},"object",$variables);
 		}
 		my @keys=sort{$a cmp $b}keys(%{$variables});
+		if(keys(%{$anchor})>0){$query->{"anchor"}=$anchor;}
 		$query->{"variables"}=\@keys;
 	}
 	return (openFile($file),$function);
@@ -3208,17 +3219,26 @@ sub samStartEndStrand{
 ############################## sharedKeys ##############################
 sub sharedKeys{
 	my $array1=shift();
-	my $array2=shift();
+	my $query=shift();
 	my $h1={};
 	my $h2={};
 	my $total={};
+	my $joined=0;
 	foreach my $a(@{$array1}){$h1->{$a}=1;$total->{$a}=1;}
-	foreach my $a(@{$array2}){$h2->{$a}=1;$total->{$a}=1;}
+	foreach my $a(@{$query->{"subject.variables"}}){$h2->{$a}=1;$total->{$a}=1;if(exists($h1->{$a})){$joined=1;}}
+	foreach my $a(@{$query->{"predicate.variables"}}){$total->{$a}=1;if(exists($h1->{$a})){$joined=1;}}
+	if(exists($query->{"anchor"})){
+		foreach my $v(values(%{$query->{"anchor"}})){
+			foreach my $a(@{$v->{"object.variables"}}){$h2->{$a}=1;$total->{$a}=1;if(exists($h1->{$a})){$joined=1;}}
+		}
+	}else{
+		foreach my $a(@{$query->{"object.variables"}}){$h2->{$a}=1;$total->{$a}=1;if(exists($h1->{$a})){$joined=1;}}
+	}
 	my @keys=();
 	foreach my $key(keys(%{$h1})){if(exists($h2->{$key})){push(@keys,$key);}}
 	@keys=sort{$a cmp $b}@keys;
 	my @totalKeys=sort{$a cmp $b}keys(%{$total});
-	return (\@keys,\@totalKeys);
+	return (\@keys,\@totalKeys,$joined);
 }
 ############################## sizeFiles ##############################
 sub sizeFiles{
@@ -3262,7 +3282,7 @@ sub sortSubs{
 	}
 	close($reader);
 	if(defined($name)){$blocks->{$name}=$block;push(@orders,$name);}
-	my ($writer,$file)=tempfile("scriptXXXXXXXXXX",DIR=>"/tmp",SUFFIX=>".pl",UNLINK=>1);
+	my ($writer,$file)=tempfile("scriptXXXXXXXXXX",DIR=>"/tmp",SUFFIX=>".pl");
 	foreach my $line(@headers){print $writer "$line\n";}
 	foreach my $key(sort{$a cmp $b}@orders){foreach my $line(@{$blocks->{$key}}){print $writer "$line\n";}}
 	close($writer);
@@ -3776,10 +3796,6 @@ sub test{
 }
 #Test test
 sub test0{
-	#createFile("test/single.txt","A","B","C","D");
-	#testCommand("perl $program_directory/dag.pl query 'root->test/single->\$var'","var","A","B","C","D");
-	#testCommand("perl $program_directory/dag.pl query '*->test/single->\$var'","var","A","B","C","D");
-	#testCommand("perl $program_directory/dag.pl query '?->test/single->\$var'","var","A","B","C","D");
 }
 #Test sub functions
 sub test1{
@@ -4033,6 +4049,33 @@ sub test2{
 	rmdir("db/flag");
 	unlink("db/input.txt");
 	rmdir("db");
+	#Testing * and ? with one column file
+	createFile("test/single.txt","A","B","C","D");
+	testCommand("perl $program_directory/dag.pl query 'root->test/single->\$var'","var","A","B","C","D");
+	testCommand("perl $program_directory/dag.pl query '*->test/single->\$var'","var","A","B","C","D");
+	testCommand("perl $program_directory/dag.pl query '?->test/single->\$var'","var","A","B","C","D");
+	unlink("test/single.txt");
+	#Testing variables in predicates
+	createFile("test/root.txt","A","root2\tB");
+	createFile("test/A/value.txt","B\t2","B\t3","C\t4","D\t5");
+	createFile("test/B/value.txt","E\t6");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir'","dir","A");
+	testCommand("perl $program_directory/dag.pl -d test query 'root2->root->\$dir'","dir","B");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value->\$val'","dir\tkey\tval","A\tB\t2","A\tB\t3","A\tC\t4","A\tD\t5");
+	testCommand("perl $program_directory/dag.pl -d test query 'root2->root->\$dir' '\$key->\$dir/value->\$val'","dir\tkey\tval","B\tE\t6");
+	createFile("test/root.txt","A");
+	createFile("test/A/value.txt","AA\tB\t1","CA\tB\t2","EA\tB\t3","AA\tC\t4","CA\tC\t5","EA\tC\t6");
+	createFile("test/B/value.txt","AB\tB\t4","CB\tB\t5","EB\tB\t6");
+	testCommand("perl $program_directory/dag.pl -d test query '\$key->A/value#B->\$val'","key\tval","AA\t1","CA\t2","EA\t3");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#B->\$val'","dir\tkey\tval","A\tAA\t1","A\tCA\t2","A\tEA\t3");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#C->\$val'","dir\tkey\tval","A\tAA\t4","A\tCA\t5","A\tEA\t6");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#\$anchor->\$val'","anchor\tdir\tkey\tval","B\tA\tAA\t1","B\tA\tCA\t2","B\tA\tEA\t3","C\tA\tAA\t4","C\tA\tCA\t5","C\tA\tEA\t6");
+	testCommand("perl $program_directory/dag.pl -d test query '\$key->\$dir/value#B->\$val'","dir\tkey\tval","A\tAA\t1","A\tCA\t2","A\tEA\t3","B\tAB\t4","B\tCB\t5","B\tEB\t6");
+	unlink("test/root.txt");
+	unlink("test/A/value.txt");
+	unlink("test/B/value.txt");
+	rmdir("test/A");
+	rmdir("test/B");
 }
 #Testing advanced cases
 sub test3{
@@ -4158,7 +4201,6 @@ sub test3{
 	rmdir("test/A/B/C");
 	rmdir("test/A/B");
 	rmdir("test/A");
-	rmdir("test");
 }
 sub test4{
 	#Testing file predicates FASTA, CSV, TSV
@@ -4528,7 +4570,7 @@ sub tsvToJson{
 	while(<$reader>){
 		chomp;
 		s/\r//g;
-		my ($subject,$predicate,$object)=split(/\t/);
+		my ($subject,$predicate,$object)=split(/\t|\-\>/);
 		if(!exists($json->{$subject})){$json->{$subject}={};}
 		if(!exists($json->{$subject}->{$predicate})){$json->{$subject}->{$predicate}=$object;}
 		elsif(ref($json->{$subject}->{$predicate}) eq "ARRAY"){push(@{$json->{$subject}->{$predicate}},$object);}
