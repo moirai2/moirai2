@@ -252,12 +252,36 @@ sub assignResults{
 	my $results=shift();
 	my $key=shift();
 	my $val=shift();
-	my @values=split(/,/,$val);
-	my $size=scalar(@values);
-	for(my $i=0;$i<$size;$i++){
-		if(!defined($results->[$i])){$results->[$i]={};}
-		my $hash=$results->[$i];
-		$hash->{$key}=$values[$i];
+	if(!defined($val)){return;}
+	if($val=~/^\{/){return;}#Can't handle json in hash format
+	if($val=~/^\[/){$val=jsonDecode($val);}#Can handle json in array format
+	if(ref($val)ne"ARRAY"){$val=[$val];}
+	my $results2=[];
+	foreach my $v(@{$val}){
+		if(ref($v)eq"ARRAY"){print STDERR "WARNING: '$v' can't be ARRAY.  Ignoring this value.\n";next;}
+		if(ref($v)eq"HASH"){print STDERR "WARNING: '$v' can't be HASH.  Ignoring this value.\n";next;}
+		push(@{$results2},$v);
+	}
+	my $size1=scalar(@{$results});
+	my $size2=scalar(@{$results2});
+	if($size2==0){return;}
+	if($size1==0){$results->[0]={};$size1=1;}
+	if($size2>1){
+		for(my $i=1;$i<$size2;$i++){
+			for(my $j=0;$j<$size1;$j++){
+				my $h1=$results->[$j];
+				$results->[$i*$size1+$j]={};
+				while(my($key,$val)=each(%{$h1})){
+					$results->[$i*$size1+$j]->{$key}=$val;
+				}
+			}
+		}
+	}
+	for(my $i=0;$i<$size2;$i++){
+		my $val2=$results2->[$i];
+		for(my $j=0;$j<$size1;$j++){
+			$results->[$i*$size1+$j]->{$key}=$val2;
+		}
 	}
 }
 ############################## avgArray ##############################
@@ -849,10 +873,14 @@ sub commandQuery{
 	my @queries=();
 	my @results=();
 	foreach my $arg(@args){
-		if($arg=~/^\$(\w+)\=(.+)$/){assignResults(\@results,$1,$2);}
-		else{push(@queries,splitQueries($arg));}
+		foreach my $token(@{splitTokenByComma($arg)}){splitQueries($token,\@queries,\@results);}
 	}
-	if(scalar(@queries)==0){while(<STDIN>){chomp;push(@queries,splitQueries($_));}}
+	if(scalar(@queries)==0&&scalar(@results)==0){
+		while(<STDIN>){
+			chomp;
+			foreach my $token(@{splitTokenByComma($_)}){splitQueries($token,\@queries,\@results);}
+		}
+	}
 	foreach my $query(@queries){downloadUrlFromQuery($query);}
 	if(!defined($opt_f)){$opt_f="tsv";}
 	my @results=queryResults($opt_x,\@results,@queries);
@@ -2242,8 +2270,6 @@ sub kendallRankCorrelation{
 	my $r=($p-$q)/sqrt(($p+$q+$t)*($p+$q+$u));
 	my $z=$r/sqrt(2*(2*$countX+5)/(9*$countX*($countX-1)));
 	my $p=2*(1-normsdist($z));
-	print STDERR "n=$countX t=$t u=$u p=$p q=$q r=$r z=$z p=$p\n";
-	exit();
 	my $r1=6*sumDiffSquare($x,$y);
 	my $r2=$countX*($countX*$countY-1);
 	if($r2==0){return wantarray?(0,0):0;}
@@ -3501,31 +3527,30 @@ sub splitGtf{
 }
 ############################## splitQueries ##############################
 sub splitQueries{
-	my $arg=shift();
-	my @tokens=@{splitTokenByComma($arg)};
-	my @queries=();
-	my $query;
-	foreach my $token(@tokens){
-		my $string=$token;
-		my $count=$string=~s/\-\>//g;
-		if($count==2){push(@queries,$token);}
-		elsif(defined($query)){
-			$query.=",$token";
-			$string=$query;
-			my $count=$string=~s/\-\>//g;
-			if($count==2){push(@queries,$query);$query=undef;}
-			elsif($count>2){
-				$query=undef;
-				print STDERR "ERROR: '$query' has multiple '->' (More than 2)\n";
-				exit(1);
+	my $query=shift();
+	my $queries=shift();
+	my $results=shift();
+	if($query=~/^\$(\w+)\=(.+)$/){assignResults($results,$1,$2);return;}
+	my @tokens=split(/\-\>/,$query);
+	my $count=scalar(@tokens);
+	if($count==3){push(@{$queries},$query);}
+	elsif($count>3){print STDERR "ERROR: '$query' has multiple '->' (More than 2)\n";exit(1);}
+	elsif($count>1){print STDERR "ERROR: '$query' doesn't have enough '->' (Less than 2)\n";exit(1);}
+	else{#Probably it's in json format
+		my $json=jsonDecode($query);
+		if(ref($json)ne"ARRAY"){$json=[$json];}
+		foreach my $j(@{$json}){
+			if(ref($j)ne"HASH"){return;}
+			my @remkeys=();
+			my @keys=keys(%{$j});
+			foreach my $key(@keys){
+				my $val=$j->{$key};
+				if(ref($val)eq"HASH"){delete($j->{$key});}
+				elsif(ref($val)eq"ARRAY"){delete($j->{$key});}
 			}
-		}elsif($count<2){$query=$token;}
+			push(@{$results},$j);
+		}
 	}
-	if(defined($query)){
-		print STDERR "'$query' doesn't have subject, predicate, object\n";
-		exit(1);
-	}
-	return @queries;
 }
 ############################## splitRunInfo ##############################
 #Run,ReleaseDate,LoadDate,spots,bases,spots_with_mates,avgLength,size_MB,AssemblyName,download_path,Experiment,LibraryName,LibraryStrategy,LibrarySelection,LibrarySource,LibraryLayout,InsertSize,InsertDev,Platform,Model,SRAStudy,BioProject,Study_Pubmed_id,ProjectID,Sample,BioSample,SampleType,TaxID,ScientificName,SampleName,g1k_pop_code,source,g1k_analysis_group,Subject_ID,Sex,Disease,Tumor,Affection_Status,Analyte_Type,Histological_Type,Body_Site,CenterName,Submission,dbgap_study_accession,Consent,RunHash,ReadHash
@@ -4076,6 +4101,19 @@ sub test2{
 	unlink("test/B/value.txt");
 	rmdir("test/A");
 	rmdir("test/B");
+	#Testing assign arguments
+	testCommand("perl $program_directory/dag.pl -d test query '\$a=\"A\"'","a","A");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a=\"A\"' '\$b=\"H\"'","a\tb","A\tH");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a=\"A\",\$b=\"H\"'","a\tb","A\tH");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a=[\"A\",\"T\"],\$b=\"H\"'","a\tb","A\tH","T\tH");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a=[\"A\",\"T\"],\$b=[\"H\"]'","a\tb","A\tH","T\tH");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a=[\"A\",\"T\"],\$b=[\"H\",\"J\"]'","a\tb","A\tH","T\tH","A\tJ","T\tJ");
+	testCommand("perl $program_directory/dag.pl -d test query '{\"a\":\"A\",\"b\":\"H\"}'","a\tb","A\tH");
+	testCommand("perl $program_directory/dag.pl -d test query '{\"a\":\"A\",\"b\":\"H\"}' '{\"c\":\"T\",\"d\":\"J\"}'","a\tb\tc\td","A\tH\t\t","\t\tT\tJ");
+	testCommand("perl $program_directory/dag.pl -d test query '[{\"a\":\"A\",\"b\":\"H\"},{\"a\":\"T\",\"b\":\"J\"}]'","a\tb","A\tH","T\tJ");
+	testCommand("perl $program_directory/dag.pl -d test query '[{\"a\":\"A\"},{\"b\":\"H\"}]'","a\tb","A\t","\tH");
+	testCommand("perl $program_directory/dag.pl -d test query '{\"c\":\"T\",\"d\":\"J\"}' '\$a=[\"A\",\"H\"]'","a\tc\td","A\tT\tJ","H\tT\tJ");
+	testCommand("perl $program_directory/dag.pl -d test query '{\"c\":\"T\",\"d\":\"J\"}' '{\"b\":\"T\",\"d\":\"J\"}' '\$a=[\"A\",\"H\"]'","a\tb\tc\td","A\t\tT\tJ","A\tT\t\tJ","H\t\tT\tJ","H\tT\t\tJ");
 }
 #Testing advanced cases
 sub test3{
