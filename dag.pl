@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2022/11/28";
+my $program_version="2023/01/16";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:D:f:g:G:hi:qo:r:s:w:x');
@@ -559,7 +559,7 @@ sub deleteJson{
 		elsif(!-e $file){next;}
 		my $pre=getPredicateFromFile($file);
 		my $reader=openFile($file);
-		my ($writer,$tempfile)=tempfile();
+		my ($writer,$tempfile)=tempfile(UNLINK=>1);
 		while(<$reader>){
 			chomp;
 			my @tokens=split(/\t/);
@@ -640,7 +640,7 @@ sub commandImport{
 				elsif($file=~/\.bz2$/){$writers->{$p}=undef;}
 				elsif(-d $file){$writers->{$p}=undef;}
 				elsif(keys(%{$writers})<$limit-2){
-					my ($writer,$tempfile)=tempfile();
+					my ($writer,$tempfile)=tempfile(UNLINK=>1);
 					if(-e $file){
 						my $reader=openFile($file);
 						while(<$reader>){chomp;print $writer "$_\n";}
@@ -671,7 +671,7 @@ sub commandImport{
 		if($file=~/\.gz$/){next;}
 		elsif($file=~/\.bz2$/){next;}
 		elsif(-d $file){next;}
-		my ($writer,$tempfile)=tempfile();
+		my ($writer,$tempfile)=tempfile(UNLINK=>1);
 		if(-e $file){
 			my $reader=openFile($file);
 			while(<$reader>){chomp;print $writer "$_\n";}
@@ -682,7 +682,7 @@ sub commandImport{
 		$files->{$file}=$tempfile;
 	}
 	while(my($file,$tempfile)=each(%{$files})){
-		my ($writer2,$tempfile2)=tempfile();
+		my ($writer2,$tempfile2)=tempfile(UNLINK=>1);
 		close($writer2);
 		chmod(0777,$tempfile2);
 		system("sort $tempfile -u > $tempfile2");
@@ -723,7 +723,7 @@ sub insertJson{
 		elsif(-d $file){$file="$file.txt";}
 		my $anchor;
 		if($predicate=~/#(.+)$/){$anchor=$1;}
-		my ($writer,$tempfile)=tempfile();
+		my ($writer,$tempfile)=tempfile(UNLINK=>1);
 		if(-e $file){
 			my $reader=openFile($file);
 			while(<$reader>){chomp;print $writer "$_\n";$count++;}
@@ -743,7 +743,7 @@ sub insertJson{
 		close($writer);
 		if($count==0){unlink($file);}
 		elsif($inserted>0){
-			my ($writer2,$tempfile2)=tempfile();
+			my ($writer2,$tempfile2)=tempfile(UNLINK=>1);
 			close($writer2);
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
@@ -776,30 +776,62 @@ sub commandMd5{
 }
 ############################## commandProcess ##############################
 #Only allows tsv format
+#order is delete, insert, and update
 sub commandProcess{
 	my @args=@_;
-	my $updates={};
-	my $deletes={};
-	my $inserts={};
+	my ($deleteWriter,$deleteTemp)=tempfile(UNLINK=>1);
+	my ($insertWriter,$insertTemp)=tempfile(UNLINK=>1);
+	my ($updateWriter,$updateTemp)=tempfile(UNLINK=>1);
+	my $deleteCount=0;
+	my $insertCount=0;
+	my $updateCount=0;
 	while(<STDIN>){
 		chomp;
-		if(/^update\s(.+)$/i){tripleTohashUniq($updates,commandProcessSplit($1));}
-		elsif(/^delete\s(.+)$/i){tripleTohash($deletes,commandProcessSplit($1));}
-		elsif(/^insert\s(.+)$/i){tripleTohash($inserts,commandProcessSplit($1));}
+		if(/^delete\s(.+)$/i){
+			my ($sub,$pre,$obj,$anchor)=commandProcessSplit($1);	
+			print $deleteWriter "$pre\t$anchor\t$sub\t$obj\n";
+			$deleteCount++;
+		}elsif(/^insert\s(.+)$/i){
+			my ($sub,$pre,$obj,$anchor)=commandProcessSplit($1);
+			print $insertWriter "$pre\t$anchor\t$sub\t$obj\n";
+			$insertCount++;
+		}elsif(/^update\s(.+)$/i){
+			my ($sub,$pre,$obj,$anchor)=commandProcessSplit($1);
+			print $updateWriter "$pre\t$anchor\t$sub\t$obj\n";
+			$updateCount++;
+		}
 	}
-	my $totalUpdate=updateJson($updates);
-	if(!defined($opt_q)){print "updated $totalUpdate\n";}
-	my $totalDelete=deleteJson($deletes);
-	if(!defined($opt_q)){print "deleted $totalDelete\n";}
-	my $totalInsert=insertJson($inserts);
-	if(!defined($opt_q)){print "inserted $totalInsert\n";}
+	close($deleteWriter);
+	close($insertWriter);
+	close($updateWriter);
+	if($deleteCount==0){unlink($deleteTemp);}
+	else{
+		$deleteCount=processTsv(\&deleteTsv,$deleteTemp);
+		if(!defined($opt_q)){print "deleted $deleteCount\n";}
+	}
+	if($insertCount==0){unlink($insertTemp);}
+	else{
+		$insertCount=processTsv(\&insertTsv,$insertTemp);
+		if(!defined($opt_q)){print "inserted $insertCount\n";}
+	}
+	if($updateCount==0){unlink($updateTemp);}
+	else{
+		$updateCount=processTsv(\&updateTsv,$updateTemp);
+		if(!defined($opt_q)){print "updated $updateCount\n";}
+	}
 }
+############################## commandProcessSplit ##############################
 sub commandProcessSplit{
 	my $line=shift();
-	if($line=~/^(.+)\-\>(.+)\-\>(.+)$/){return ($1,$2,$3);}
-	elsif($line=~/^(.+)\t(.+)\t(.+)$/){return ($1,$2,$3);}
-	elsif($line=~/^(.+)\,(.+)\,(.+)$/){return ($1,$2,$3);}
-	elsif($line=~/^(.+)\s(.+)\s(.+)$/){return ($1,$2,$3);}
+	my $s;
+	my $p;
+	my $o;
+	if($line=~/^(.+)\-\>(.+)\-\>(.+)$/){$s=$1;$p=$2;$o=$3;}
+	elsif($line=~/^(.+)\t(.+)\t(.+)$/){$s=$1;$p=$2;$o=$3;}
+	elsif($line=~/^(.+)\,(.+)\,(.+)$/){$s=$1;$p=$2;$o=$3;}
+	elsif($line=~/^(.+)\s(.+)\s(.+)$/){$s=$1;$p=$2;$o=$3;}
+	if($p=~/^(.+)#(.+)$/){return ($s,$1,$o,$2);}
+	else{return ($s,$p,$o);}
 }
 ############################## commandPrompt ##############################
 sub commandPrompt{
@@ -884,7 +916,7 @@ sub commandQuery{
 	foreach my $query(@queries){downloadUrlFromQuery($query);}
 	if(!defined($opt_f)){$opt_f="tsv";}
 	my @results=queryResults($opt_x,\@results,@queries);
-	my ($writer,$tempfile)=tempfile();
+	my ($writer,$tempfile)=tempfile(UNLINK=>1);
 	if($opt_f eq "json"){
 		print $writer jsonEncode(\@results)."\n";
 	}elsif($opt_f=~/^sqlite3/){
@@ -1085,7 +1117,7 @@ sub updateJson{
 		if($file=~/\.gz$/){next;}
 		elsif($file=~/\.bz2$/){next;}
 		elsif(-d $file){next;}
-		my ($writer,$tempfile)=tempfile();
+		my ($writer,$tempfile)=tempfile(UNLINK=>1);
 		if(! -e $file){mkdirs(dirname($file));}
 		if(defined($anchor)){
 			my $reader=openFile($file);
@@ -1123,7 +1155,7 @@ sub updateJson{
 		close($writer);
 		if($count==0){unlink($file);}
 		elsif($updated>0){
-			my ($writer2,$tempfile2)=tempfile();
+			my ($writer2,$tempfile2)=tempfile(UNLINK=>1);
 			close($writer2);
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
@@ -1331,6 +1363,23 @@ sub createTextTextTable{
 	$hashtable->{"colSize"}=$colSize;
 	$hashtable->{"sampleSize"}=$countX;
 	return $hashtable;
+}
+############################## deleteTsv ##############################
+sub deleteTsv{
+	my $predicate=shift();
+	my $tempfile=shift();
+	my $writer=shift();
+	close($writer);
+	my $file=getFileFromPredicate($predicate);
+	if($file=~/\.gz$/){return;}
+	elsif($file=~/\.bz2$/){return;}
+	elsif(-d $file){return;}
+	my $hash1=readTsvToKeyValHash($file);#original
+	my $hash2=readTsvToKeyValHash($tempfile);#updates
+	my $count=0;
+	while(my($key,$val)=each(%{$hash2})){if(exists($hash1->{$key})){delete($hash1->{$key});$count++;}}
+	writeKeyValHash($file,$hash1);
+	return $count;
 }
 ############################## downloadUrl ##############################
 sub downloadUrl{
@@ -1937,9 +1986,7 @@ sub handleInputOutput{
 sub handleTripleQueries{
 	my @queries=@_;
 	my @triples=();
-	my @triples=();
-	my @triplesWithAnchors=();
-	my @triplesWithIndeces=();
+	my $anchorHashtable={};
 	foreach my $query(@queries){
 		my ($subject,$predicate,$object)=split(/\-\>/,$query);
 		my $anchor;
@@ -1948,16 +1995,19 @@ sub handleTripleQueries{
 		if($predicate=~/^(.+)\?(.+)$/){$predicate=$1;$parameter=$2;}
 		if(defined($anchor)){
 			my $type=checkTripleAnchor($subject,$predicate,$object,$anchor);
-			if($type==1){push(@triplesWithAnchors,[$query,$subject,$predicate,$object,$anchor,$parameter]);next;}
-			elsif($type==2){push(@triplesWithIndeces,[$query,$subject,$predicate,$object,$anchor,$parameter]);next;}
+			if($type==1){
+				handleTripleQueriesMergeAnchors($anchorHashtable,\@triples,[$query,$subject,$predicate,$object,$anchor,$parameter]);
+				next;
+			}elsif($type==2){
+				handleTripleQueriesMergeAnchors($anchorHashtable,\@triples,[$query,$subject,$predicate,$object,$anchor,$parameter],1);
+				next;
+			}
 		}
 		my $hash={"query"=>$query,"subject"=>$subject,"predicate"=>$predicate,"object"=>$object};
 		if(defined($anchor)){$hash->{"anchor"}=$anchor;}
 		if(defined($parameter)){$hash->{"parameter"}=$parameter;}
 		push(@triples,$hash);
 	}
-	handleTripleQueriesMergeAnchors(\@triples,\@triplesWithAnchors);
-	handleTripleQueriesMergeAnchors(\@triples,\@triplesWithIndeces,1);
 	foreach my $triple(@triples){
 		my $variables={};
 		foreach my $key("subject","predicate","object"){
@@ -1991,61 +2041,59 @@ sub handleTripleQueriesFunction{
 }
 ############################## handleTripleQueriesMergeAnchors ##############################
 sub handleTripleQueriesMergeAnchors{
+	my $hashtable=shift();
 	my $triples=shift();
 	my $tripleWithAnchors=shift();
 	my $isIndex=shift();
-	my $hashtable={};
 	my $variables={};
-	foreach my $triple(@${tripleWithAnchors}){
-		my ($query,$subject,$predicate,$object,$anchor,$parameter)=@{$triple};
-		my $pred=getPredicateFromFile($predicate);
-		if(!exists($hashtable->{$subject})){$hashtable->{$subject}={};}
-		if(!exists($hashtable->{$subject}->{$predicate})){
-			my $tmp={};
-			if(defined($isIndex)){$tmp->{"isIndex"}="true";}
-			else{$tmp->{"isAnchor"}="true";}
-			$tmp->{"query"}=[];
-			$tmp->{"order"}=[];
-			$tmp->{"subject"}=$subject;
-			$tmp->{"predicate"}=$pred;
-			if(defined($parameter)){
-				my $hash={};
-				foreach my $param(split(/\&/,$parameter)){
-					my ($key,$val)=split(/\=/,$param);
-					$hash->{$key}=$val;
-				}
-				$tmp->{"parameter"}=$hash;
+	my ($query,$subject,$predicate,$object,$anchor,$parameter)=@{$tripleWithAnchors};
+	my $pred=getPredicateFromFile($predicate);
+	if(!exists($hashtable->{$subject})){$hashtable->{$subject}={};}
+	if(!exists($hashtable->{$subject}->{$predicate})){
+		my $tmp={};
+		if(defined($isIndex)){$tmp->{"isIndex"}="true";}
+		else{$tmp->{"isAnchor"}="true";}
+		$tmp->{"query"}=[];
+		$tmp->{"order"}=[];
+		$tmp->{"subject"}=$subject;
+		$tmp->{"predicate"}=$pred;
+		if(defined($parameter)){
+			my $hash={};
+			foreach my $param(split(/\&/,$parameter)){
+				my ($key,$val)=split(/\=/,$param);
+				$hash->{$key}=$val;
 			}
-			$tmp->{"predicateUrl"}=$predicate;
-			$tmp->{"anchor"}={};
-			if($anchor=~/\$\w+/){$tmp->{"isVariableAnchor"}="true";}
-			$hashtable->{$subject}->{$predicate}=$tmp;
-			push(@{$triples},$tmp);
+			$tmp->{"parameter"}=$hash;
 		}
-		my $tmp=$hashtable->{$subject}->{$predicate};
-		push(@{$tmp->{"query"}},$query);
-		if(defined($isIndex)){
-			my ($key,@vals)=split(/:/,$anchor);
-			my @objs=split(/:/,$object);
-			my $size=scalar(@vals);
-			if($size!=scalar(@objs)){
-				print STDERR "Number of anchors and values don't match\n";
-				print STDERR "values=".join(",",@vals);
-				print STDERR "objects=".join(",",@objs);
-				exit(1);
-			}
-			$tmp->{"index"}=[$key,@vals];
-			for(my $i=0;$i<$size;$i++){
-				my $v=$vals[$i];
-				my $o=$objs[$i];
-				$tmp->{"anchor"}->{$v}={"predicate"=>"$pred#$v","object"=>$o};
-			}
-			for(my $i=0;$i<scalar(@vals);$i++){push(@{$tmp->{"order"}},$vals[$i]);}
-		}else{
-			push(@{$tmp->{"order"}},$anchor);
-			my $hash={"predicate"=>"$pred#$anchor","object"=>$object};
-			$tmp->{"anchor"}->{$anchor}=$hash;
+		$tmp->{"predicateUrl"}=$predicate;
+		$tmp->{"anchor"}={};
+		if($anchor=~/\$\w+/){$tmp->{"isVariableAnchor"}="true";}
+		$hashtable->{$subject}->{$predicate}=$tmp;
+		push(@{$triples},$tmp);
+	}
+	my $tmp=$hashtable->{$subject}->{$predicate};
+	push(@{$tmp->{"query"}},$query);
+	if(defined($isIndex)){
+		my ($key,@vals)=split(/:/,$anchor);
+		my @objs=split(/:/,$object);
+		my $size=scalar(@vals);
+		if($size!=scalar(@objs)){
+			print STDERR "Number of anchors and values don't match\n";
+			print STDERR "values=".join(",",@vals);
+			print STDERR "objects=".join(",",@objs);
+			exit(1);
 		}
+		$tmp->{"index"}=[$key,@vals];
+		for(my $i=0;$i<$size;$i++){
+			my $v=$vals[$i];
+			my $o=$objs[$i];
+			$tmp->{"anchor"}->{$v}={"predicate"=>"$pred#$v","object"=>$o};
+		}
+		for(my $i=0;$i<scalar(@vals);$i++){push(@{$tmp->{"order"}},$vals[$i]);}
+	}else{
+		push(@{$tmp->{"order"}},$anchor);
+		my $hash={"predicate"=>"$pred#$anchor","object"=>$object};
+		$tmp->{"anchor"}->{$anchor}=$hash;
 	}
 }
 ############################## handleTripleQueriesRegexpVars ##############################
@@ -2093,6 +2141,22 @@ sub handleTripleQueriesRegexpVars{
 			if($pipedVars){$triple->{"$key.regexp"}=undef;}
 		}
 	}
+}
+############################## insertTsv ##############################
+sub insertTsv{
+	my $predicate=shift();
+	my $tempfile=shift();
+	my $writer=shift();
+	close($writer);
+	my $file=getFileFromPredicate($predicate);
+	if($file=~/\.gz$/){return;}
+	elsif($file=~/\.bz2$/){return;}
+	elsif(-d $file){return;}
+	my $hash=readTsvToKeyValHash($file);#original
+	my $count;
+	($hash,$count)=readTsvToKeyValHash($tempfile,$hash);#updates
+	writeKeyValHash($file,$hash);
+	return $count;
 }
 ############################## isArrayAllInteger ##############################
 sub isArrayAllInteger{
@@ -2705,6 +2769,31 @@ sub processTripleFunctionGetVariable{
 	elsif(scalar(@{$variables})>1){print STDERR "variable should be one for function\n";exit(1);}
 	return $variables->[0];
 }
+############################## processTsv ##############################
+sub processTsv{
+	my $process=shift();
+	my $file=shift();
+	my $reader=openFile($file);
+	my $prevPredicate;
+	my $writer;
+	my $tempfile;
+	my $count=0;
+	while(<$reader>){
+		chomp;
+		my ($predicate,$anchor,$subject,$object)=split(/\t/);
+		if($predicate ne $prevPredicate){
+			if(defined($writer)&&defined($tempfile)){$count+=$process->($prevPredicate,$tempfile,$writer);}
+			($writer,$tempfile)=tempfile(UNLINK=>1);
+			$prevPredicate=$predicate;
+		}
+		if($anchor ne""){print $writer "$subject\t$anchor\t$object\n";}
+		else{print $writer "$subject\t$object\n";}
+	}
+	close($reader);
+	unlink($file);
+	if(defined($writer)&&defined($tempfile)){$count+=$process->($prevPredicate,$tempfile,$writer);}
+	return $count;
+}
 ############################## queryResults ##############################
 sub queryResults{
 	my @queries=@_;
@@ -2724,10 +2813,11 @@ sub queryResults{
 	}
 	for(my $i=0;$i<scalar(@queries);$i++){
 		my $query=$queries[$i];
-		if(scalar(@{$results})==0){
-			$results=queryVariables($query);
-			if(scalar(@{$results}==0)){return @{$results};}
+		if($i==0){
+			my $queryResult=queryVariables($query,$expand);
+			if(scalar(@{$queryResult}==0)){return @{$queryResult};}
 			($joinKeys,$currentKeys,$joined)=sharedKeys($currentKeys,$query);
+			$results=$queryResult;
 			next;
 		}
 		($joinKeys,$currentKeys,$joined)=sharedKeys($currentKeys,$query);
@@ -2735,14 +2825,12 @@ sub queryResults{
 			print STDERR "Please make sure variables specified in queries are connected\n";
 			exit(1);
 		}
-		if(scalar(@{$joinKeys})==0){
-			#Very special case where variables only exists in predicates
-			#In this case, there is no need to combine previous array and current hash
-			$results=queryVariables($query,undef,$results);
-			if(scalar(@{$results}==0)){return @{$results};}
+		my $queryResult=queryVariables($query,$expand,$joinKeys,$results);
+		if(ref($queryResult)eq"ARRAY"){
+			if(scalar(@{$queryResult}==0)){return @{$queryResult};}
+			$results=$queryResult;
 			next;
 		}
-		my $joinHash=queryVariables($query,$joinKeys,$results,$expand);
 		my @temp=();
 		my $founds={};
 		my @array=();
@@ -2750,8 +2838,8 @@ sub queryResults{
 		foreach my $h1(@{$results}){
 			my $found=0;
 			my $joinKey=constructJoinKey($joinKeys,$h1);
-			if(exists($joinHash->{$joinKey})){
-				my $h2s=$joinHash->{$joinKey};
+			if(exists($queryResult->{$joinKey})){
+				my $h2s=$queryResult->{$joinKey};
 				if(ref($h2s)ne"ARRAY"){$h2s=[$h2s];}
 				foreach my $h2(@{$h2s}){
 					my $h={};
@@ -2770,9 +2858,9 @@ sub queryResults{
 			}
 		}
 		if(defined($expand)){
-			foreach my $joinKey(keys(%{$joinHash})){
+			foreach my $joinKey(keys(%{$queryResult})){
 				if(exists($usedKeys->{$joinKey})){next;}
-				my $h2s=$joinHash->{$joinKey};
+				my $h2s=$queryResult->{$joinKey};
 				if(ref($h2s)ne"ARRAY"){$h2s=[$h2s];}
 				foreach my $h2(@{$h2s}){
 					my $h={};
@@ -2791,9 +2879,9 @@ sub queryResults{
 # perl dag.pl -d db query '$day->$id/json->$json' '$studyid->id2json->$json' '$studyid->$id/perJson#filesize->$filesize' '$studyid->$id/perJson#study->$study' '$studyid->$id/perJson#sample->$sample' '$studyid->$id/perJson#experiment->$experiment' '$studyid->$id/perJson#run->$run'
 sub queryVariables{
 	my $query=shift();
+	my $expand=shift();
 	my $joinKeys=shift();
 	my $results=shift();
-	my $expand=shift();
 	my $dir=$dbdir;
 	my $subject=$query->{"subject"};
 	if($subject eq "system"){return queryVariablesSystem($query,$joinKeys);}
@@ -2813,6 +2901,7 @@ sub queryVariables{
 	my $hashtable={};
 	my $joinKeysFake;
 	my $noJoinKey;
+	if(scalar(@{$joinKeys})==0){$joinKeys=undef;}#Convert empty array to undef
 	#anchor exists, but join key doesn't exit yet meaning it's a first merging process
 	my $joinFunction=\&queryVariablesMerge;
 	if(!defined($joinKeys)){
@@ -2824,11 +2913,11 @@ sub queryVariables{
 			push(@{$joinKeysFake},@{$subVars});
 			push(@{$joinKeysFake},@{$preVars});
 			if(scalar(@{$joinKeysFake})==0){$joinKeysFake=undef;$noJoinKey=1;}
-		}elsif(exists($query->{"isAnchor"})){
+		}elsif(exists($query->{"isAnchor"})&&scalar(keys(%{$query->{"anchor"}}))>1){
 			push(@{$joinKeysFake},@{$subVars});
 			push(@{$joinKeysFake},@{$preVars});
 			push(@{$joinKeysFake},@{$objVars});
-		}elsif(exists($query->{"isIndex"})){
+		}elsif(exists($query->{"isIndex"})&&scalar(keys(%{$query->{"anchor"}}))>1){
 			push(@{$joinKeysFake},@{$subVars});
 			push(@{$joinKeysFake},@{$preVars});
 			push(@{$joinKeysFake},@{$objVars});
@@ -2839,6 +2928,7 @@ sub queryVariables{
 		$acceptKeys={};
 		foreach my $h(@{$results}){$acceptKeys->{constructJoinKey($joinKeys,$h)}=1;}
 	}
+	my $keyCounts={};
 	if(exists($query->{"subject.join"})||exists($query->{"object.join"})){$joinFunction=\&queryVariablesJoin;}
 	foreach my $file(@files){
 		my $p=getPredicateFromFile($file);
@@ -2849,13 +2939,17 @@ sub queryVariables{
 				my ($s,$o,$a)=@{$result};
 				my $h=queryVariablesHash($p,$query,$result);
 				if(!defined($h)){next;}
-				# handle normal join keys
-				if(exists($query->{"isVariableAnchor"})){
+				if(exists($query->{"isVariableAnchor"})){# handle normal join keys
 					push(@array,$h);
 					next;
 				}
 				if(defined($joinKeysFake)){#handle fake join keys
 					my $joinKey=constructJoinKey($joinKeysFake,$h);
+					# There is a very special case where query's subject or object is an actual value
+					# This is when query is used to narrow down candidates
+					# If multiple anchors exist, it's possible to have mixture of success and failure ones.
+					# I later remove hashtable with failure one later.
+					$keyCounts->{$joinKey}++;
 					$joinFunction->($hashtable,\@array,$joinKey,$h,$a);
 					next;
 				}
@@ -2871,7 +2965,24 @@ sub queryVariables{
 		}
 		close($reader);
 	}
+	#handle fake join keys
+	my $max=exists($query->{"anchor"})?scalar(keys(%{$query->{"anchor"}})):0;
+	if(defined($joinKeysFake)&&!defined($expand)&&$max>0){
+		my $deleted=0;
+		while(my($key,$count)=each(%{$keyCounts})){if($count<$max){delete($hashtable->{$key});$deleted++;}}
+		if($deleted>0){
+			my @temp=();
+			foreach my $h(@array){
+				my $joinKey=constructJoinKey($joinKeysFake,$h);
+				if($keyCounts->{$joinKey}==$max){push(@temp,$h);}
+			}
+			@array=@temp;
+		}
+	}
 	processTripleFunction($query,\@array);
+	if(!defined($joinKeys)){
+		if(defined($results)){@array=queryVariablesJoinResults($results,\@array,$expand);}
+	}
 	if(defined($joinKeysFake)){return \@array;}
 	if(defined($noJoinKey)){return \@array;}
 	if(defined($joinKeys)){return $hashtable;}
@@ -2996,20 +3107,20 @@ sub queryVariablesHash{
 			$predicate="$p#$a";
 		}
 	}
-	if($s!~/^$subjectR$/){next;}
-	if($o!~/^$objectR$/){next;}
+	if($s!~/^$subjectR$/){return;}
+	if($o!~/^$objectR$/){return;}
 	my $h={};
 	if(defined($subVars)>0){
-		my @results=$s=~/^$subjectR$/;
-		for(my $i=0;$i<scalar(@{$subVars});$i++){$h->{$subVars->[$i]}=$results[$i];}
+		my @regexp=$s=~/^$subjectR$/;
+		for(my $i=0;$i<scalar(@{$subVars});$i++){$h->{$subVars->[$i]}=$regexp[$i];}
 	}
 	if(defined($preVars)>0){
-		my @results=$predicate=~/^$predicateR$/;
-		for(my $i=0;$i<scalar(@{$preVars});$i++){$h->{$preVars->[$i]}=$results[$i];}
+		my @regexp=$predicate=~/^$predicateR$/;
+		for(my $i=0;$i<scalar(@{$preVars});$i++){$h->{$preVars->[$i]}=$regexp[$i];}
 	}
 	if(defined($objVars)>0){
-		my @results=$o=~/^$objectR$/;
-		for(my $i=0;$i<scalar(@{$objVars});$i++){$h->{$objVars->[$i]}=$results[$i];}
+		my @regexp=$o=~/^$objectR$/;
+		for(my $i=0;$i<scalar(@{$objVars});$i++){$h->{$objVars->[$i]}=$regexp[$i];}
 	}
 	if(scalar(keys(%{$h}))==0){return;}
 	return $h;
@@ -3061,6 +3172,43 @@ sub queryVariablesJoin{
 		if(existsArray($h2->{$key},$val)){next;}
 		push(@{$h2->{$key}},$val);
 	}
+}
+############################## queryVariablesJoinResults ##############################
+sub queryVariablesJoinResults{
+	my $results=shift();
+	my $array=shift();
+	my $expand=shift();
+	my @sharedKeys=sharedKeysFromArrays($results,$array);
+	my $h1={};
+	my @joined=();
+	foreach my $h(@{$results}){
+		my $joinKey=constructJoinKey(\@sharedKeys,$h);
+		if(exists($h1->{$joinKey})){push(@{$h1->{$joinKey}},$h)}
+		else{$h1->{$joinKey}=[$h];}
+	}
+	if(defined($expand)){
+	}else{
+		foreach my $h2(@{$array}){
+			my $joinKey=constructJoinKey(\@sharedKeys,$h2);
+			if(!exists($h1->{$joinKey})){next;}
+			my @array=@{$h1->{$joinKey}};
+			for(my $i=0;$i<scalar(@array);$i++){
+				if($i==0){
+					while(my($k,$v)=each(%{$array[$i]})){
+						if(exists($h2->{$k})){next;}
+						$h2->{$k}=$v;
+					}
+					push(@joined,$h2);
+					next;
+				}
+				my $h={};
+				while(my($k,$v)=each(%{$h2})){$h->{$k}=$v;}
+				while(my($k,$v)=each(%{$array[$i]})){$h->{$k}=$v;}
+				push(@joined,$h);
+			}
+		}
+	}
+	return @joined;
 }
 ############################## queryVariablesMerge ##############################
 sub queryVariablesMerge{
@@ -3200,6 +3348,28 @@ sub readText{
 	close(IN);
 	return $text;
 }
+############################## readTsvToKeyValHash ##############################
+sub readTsvToKeyValHash{
+	my $file=shift();
+	my $hash=shift();
+	if(!defined($hash)){$hash={};}
+	my $count=0;
+	my $reader=openFile($file);
+	while(<$reader>){
+		chomp;
+		my @tokens=split(/\t/);
+		my $size=scalar(@tokens);
+		my $key;
+		my $val;
+		if($size==2){$key=$tokens[0];$val=$tokens[1];}
+		elsif($size==3){$key=$tokens[0]."\t".$tokens[1];$val=$tokens[2];}
+		if(exists($hash->{$key})){push(@{$hash->{$key}},$val);}
+		else{$hash->{$key}=[$val];}
+		$count++;
+	}
+	close($reader);
+	return wantarray?($hash,$count):$hash;
+}
 ############################## retrieveValuesFromArrayR ##############################
 sub retrieveValuesFromArrayR{
 	my $array=shift();
@@ -3230,7 +3400,7 @@ sub samStartEndStrand{
 	my $start;
 	my $end;
 	my $strand;
-	if($flag&4){next;}
+	if($flag&4){return;}
 	if($flag&16){
 		$strand="-";
 		$start=$pos-1;
@@ -3266,6 +3436,24 @@ sub sharedKeys{
 	my @totalKeys=sort{$a cmp $b}keys(%{$total});
 	return (\@keys,\@totalKeys,$joined);
 }
+############################## sharedKeysFromArrays ##############################
+sub sharedKeysFromArrays{
+	my $array1=shift();
+	my $array2=shift();
+	my $hash={};
+	my @keys=();
+	foreach my $h(@{$array1}){while(my ($key,$val)=each(%{$h})){$hash->{$key}=1;}}
+	foreach my $h(@{$array2}){
+		while(my ($key,$val)=each(%{$h})){
+			if(exists($hash->{$key})){
+				push(@keys,$key);
+				delete($hash->{$key});
+			}
+		}
+	}
+	@keys=sort{$a cmp $b}@keys;
+	return @keys;
+}
 ############################## sizeFiles ##############################
 sub sizeFiles{
 	my @files=@_;
@@ -3277,6 +3465,14 @@ sub sizeFiles{
 		my $size=-s $file;
 		print $writer "$file\tfile/filesize\t$size\n";
 	}
+}
+############################## sortFile ##############################
+sub sortFile{
+	my $input=shift();
+	my ($writer,$output)=tempfile(UNLINK=>1);
+	close($writer);
+	system("sort -u $input > $output");
+	return $output;
 }
 ############################## sortSubs ##############################
 sub sortSubs{
@@ -3807,7 +4003,7 @@ sub test{
 	my @arguments=@_;
 	my $hash={};
 	if(scalar(@arguments)>0){foreach my $arg(@arguments){$hash->{$arg}=1;}}
-	else{for(my $i=0;$i<=6;$i++){$hash->{$i}=1;}}
+	else{for(my $i=1;$i<=7;$i++){$hash->{$i}=1;}}
 	if(fileExistsInDirectory("test")){system("rm -r test/*");}
 	mkdir("test");
 	if(exists($hash->{0})){test0();}
@@ -3817,6 +4013,7 @@ sub test{
 	if(exists($hash->{4})){test4();}
 	if(exists($hash->{5})){test5();}
 	if(exists($hash->{6})){test6();}
+	if(exists($hash->{7})){test7();}
 	rmdir("test");
 }
 #Test test
@@ -4122,7 +4319,8 @@ sub test3{
 	testCommand("perl $program_directory/dag.pl -d test query '\$one->input->\$two'","one\ttwo","A\tB","F\tG");
 	testCommand("perl $program_directory/dag.pl -d test query '\$one->input#D->\$two'","one\ttwo","C\tE");
 	testCommand("perl $program_directory/dag.pl -d test query '\$one->input#I->\$two'","one\ttwo","H\tJ");
-	testCommand("perl $program_directory/dag.pl -d test query '\$one->input#D->\$two' '\$one->input#I->\$three'","one\tthree\ttwo","C\t\tE","H\tJ\t");
+	testCommand("perl $program_directory/dag.pl -d test query '\$one->input#D->\$two' '\$one->input#I->\$three'");
+	testCommand("perl $program_directory/dag.pl -x -d test query '\$one->input#D->\$two' '\$one->input#I->\$three'","one\tthree\ttwo","C\t\tE","H\tJ\t");
 	testCommand("perl $program_directory/dag.pl -d test query '\$one->input#\$two->\$three'","one\tthree\ttwo","C\tE\tD","H\tJ\tI");
 	testCommand("perl $program_directory/dag.pl -d test query '\$one->\$two#\$three->\$four'","four\tone\tthree\ttwo","E\tC\tD\tinput","J\tH\tI\tinput");
 	unlink("test/input.txt");
@@ -4239,6 +4437,34 @@ sub test3{
 	rmdir("test/A/B/C");
 	rmdir("test/A/B");
 	rmdir("test/A");
+	#Testing multiple predicate variable query
+	createFile("test/root.txt","A");
+	createFile("test/A/value.txt","AA\tB\t1","CA\tB\t2","EA\tB\t3","AA\tC\t4","CA\tC\t5","EA\tC\t6");
+	createFile("test/B/value.txt","AB\tB\t4","CB\tB\t5","EB\tB\t6");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#A->\$val'");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#B->\$val'","dir\tkey\tval","A\tAA\t1","A\tCA\t2","A\tEA\t3");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#C->\$val'","dir\tkey\tval","A\tAA\t4","A\tCA\t5","A\tEA\t6");
+	createFile("test/AA.txt","a\ta");
+	createFile("test/CA.txt","c\ta");
+	createFile("test/EA.txt","e\ta");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#B->\$val' '\$k->\$key->\$v'","dir\tk\tkey\tv\tval","A\ta\tAA\ta\t1","A\tc\tCA\ta\t2","A\te\tEA\ta\t3");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#\$anchor->\$val'","anchor\tdir\tkey\tval","B\tA\tAA\t1","B\tA\tCA\t2","B\tA\tEA\t3","C\tA\tAA\t4","C\tA\tCA\t5","C\tA\tEA\t6");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#A->\$val' '\$k->\$key->\$v'");
+	testCommand("perl $program_directory/dag.pl -d test query 'root->root->\$dir' '\$key->\$dir/value#\$anchor->\$val' '\$k->\$key->\$v'","anchor\tdir\tk\tkey\tv\tval","B\tA\ta\tAA\ta\t1","C\tA\ta\tAA\ta\t4","B\tA\tc\tCA\ta\t2","C\tA\tc\tCA\ta\t5","B\tA\te\tEA\ta\t3","C\tA\te\tEA\ta\t6");
+	unlink("test/root.txt");
+	unlink("test/A/value.txt");
+	unlink("test/B/value.txt");
+	unlink("test/AA.txt");
+	unlink("test/CA.txt");
+	unlink("test/EA.txt");
+	rmdir("test/A");
+	rmdir("test/B");
+	#Testing selction with anchor functionality
+	createFile("test/A.txt","A\tname\tAkira","A\tage\t18","B\tname\tBen","B\tage\t19");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a->A#name->\$name' '\$a->A#age->\$age'","a\tage\tname","A\t18\tAkira","B\t19\tBen");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a->A#name->Akira' '\$a->A#age->\$age'","a\tage","A\t18");
+	testCommand("perl $program_directory/dag.pl -d test query '\$a->A#name->Ben' '\$a->A#age->\$age'","a\tage","B\t19");
+	unlink("test/A.txt");
 }
 sub test4{
 	#Testing file predicates FASTA, CSV, TSV
@@ -4423,12 +4649,74 @@ sub test6{
 	#https://corvus-window.com/all_kendalls-tau/
 	#testSub("kendallRankCorrelation([4,5,3,3,1,2,5,2,1,1],[3,5,2,3,1,1,4,3,2,1],1)",0.85);
 }
+sub test7{
+	# Test insert/delete/update process
+	createFile("test/insert.txt","insert\tA->B->C");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/insert.txt","inserted 1");
+	unlink("test/insert.txt");
+	testCommand("cat test/db/B.txt","A\tC");
+	createFile("test/delete.txt","delete\tA->B->C");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/delete.txt","deleted 1");
+	unlink("test/delete.txt");
+	if(-e "test/db/B.txt"){print STDERR "test/db/B.txt shouldn't exist";}
+	createFile("test/update.txt","update\tA->B->C","update\tD->B->E");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/update.txt","updated 2");
+	unlink("test/update.txt");
+	testCommand("cat test/db/B.txt","A\tC","D\tE");
+	createFile("test/update2.txt","update\tA->B->F","update\tG->B->H");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/update2.txt","updated 2");
+	unlink("test/update2.txt");
+	testCommand("cat test/db/B.txt","A\tF","D\tE","G\tH");
+	unlink("test/db/B.txt");
+	system("rmdir test/db");
+	# Test insert/delete/update process with anchor
+	createFile("test/insert.txt","insert\tA->B#C->D");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/insert.txt","inserted 1");
+	unlink("test/insert.txt");
+	testCommand("cat test/db/B.txt","A\tC\tD");
+	createFile("test/delete.txt","delete\tA->B#C->D");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/delete.txt","deleted 1");
+	unlink("test/delete.txt");
+	if(-e "test/db/B.txt"){print STDERR "test/db/B.txt shouldn't exist";}
+	createFile("test/update.txt","update\tA->B#C->D","update\tE->B#F->G");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/update.txt","updated 2");
+	unlink("test/update.txt");
+	testCommand("cat test/db/B.txt","A\tC\tD","E\tF\tG");
+	createFile("test/update.txt","update\tA->B#C->H","update\tE->B#I->J");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/update.txt","updated 2");
+	unlink("test/update.txt");
+	testCommand("cat test/db/B.txt","A\tC\tH","E\tF\tG","E\tI\tJ");
+	unlink("test/db/B.txt");
+	# Test insert/delete/update process with anchor
+	createFile("test/insert.txt","insert\tA->B#C->D","insert\tE->F->G","insert\tH->I->J");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/insert.txt","inserted 3");
+	unlink("test/insert.txt");
+	testCommand("cat test/db/B.txt","A\tC\tD");
+	testCommand("cat test/db/F.txt","E\tG");
+	testCommand("cat test/db/I.txt","H\tJ");
+	createFile("test/update.txt","update\tA->B#K->L","update\tA->F->B","update\tH->I#A->O");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/update.txt","updated 3");
+	unlink("test/update.txt");
+	testCommand("cat test/db/B.txt","A\tC\tD","A\tK\tL");
+	testCommand("cat test/db/F.txt","A\tB","E\tG");
+	testCommand("cat test/db/I.txt","H\tA\tO","H\tJ");
+	createFile("test/update.txt","update\tA->B#K->P","update\tA->F->Q","update\tH->I#A->R","update\tH->I->A");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/update.txt","updated 4");
+	unlink("test/update.txt");
+	testCommand("cat test/db/B.txt","A\tC\tD","A\tK\tP");
+	testCommand("cat test/db/F.txt","A\tQ","E\tG");
+	testCommand("cat test/db/I.txt","H\tA","H\tA\tR");
+	unlink("test/db/B.txt");
+	unlink("test/db/F.txt");
+	unlink("test/db/I.txt");
+	system("rmdir test/db");
+}
 ############################## testCommand ##############################
 sub testCommand{
 	my @values=@_;
 	my $command=shift(@values);
 	my $value2=join("\n",@values);
-	my ($writer,$file)=tempfile();
+	my ($writer,$file)=tempfile(UNLINK=>1);
 	close($writer);
 	if(system("$command > $file")){
 		print STDERR ">$command\n";
@@ -4643,6 +4931,26 @@ sub unusedSubs{
 		print "$name\t".$names->{$name}."\n";
 	}
 }
+############################## updateTsv ##############################
+sub updateTsv{
+	my $predicate=shift();
+	my $tempfile=shift();
+	my $writer=shift();
+	close($writer);
+	my $file=getFileFromPredicate($predicate);
+	if($file=~/\.gz$/){return;}
+	elsif($file=~/\.bz2$/){return;}
+	elsif(-d $file){return;}
+	my $hash=readTsvToKeyValHash($file);#original
+	my $hash2=readTsvToKeyValHash($tempfile);#updates
+	my $count=0;
+	while(my($key,$val)=each(%{$hash2})){
+		$hash->{$key}=$val;
+		$count++;
+	}
+	writeKeyValHash($file,$hash);
+	return $count;
+}
 ############################## which ##############################
 sub which{
 	my $cmd=shift();
@@ -4667,4 +4975,18 @@ sub which{
 	}
 	if($result ne ""){$hash->{$cmd}=$result;}
 	return $result;
+}
+############################## writeKeyValHash ##############################
+sub writeKeyValHash{
+	my $output=shift();
+	my $hash=shift();
+	my ($writer,$tempfile)=tempfile(UNLINK=>1);
+	my $count=0;
+	while(my($key,$val)=each(%{$hash})){foreach my $v(@{$val}){print $writer "$key\t$v\n";$count++;}}
+	close($writer);
+	if($count==0){unlink($output);return;}
+	my $sortfile=sortFile($tempfile);
+	unlink($tempfile);
+	mkdirs(dirname($output));
+	rename($sortfile,$output);
 }
