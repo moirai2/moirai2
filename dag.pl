@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2023/01/16";
+my $program_version="2023/02/03";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:D:f:g:G:hi:qo:r:s:w:x');
@@ -2556,7 +2556,6 @@ sub moveTempToDest{
 	my $dest=shift();
 	mkdir(dirname($dest));
 	system("mv $file $dest");
-	#rename($file,$dest);
 	chmod(0755,$dest);
 }
 ############################## narrowDownByPredicate ##############################
@@ -2899,7 +2898,7 @@ sub queryVariables{
 	my @files=getFilesFromQuery($predicate,$dir,$results);
 	my @array=();
 	my $hashtable={};
-	my $joinKeysFake;
+	my $joinKeysFake;#All the variables become joinKeys for join/anchor/index cases, if not defined joinkeys
 	my $noJoinKey;
 	if(scalar(@{$joinKeys})==0){$joinKeys=undef;}#Convert empty array to undef
 	#anchor exists, but join key doesn't exit yet meaning it's a first merging process
@@ -2928,7 +2927,8 @@ sub queryVariables{
 		$acceptKeys={};
 		foreach my $h(@{$results}){$acceptKeys->{constructJoinKey($joinKeys,$h)}=1;}
 	}
-	my $keyCounts={};
+	my $joinKeyCounts={};
+	my $fakeKeyCounts={};
 	if(exists($query->{"subject.join"})||exists($query->{"object.join"})){$joinFunction=\&queryVariablesJoin;}
 	foreach my $file(@files){
 		my $p=getPredicateFromFile($file);
@@ -2949,7 +2949,7 @@ sub queryVariables{
 					# This is when query is used to narrow down candidates
 					# If multiple anchors exist, it's possible to have mixture of success and failure ones.
 					# I later remove hashtable with failure one later.
-					$keyCounts->{$joinKey}++;
+					$fakeKeyCounts->{$joinKey}++;
 					$joinFunction->($hashtable,\@array,$joinKey,$h,$a);
 					next;
 				}
@@ -2960,6 +2960,7 @@ sub queryVariables{
 				if(!defined($joinKeys)){push(@array,$h);next;}
 				my $joinKey=constructJoinKey($joinKeys,$h);
 				if(defined($acceptKeys)&&!exists($acceptKeys->{$joinKey})){next;}
+				$joinKeyCounts->{$joinKey}++;
 				$joinFunction->($hashtable,\@array,$joinKey,$h,$a);
 			}
 		}
@@ -2967,21 +2968,34 @@ sub queryVariables{
 	}
 	#handle fake join keys
 	my $max=exists($query->{"anchor"})?scalar(keys(%{$query->{"anchor"}})):0;
-	if(defined($joinKeysFake)&&!defined($expand)&&$max>0){
-		my $deleted=0;
-		while(my($key,$count)=each(%{$keyCounts})){if($count<$max){delete($hashtable->{$key});$deleted++;}}
-		if($deleted>0){
-			my @temp=();
-			foreach my $h(@array){
-				my $joinKey=constructJoinKey($joinKeysFake,$h);
-				if($keyCounts->{$joinKey}==$max){push(@temp,$h);}
+	if($max>0&&!defined($expand)){
+		if(defined($joinKeysFake)){
+			my $deleted=0;
+			while(my($key,$count)=each(%{$fakeKeyCounts})){if($count<$max){delete($hashtable->{$key});$deleted++;}}
+			if($deleted>0){
+				my @temp=();
+				foreach my $h(@array){
+					my $joinKey=constructJoinKey($joinKeysFake,$h);
+					if($fakeKeyCounts->{$joinKey}==$max){push(@temp,$h);}
+				}
+				@array=@temp;
 			}
-			@array=@temp;
+		}elsif(defined($joinKeys)){
+			my $deleted=0;
+			while(my($key,$count)=each(%{$joinKeyCounts})){if($count<$max){delete($hashtable->{$key});$deleted++;}}
+			if($deleted>0){
+				my @temp=();
+				foreach my $h(@array){
+					my $joinKey=constructJoinKey($joinKeysFake,$h);
+					if($joinKeyCounts->{$joinKey}==$max){push(@temp,$h);}
+				}
+				@array=@temp;
+			}
 		}
 	}
 	processTripleFunction($query,\@array);
 	if(!defined($joinKeys)){
-		if(defined($results)){@array=queryVariablesJoinResults($results,\@array,$expand);}
+		if(defined($results)){@array=queryVariablesJoinResults($results,\@array);}
 	}
 	if(defined($joinKeysFake)){return \@array;}
 	if(defined($noJoinKey)){return \@array;}
@@ -3177,7 +3191,6 @@ sub queryVariablesJoin{
 sub queryVariablesJoinResults{
 	my $results=shift();
 	my $array=shift();
-	my $expand=shift();
 	my @sharedKeys=sharedKeysFromArrays($results,$array);
 	my $h1={};
 	my @joined=();
@@ -3186,26 +3199,23 @@ sub queryVariablesJoinResults{
 		if(exists($h1->{$joinKey})){push(@{$h1->{$joinKey}},$h)}
 		else{$h1->{$joinKey}=[$h];}
 	}
-	if(defined($expand)){
-	}else{
-		foreach my $h2(@{$array}){
-			my $joinKey=constructJoinKey(\@sharedKeys,$h2);
-			if(!exists($h1->{$joinKey})){next;}
-			my @array=@{$h1->{$joinKey}};
-			for(my $i=0;$i<scalar(@array);$i++){
-				if($i==0){
-					while(my($k,$v)=each(%{$array[$i]})){
-						if(exists($h2->{$k})){next;}
-						$h2->{$k}=$v;
-					}
-					push(@joined,$h2);
-					next;
+	foreach my $h2(@{$array}){
+		my $joinKey=constructJoinKey(\@sharedKeys,$h2);
+		if(!exists($h1->{$joinKey})){next;}
+		my @array=@{$h1->{$joinKey}};
+		for(my $i=0;$i<scalar(@array);$i++){
+			if($i==0){
+				while(my($k,$v)=each(%{$array[$i]})){
+					if(exists($h2->{$k})){next;}
+					$h2->{$k}=$v;
 				}
-				my $h={};
-				while(my($k,$v)=each(%{$h2})){$h->{$k}=$v;}
-				while(my($k,$v)=each(%{$array[$i]})){$h->{$k}=$v;}
-				push(@joined,$h);
+				push(@joined,$h2);
+				next;
 			}
+			my $h={};
+			while(my($k,$v)=each(%{$h2})){$h->{$k}=$v;}
+			while(my($k,$v)=each(%{$array[$i]})){$h->{$k}=$v;}
+			push(@joined,$h);
 		}
 	}
 	return @joined;
@@ -3472,6 +3482,7 @@ sub sortFile{
 	my ($writer,$output)=tempfile(UNLINK=>1);
 	close($writer);
 	system("sort -u $input > $output");
+	chmod(0755,$output);
 	return $output;
 }
 ############################## sortSubs ##############################
@@ -4988,5 +4999,5 @@ sub writeKeyValHash{
 	my $sortfile=sortFile($tempfile);
 	unlink($tempfile);
 	mkdirs(dirname($output));
-	rename($sortfile,$output);
+	system("mv $sortfile $output");
 }
