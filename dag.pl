@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2023/02/03";
+my $program_version="2023/02/07";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:D:f:g:G:hi:qo:r:s:w:x');
@@ -425,7 +425,7 @@ sub checkTripleAnchor{
 	if($object=~/^\(\$(\{\w+\}|\w+)\)$/){return;}
 	$predicate=basename($predicate);
 	foreach my $suffix(sort{$b cmp $a}keys(%{$fileSuffixes})){if($predicate=~/^(.+)$suffix/){return 2;}}#index.csv
-	my @index=split(/:/,$anchor);#table#0:1 table#0:1,2 table#index:number
+	my @index=split(/\:/,$anchor);#table#0:1 table#0:1,2 table#index:number
 	if(scalar(@index)>1){return 2;}
 	return 1;#triple#number
 }
@@ -2074,8 +2074,8 @@ sub handleTripleQueriesMergeAnchors{
 	my $tmp=$hashtable->{$subject}->{$predicate};
 	push(@{$tmp->{"query"}},$query);
 	if(defined($isIndex)){
-		my ($key,@vals)=split(/:/,$anchor);
-		my @objs=split(/:/,$object);
+		my ($key,@vals)=split(/\:/,$anchor);
+		my @objs=split(/\:/,$object);
 		my $size=scalar(@vals);
 		if($size!=scalar(@objs)){
 			print STDERR "Number of anchors and values don't match\n";
@@ -3288,7 +3288,6 @@ sub queryVariablesSystem{
 					my $h={};
 					my @results=$file=~/^$objectR$/;
 					for(my $i=0;$i<scalar(@objVars);$i++){$h->{$objVars[$i]}=$results[$i];}
-					#$h->{"filepath"}=$file;
 					push(@array,$h);
 				}
 			}else{
@@ -4027,7 +4026,6 @@ sub test{
 	if(exists($hash->{7})){test7();}
 	rmdir("test");
 }
-#Test test
 sub test0{
 }
 #Test sub functions
@@ -4563,10 +4561,16 @@ sub test4{
 }
 #Testing list and advanced () functionality
 sub test5{
+	#Check system->ls with ':'
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$filepath'","[{\"filepath\":\"css/classic.css\"},{\"filepath\":\"css/clean.css\"},{\"filepath\":\"css/flex.css\"},{\"filepath\":\"css/tab.css\"}]");
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$filepath:\$dir'","[{\"dir\":\"css\",\"filepath\":\"css/classic.css\"},{\"dir\":\"css\",\"filepath\":\"css/clean.css\"},{\"dir\":\"css\",\"filepath\":\"css/flex.css\"},{\"dir\":\"css\",\"filepath\":\"css/tab.css\"}]");
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$file:\$dir:\$filename'","[{\"dir\":\"css\",\"file\":\"css/classic.css\",\"filename\":\"classic\"},{\"dir\":\"css\",\"file\":\"css/clean.css\",\"filename\":\"clean\"},{\"dir\":\"css\",\"file\":\"css/flex.css\",\"filename\":\"flex\"},{\"dir\":\"css\",\"file\":\"css/tab.css\",\"filename\":\"tab\"}]");
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$file:\$dir:\$filename:\$suffix'","[{\"dir\":\"css\",\"file\":\"css/classic.css\",\"filename\":\"classic\",\"suffix\":\"css\"},{\"dir\":\"css\",\"file\":\"css/clean.css\",\"filename\":\"clean\",\"suffix\":\"css\"},{\"dir\":\"css\",\"file\":\"css/flex.css\",\"filename\":\"flex\",\"suffix\":\"css\"},{\"dir\":\"css\",\"file\":\"css/tab.css\",\"filename\":\"tab\",\"suffix\":\"css\"}]");
+	#check system->ls
+	testCommand("perl $program_directory/dag.pl query 'system->ls css/*->\$file'","file","css/classic.css","css/clean.css","css/flex.css","css/tab.css");
+	testCommand("perl $program_directory/dag.pl query 'system->ls css/*->\$dir/\$file'","dir\tfile","css\tclassic.css","css\tclean.css","css\tflex.css","css\ttab.css");
+	testCommand("perl $program_directory/dag.pl query 'system->ls css/*->\$dir/\$basename.css'",
+"basename\tdir","classic\tcss","clean\tcss","flex\tcss","tab\tcss");
 	#A->B->C
 	#A->B->D
 	testCommand("perl $program_directory/dag.pl -d test insert A B C","inserted 1");
