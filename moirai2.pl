@@ -11,7 +11,7 @@ use Time::localtime;
 my ($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=Cwd::abs_path($program_directory);
 my $program_path="$program_directory/$program_name";
-my $program_version="2023/02/14";
+my $program_version="2023/02/15";
 ############################## OPTIONS ##############################
 use vars qw($opt_a $opt_A $opt_b $opt_c $opt_C $opt_d $opt_D $opt_e $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_L $opt_m $opt_M $opt_n $opt_o $opt_O $opt_p $opt_P $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_z $opt_Z);
 getopts('a:Ab:c:C:d:D:e:E:f:F:g:G:hHi:I:j:lLm:M:n:o:O:pP:q:Q:r:R:s:S:tuUv:V:w:xX:zZ:');
@@ -198,7 +198,7 @@ $urls->{"daemon/workdir"}="https://moirai2.github.io/schema/daemon/workdir";
 $urls->{"daemon/workflow"}="https://moirai2.github.io/schema/daemon/workflow";
 $urls->{"daemon/workflow/urls"}="https://moirai2.github.io/schema/daemon/workflow/urls";
 ############################## VARIABLES ##############################
-my $writeFullLog=1;#Write full detailed bash and script informations
+my $writeFullLog;#Write full detailed bash and script informations
 my $testip="172.18.91.78";# Test server IP
 my $testuser="ah3q";# Test server username
 my $testserver="$testuser\@$testip";# Test server
@@ -1262,7 +1262,10 @@ sub controlWorkflow{
 	my $commands=shift();
 	my $nosync=shift();
 	my $completed=0;
-	if(defined($processes)&&defined($commands)){$completed=checkProcessIsCompleted($processes,$commands);}
+	if(defined($processes)&&defined($commands)){
+		$completed=checkProcessIsCompleted($processes,$commands);
+		if($completed ne "completed"&&$completed ne "error"){return;}
+	}
 	my $inserted=controlInsert();
 	my $deleted=controlDelete();
 	my $updated=controlUpdate();
@@ -1271,8 +1274,6 @@ sub controlWorkflow{
 	if($inserted>0){print getLogtime()."|Inserted $inserted triple\n";}
 	if($deleted>0){print getLogtime()."|Deleted $deleted triple\n";}
 	if($updated>0){print getLogtime()."|Updated $updated triple\n";}
-	#my $remaining=getNumberOfJobsRemaining();
-	#if($remaining>0){print getLogtime()."|Remaining $remaining job\n";}
 }
 ############################## convertToArray ##############################
 sub convertToArray{
@@ -1664,12 +1665,13 @@ sub createNewInstance{
 	if(defined($jobServer)){$cmdline.=" -j $jobServer";push(@modes,"retrieve");}
 	$cmdline.=" daemon ".join(" ",@modes)." > /dev/null 2>&1 &'";
 	if(defined($opt_l)){print getLogtime()."|$cmdline\n";}
-	if(system($cmdline)!=0){print STDERR "#ERROR: Failed to start daemon for $flavor\n";terminate(1);}
+	if(system($cmdline)!=0){print STDERR "#ERROR: Failed to start daemon for $flavor\n";return;}
 	my ($tmpwriter,$tmpfile)=tempfile(DIR=>"/tmp",SUFFIX=>".txt");
 	print $tmpwriter "$ip\n";
 	print $tmpwriter "$flavor\n";
 	close($tmpwriter);
 	system("mv $tmpfile $startFile");
+	return 1;
 }
 ############################## daemonCheckTimestamp ##############################
 sub daemonCheckTimestamp{
@@ -1749,6 +1751,15 @@ sub distributeResources{
 		if($maxResource==0){last;}
 	}
 	if($maxResource>0){$distributions->{$keys[$size-1]}=$maxResource;}
+	if(defined($opt_l)){
+		my $logtime=getLogtime();
+		my @outputs=();
+		foreach my $wid(sort{$a cmp $b}keys(%{$distributions})){
+			my $count=$distributions->{$wid};
+			push(@outputs,$wid."($count/$maxThread)");
+		}
+		print "$logtime|Job distribution ".join(",",@outputs)."\n";
+	}
 	return $distributions;
 }
 ############################## downloadCommandFromProcess ##############################
@@ -1827,7 +1838,7 @@ sub downloadJobFiles{
 			if(system("ssh $serverUser\@$serverName 'mv $serverJobdir/$next $serverProcessfile'")){next;}
 			push(@jobfiles,$serverProcessfile);
 			$maxjob--;#reduce maxjob
-			if($maxjob<1){last;}
+			if($maxjob<2){last;}
 		}
 	}
 	foreach my $serverJobfile(@jobfiles){
@@ -1943,6 +1954,15 @@ sub estimateJobTimes{
 			}
 			closedir(DIR);
 		}
+	}
+	if(defined($opt_l)){
+		my $logtime=getLogtime();
+		my @outputs=();
+		foreach my $wid(sort{$a cmp $b}keys(%{$openstackFlavors})){
+			my $appTime=$openstackFlavors->{$wid};
+			if($appTime>0){push(@outputs,"$wid(${appTime}s)");}
+		}
+		if(scalar(@outputs)>0){print "$logtime|estimated time ".join(",",@outputs)."\n";}
 	}
 	return $openstackFlavors;
 }
@@ -2388,7 +2408,7 @@ sub getJobFilesSelect{
 			if(system("mv $next $processfile2")){next;}#move to process directory
 			push(@jobfiles,$processfile2);#remember job files
 			$maxjob-=1;#reduce maxjob
-			if($maxjob<1){last;}
+			if($maxjob<2){last;}
 		}
 	}
 	foreach my $jobfile(@jobfiles){
@@ -2630,6 +2650,7 @@ sub handleCompletedProcess{
 	my $logfile="$workdir/log.txt";
 	my $bashfile="$workdir/run.sh";
 	my $processLog=loadProcessFile($logfile);
+	removeWorkdirFromVariableValues($command,$process,$processLog);
 	my $processfile="$processdir/$processid/$execid.txt";
 	my $dagdb=exists($command->{$urls->{"daemon/dagdb"}})?$command->{$urls->{"daemon/dagdb"}}."/":defined($dbdir)?"$dbdir/":undef;
 	if(exists($process->{$urls->{"daemon/hostname"}})){$processfile="$processdir/".$process->{$urls->{"daemon/hostname"}}."/$execid.txt";}
@@ -2732,7 +2753,7 @@ sub handleCompletedProcess{
 		print $logwriter "$_\n";$stderrcount++;
 	}
 	close($reader);
-	my $doNotUpdateDb=exists($process->{$urls->{"daemon/donot/update/db"}})?1:0;
+	my $doNotUpdateDb=exists($process->{$urls->{"daemon/donot/update/db"}})?1:($status eq "error")?1:0;
 	#insertfile
 	if($insertcount>0&&!$doNotUpdateDb){
 		print $logwriter "######################################## insert ########################################\n";
@@ -2927,8 +2948,8 @@ sub handleKeys{
 ############################## handleOpenstackMode ##############################
 sub handleOpenstackMode{
 	my $openstackFlavors=shift();
-	removeUnusedInstances();
 	my ($instanceCount,$instances)=getInstanceCounts();
+	$instanceCount=removeUnusedInstances($instanceCount,$instances);
 	if($instanceCount>=$maxThread){return;}#No need to create anymore
 	my $jobdir=defined($jobServer)?"$jobServer/.moirai2/ctrl/job":$jobdir;
 	estimateJobTimes($jobdir,$openstackFlavors);
@@ -4055,6 +4076,7 @@ sub moiraiFinally{
 	my $commands=shift(@execids);
 	my $processes=shift(@execids);
 	my $result=0;
+	controlWorkflow();
 	foreach my $execid(@execids){
 		my $process=$processes->{$execid};
 		if(returnError($execid)eq"error"){$result=1;}
@@ -4797,6 +4819,8 @@ sub removeSlash{
 ############################## removeUnusedInstances ##############################
 #Remove unused instances with stop files 'instancedir/IP_FLAVOR.stop'
 sub removeUnusedInstances{
+	my $instanceCount=shift();
+	my $instances=shift();
 	my @stopFiles=getFilesFromDir("$instancedir/*.stop");
 	if(scalar(@stopFiles)==0){return 0;}
 	my @ips=();
@@ -4804,7 +4828,7 @@ sub removeUnusedInstances{
 	foreach my $stopFile(@stopFiles){
 		my $basename=basename($stopFile,".stop");
 		my ($ip,$flavor)=split(/_/,$basename);
-		if(defined($opt_l)){print getLogtime()."|Stopping $ip instance node\n";}
+		if(defined($opt_l)){print getLogtime()."|Stopping $ip instance node ($instanceCount=>".($instanceCount-1).")\n";}
 		my @lines=`openstack.pl remove node $ip`;
 		my $result=0;
 		foreach my $line(@lines){
@@ -4818,12 +4842,27 @@ sub removeUnusedInstances{
 			#It's not a fatal error, so maybe continue with the daemon process?
 			#terminate(1);
 		}else{
+			$instances->{$flavor}--;
 			my $startFile="$instancedir/$basename.start";
 			removeFiles($startFile,$stopFile);
-			$stopCount++;
+			$instanceCount--;
 		}
 	}
-	return $stopCount;
+	return $instanceCount;
+}
+############################## removeWorkdirFromVariableValues ##############################
+sub removeWorkdirFromVariableValues{
+	my $command=shift();
+	my $process=shift();
+	my $processLog=shift();
+	my $url=$process->{$urls->{"daemon/command"}};
+	my @outputs=@{$command->{$urls->{"daemon/output"}}};
+	foreach my $output(@outputs){
+		if(!exists($processLog->{"$url#$output"})){next;}
+		my $value=$processLog->{"$url#$output"};
+		if(ref($value)eq"ARRAY"){foreach my $v(@{$value}){if($v=~/^.moirai2\/[^\/]+\/(.+)/){$v=$1;}}}
+		else{if($value=~/^.moirai2\/[^\/]+\/(.+)/){$processLog->{"$url#$output"}=$1;}}
+	}
 }
 ############################## renameOutputsFromServer ##############################
 sub renameOutputsFromServer{
@@ -5724,11 +5763,12 @@ sub startNewInstances{
 	my $instances=shift();
 	my $instanceCount=shift();
 	foreach my $flavor(keys(%{$flavorDistributions})){
-		my $count=exists($instances->{$flavor})?$instances->{$flavor}:0;
 		my $max=$flavorDistributions->{$flavor};
-		if($max==0||$max<=$count){next;}
-		if(defined($opt_l)){print getLogtime()."|Creating a new '$flavor' instance with openstack.pl (".($count+1)."/$maxThread)\n";}
-		createNewInstance($flavor,$count,$max);
+		if($max==0){next;}
+		my $count=exists($instances->{$flavor})?$instances->{$flavor}:0;
+		if($max<=$count){next;}
+		if(defined($opt_l)){print getLogtime()."|Creating a new '$flavor' instance with openstack.pl ($instanceCount=>".($instanceCount+1)."/$maxThread)\n";}
+		if(createNewInstance($flavor,$count,$max)){$instanceCount++;}
 	}
 }
 ############################## tarArchiveDirectory ##############################
@@ -5860,8 +5900,10 @@ sub test2{
 	testCommand("perl $program_directory/moirai2.pl -r output -i '{\"input\":\"test/input.txt\"}' -o '{\"output\":\"test/output.txt\"}' exec 'wc -l \$input > \$output'","test/output.txt");
 	testCommandRegex("cat test/output.txt","3 test/input.txt");
 	unlink("test/output.txt");
-	testCommandRegex("perl $program_directory/moirai2.pl -m 5 -w execute -r output -i '\$input' -o '\$output.txt' exec 'wc -l < \$input> \$output;' input=test/input.txt",".moirai2/\\d{14}\\w{4}_\\w+\\d+_execute_5/tmp/output.txt\$");
+	testCommandRegex("perl $program_directory/moirai2.pl -m 5 -w execute -r output -i '\$input' -o '\$output.txt' exec 'wc -l < \$input> \$output;' input=test/input.txt","tmp/output.txt\$");
 	unlink("test/input.txt");
+	unlink("tmp/output.txt");
+	rmdir("tmp");
 	system("perl $program_directory/moirai2.pl clean dir");
 	#Testing flag functionality, no flag => no execute
 	testCommand("perl $program_directory/moirai2.pl -d test/db -i '\$name->flag/needparse->true' -o '\$name->done->true' -r output -s 1 exec 'output=\$name;'","");
@@ -5926,9 +5968,11 @@ sub test3{
 	unlink("test/output.txt");
 	#Testing suffix
 	createFile("test/input.txt","Hello","World");
-	testCommandRegex("perl $program_directory/moirai2.pl -w execute -i input -r output -X '\$output.txt' exec 'wc -l \$input > \$output' input=test/input.txt",".moirai2/\\d{14}\\w{4}_\\w+\\d+_execute_1/tmp/output.txt\$");
+	testCommandRegex("perl $program_directory/moirai2.pl -w execute -i input -r output -X '\$output.txt' exec 'wc -l \$input > \$output' input=test/input.txt","tmp/output.txt\$");
 	system("perl $program_directory/moirai2.pl clean dir");
+	unlink("tmp/output.txt");
 	unlink("test/input.txt");
+	rmdir("tmp");
 	#Testing multiple inputs
 	createFile("test/text.txt","example\tAkira","example\tBen","example\tChris","example\tDavid");
 	testCommand("perl $program_directory/moirai2.pl -d test  -i 'example->text->(\$input)' exec 'echo \${input\[\@\]}'","Akira Ben Chris David");
@@ -6128,7 +6172,6 @@ sub test6{
 	system("ssh $testserver rm moiraitest/input.txt");
 	system("ssh $testserver rm moiraitest/output.txt");
 	testCommandRegex("ssh $testserver 'ls moiraitest/.moirai2/log/$datetime/*.txt'","moiraitest/.moirai2/log/\\d+/.+\\.txt");
-	exit();
 	# assign on a local daemon and execute on a remote server (-a)
 	createFile("input2.txt","Akira Hasegawa");
 	testCommand("perl $program_directory/moirai2.pl -s 1 -r output -i input -o output -a $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
@@ -6587,30 +6630,6 @@ sub uploadInputsToRemoteServer{
 	}
 	$process->{$urls->{"daemon/download/remoteserver"}}="true";
 	$process->{$urls->{"daemon/delete/inputs"}}="true";
-}
-############################## uploadOutputsToServer ##############################
-sub uploadOutputsToServer{
-	my $command=shift();
-	my $process=shift();
-	if(!exists($process->{$urls->{"daemon/jobserver"}})){return;}
-	my $serverpath=$process->{$urls->{"daemon/jobserver"}};
-	my $url=$process->{$urls->{"daemon/command"}};
-	my $execid=$process->{$urls->{"daemon/execid"}};
-	if(!exists($command->{$urls->{"daemon/output"}})){return;}
-	foreach my $outputs(@{$command->{$urls->{"daemon/output"}}}){
-		foreach my $output(ref($outputs)eq"ARRAY"?@{$outputs}:($outputs)){
-			if(!exists($process->{"$url#$output"})){next;}
-			my $outputfiles=$process->{"$url#$output"};
-			foreach my $fromfile(ref($outputfiles)eq"ARRAY"?@{$outputfiles}:($outputfiles)){
-				if($fromfile=~/^$moiraidir\/$execid\/(.+)$/){
-					my $tofile="$serverpath/$1";
-					if(!fileExists($fromfile)){next;}
-					rsyncFileByUpdate($fromfile,$tofile);
-					next;
-				}
-			}
-		}
-	}
 }
 ############################## uploadWorkdirToJobServer ##############################
 # Moirai daemon looks for a string "completed" in a status file and proceed to completion.
