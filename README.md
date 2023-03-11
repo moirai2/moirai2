@@ -67,22 +67,16 @@ An [output file](example/text/charcount), a [log file](example/log/e202205171203
 ## Structure
 ```
 moirai2/
-├── Dockerfile - a docker file of moirai2.
-├── README.md - This readme file
-├── command/ - a collection of command line files.
-├── css/ - stylesheet used by jquery columns.
-├── docker-compose.yml - docker-compose to run moirai2 web site.
-├── example/ - a collection of example files
-├── flask/ - files used for running web server through docker-compose
-├── images/ - images used by jquery columns.
-├── js/ - Javascript used for MOIRAI2 manipulation through a browser.
-│   ├── ah3q/ - my javascripts fro moirai2
-│   ├── jquery/ - jquery (https://visjs.org) scripts
-│   └── vis/ - vis (https://visjs.org) scripts for network graphs
-├── moirai2.php - Used for MOIRAI2 manipulation through a browser interface.
+├── command/ - a collection of command line json files.
+├── dag.pl - script to handle a text-based SPO (sub,pre,obj) database.
+├── docker-compose - docker-compose dirs/files to run moirai2 web site.
+├── docker-compose.yml - docker-compose yml file for moirai2.
+│   ├── nginx/ - website for moirai2 flowchart.
+│   └── webhookd/ - simple API to manipulate moirai2/dag commands
+├── example/ - Examples shown in github page.
 ├── moirai2.pl - Assign and process MOIRAI2 commands.
 ├── openstack.pl - A collection of commands to run Openstack for moirai2.
-└── dag.pl - Script to handle a text-based SPO (sub,pre,obj) database.
+└── README.md - This readme file.
 ```
 
 ## Install

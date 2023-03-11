@@ -1,0 +1,60 @@
+<html>
+<head>
+<title>Moirai2</title>
+<script>
+function linkToWebhookdPort(dom){
+path=new URL(dom.href);
+path=window.location.protocol+'//'+window.location.hostname+':8081'+path.pathname;
+window.open(path);
+}
+</script>
+<style>
+html{font-family: sans-serif;text-align:center;background:white}
+body{padding:10px;margin:10px;}
+section{padding:10px;margin:10px;}
+article {padding:10px;margin:10px;}
+span{
+    color: #f6ffd9;
+    font-size: 40px;
+    letter-spacing: 4px;
+}
+.wrap-banner{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+ background:url(https://images.pexels.com/photos/66997/pexels-photo-66997.jpeg?cs=srgb&dl=nature-sky-sunset-the-mountains-66997.jpg&fm=jpg);
+ background-size:cover;
+  background-position:center;
+}
+</style>
+</head>
+<body>
+<header>
+<img width='600px' src="images/moirai_icon.gif">
+</header>
+<section>
+<article>
+<span class="wrap-banner"><a href="command/"> commands</a></span>
+</article>
+<article>
+<span><a href="workflows.html"> workflows</a></span>
+</article>
+<article>
+<span><a href="input/"> inputs</a></span>
+</article>
+<article>
+<span><a href="databases.html"> databases</a></span>
+</article>
+<article>
+<span><a href="configs.html"> configs</a></span>
+</article>
+</section>
+<ul>
+<li><a href="https://cdn.jsdelivr.net/npm/sweetalert2@9">sweetalert2.js</a></li>
+<li><a href="https://unpkg.com/micromodal/dist/micromodal.min.js">micromodal.min.js</a></li>
+<li><a href="moirai2/help.sh" onClick="linkToWebhookdPort(this);return false">Show moirai2.pl help</a></li>
+<li><a href="dag/help.sh" onClick="linkToWebhookdPort(this);return false">Show dag.pl help</a></li>
+</ul>
+<footer>Written by Akira Hasegawa</footer>
+</body>
+</html>

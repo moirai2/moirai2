@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2023/02/15";
+my $program_version="2023/03/11";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:D:f:g:G:hi:qo:r:s:w:x');
@@ -2772,7 +2772,11 @@ sub processTripleFunctionGetVariable{
 sub processTsv{
 	my $process=shift();
 	my $file=shift();
-	my $reader=openFile($file);
+	#sort by predicate to speed up process
+	my ($sortwriter,$sorttemp)=tempfile(UNLINK=>1);
+	close($sortwriter);
+	system("sort $file > $sorttemp");
+	my $reader=openFile($sorttemp);
 	my $prevPredicate;
 	my $writer;
 	my $tempfile;
@@ -2789,6 +2793,7 @@ sub processTsv{
 		else{print $writer "$subject\t$object\n";}
 	}
 	close($reader);
+	unlink($sorttemp);
 	unlink($file);
 	if(defined($writer)&&defined($tempfile)){$count+=$process->($prevPredicate,$tempfile,$writer);}
 	return $count;
@@ -4561,6 +4566,11 @@ sub test4{
 }
 #Testing list and advanced () functionality
 sub test5{
+	mkdir("css");
+	createFile("css/classic.css");
+	createFile("css/clean.css");
+	createFile("css/flex.css");
+	createFile("css/tab.css");
 	#Check system->ls with ':'
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$filepath'","[{\"filepath\":\"css/classic.css\"},{\"filepath\":\"css/clean.css\"},{\"filepath\":\"css/flex.css\"},{\"filepath\":\"css/tab.css\"}]");
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$filepath:\$dir'","[{\"dir\":\"css\",\"filepath\":\"css/classic.css\"},{\"dir\":\"css\",\"filepath\":\"css/clean.css\"},{\"dir\":\"css\",\"filepath\":\"css/flex.css\"},{\"dir\":\"css\",\"filepath\":\"css/tab.css\"}]");
@@ -4571,6 +4581,7 @@ sub test5{
 	testCommand("perl $program_directory/dag.pl query 'system->ls css/*->\$dir/\$file'","dir\tfile","css\tclassic.css","css\tclean.css","css\tflex.css","css\ttab.css");
 	testCommand("perl $program_directory/dag.pl query 'system->ls css/*->\$dir/\$basename.css'",
 "basename\tdir","classic\tcss","clean\tcss","flex\tcss","tab\tcss");
+	system("rm -r css");
 	#A->B->C
 	#A->B->D
 	testCommand("perl $program_directory/dag.pl -d test insert A B C","inserted 1");
