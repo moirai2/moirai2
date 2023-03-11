@@ -102,21 +102,28 @@ $ git clone https://github.com/moirai2/moirai2.git project
 
 ```
 Commands:
-         build  Build a command json from command lines and script files
-   clear/clean  Clean all command log and history by removing .moirai2 directory
-       command  Execute user specified command from STDIN
-        daemon  Checks and runs the submitted and automated scripts/jobs
-         error  Check error logs
-          exec  Execute user specified command from ARGUMENTS
-          html  Output HTML files of command/logs/database
-       history  List up executed commands
-           log  Print out logs information of processes
-          open  Open .moirai2 directory (for Mac only)
-     newdaemon  Setup a new daemon specified server
-     openstack  Use openstack.pl to create new instance to process jobs
-      sortsubs  For reorganizing this script(test commands)
-        submit  Submit job with command URL and parameters specified in STDIN
-          test  For development purpose (test commands)
+        build  Build a command json from command lines and script files
+        check  Check moirai2 daemon is running
+  clear/clean  Clean command, log, and error from .moirai2 directory
+      command  Execute command lines from STDIN
+     complete  Run daemon 'complete' mode once with -R 0 option
+       daemon  Periodically process crontab scripts and submitted jobs
+        error  Check error logs
+         exec  Execute command lines from arguments
+      history  List up executed commands
+         html  Output HTML files of command/logs/database
+           ls  List files directory
+         jobs  List number of jobs remaining and currently running
+          log  Print out logs information of processes
+    newdaemon  Setup a new daemon specified server
+         open  Open .moirai2 directory (for Mac only)
+    openstack  Use openstack.pl to create new instance to process jobs
+      process  Run Daemon 'process' mode once with -R 0 option
+    reprocess  Reprocess/restart jobs that are stopped in the middle
+     sortsubs  For reorganizing this script(test commands)
+       submit  Submit a job file OR submit user command(s), but don't execute
+         test  For development purpose (test commands)
+   unusedsubs  List up unused perl subs/functions for refactoring
 ```
 
 #### Work directory
