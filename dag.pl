@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2023/03/11";
+my $program_version="2023/07/11";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:D:f:g:G:hi:qo:r:s:w:x');
@@ -21,7 +21,7 @@ sub help{
 	print "\n";
 	print "############################## HELP ##############################\n";
 	print "\n";
-	print "Program: Utilities for handling a triple text-based database.\n";
+	print "Program: Utilities for handling a triple (subject,predicate,object) text-based database.\n";
 	print "Version: $program_version\n";
 	print "Author: Akira Hasegawa (akira.hasegawa\@riken.jp)\n";
 	print "\n";
@@ -32,8 +32,9 @@ sub help{
 	print "             delete  Delete triple(s)\n";
 	print "             export  export database content to moirai2.pl HTML from html\n";
 	print "             import  Import triple(s)\n";
+	print "          increment  Increment count\n";
 	print "             insert  Insert triple(s)\n";
-	print "            process  Process input/delete/update input\n";
+	print "            process  Process input/delete/update inputs\n";
 	print "             prompt  Prompt value from user if necessary\n";
 	print "              query  Query with my original format (example: \$a->B->\$c)\n";
 	print "             select  Select triple(s)\n";
@@ -51,6 +52,7 @@ sub help{
 	print "\n";
 	print "Options:\n";
 	print "     -d  database directory path (default='moirai')\n";
+	print "     -D  Delimiter used to split things (default=' ')\n";
 	print "     -f  input/output format (json,tsv)\n";
 	print "     -g  Grep for filestats, filesize, linecount, md5, seqcount\n";
 	print "     -G  Ungrep for filestats, filesize, linecount, md5, seqcount\n";
@@ -145,6 +147,7 @@ if(defined($opt_h)||scalar(@ARGV)==0){
 	else{help();}
 	exit(0);
 }
+my $objectDelim=defined($opt_D)?$opt_D:" ";
 my $command=shift(@ARGV);
 my $rootdir=absolutePath(".");
 my $dbdir=defined($opt_d)?checkDirPathIsSafe($opt_d):".";
@@ -159,6 +162,7 @@ elsif($command=~/^export$/i){commandExport(@ARGV);}
 elsif($command=~/^filesize$/i){commandFilesize(@ARGV);}
 elsif($command=~/^filestats$/i){commandFileStats(@ARGV);}
 elsif($command=~/^import$/i){commandImport(@ARGV);}
+elsif($command=~/^increment$/i){commandIncrement(@ARGV);}
 elsif($command=~/^insert$/i){commandInsert(@ARGV);}
 elsif($command=~/^linecount$/i){commandLinecount(@ARGV);}
 elsif($command=~/^md5$/i){commandMd5(@ARGV);}
@@ -173,6 +177,14 @@ elsif($command=~/^test$/i){test(@ARGV);}
 elsif($command=~/^timestamp$/i){commandTimestamp(@ARGV);}
 elsif($command=~/^unusedsubs$/i){unusedSubs(@ARGV);}
 elsif($command=~/^update$/i){commandUpdate(@ARGV);}
+############################## SQLITE3 ##############################
+# https://www.techonthenet.com/sqlite/tables/alter_table.php
+# ALTER TABLE table_name ADD new_column_name column_definition;
+# https://www.javadrive.jp/sqlite/table/index6.html
+# CREATE TABLE table(column1, column1, ... , PRIMARY KEY(column1, column2, ...));
+# https://dev-daikichi.hatenablog.com/entry/2020/05/01/223320
+# replace into table values(c1, c2, c3)
+# insert into table values (c1,c2,c3) on conflict(k1,k2) do update set c1 = vallue;
 ############################## URLs ##############################
 my $urls={};
 $urls->{"daemon/command"}="https://moirai2.github.io/schema/daemon/command";
@@ -692,6 +704,105 @@ sub commandImport{
 	if($total>0){utime(undef,undef,$moiraidir);utime(undef,undef,$dbdir);}
 	if(!defined($opt_q)){print "inserted $total\n";}
 }
+############################## commandIncrement ##############################
+sub commandIncrement{
+	my @args=@_;
+	my $json;
+	my $total=0;
+	if(scalar(@args)>0){
+		my $json={$args[0]=>{$args[1]=>$args[2]}};
+		$total=incrementJson($json);
+	}else{
+		if(!defined($opt_f)){$opt_f="tsv";}
+		my $reader=IO::File->new("-");
+		my $json=($opt_f eq "tsv")?tsvToJson($reader):readJson($reader);
+		close($reader);
+		$total=incrementJson($json);
+	}
+	if($total>0){utime(undef,undef,$moiraidir);utime(undef,undef,$dbdir);}
+	if(!defined($opt_q)){print "incremented $total\n";}
+}
+sub incrementJson{
+	my $json=shift();
+	my $total=0;
+	my @predicates=getPredicatesFromJson($json);
+	foreach my $predicate(@predicates){
+		my $hash={};
+		foreach my $s(keys(%{$json})){
+			if(!exists($json->{$s}->{$predicate})){next;}
+			my $o=$json->{$s}->{$predicate};
+			if(!exists($hash->{$s})){$hash->{$s}=$o}
+			else{$hash->{$s}+=$o;}
+		}
+		my $incremented=0;
+		my $count=0;
+		my $anchor;
+		if($predicate=~/#(.+)$/){$anchor=$1;}
+		my $file=getFileFromPredicate($predicate);
+		if($file=~/\.gz$/){next;}
+		elsif($file=~/\.bz2$/){next;}
+		elsif(-d $file){next;}
+		my ($writer,$tempfile)=tempfile(UNLINK=>1);
+		if(! -e $file){mkdirs(dirname($file));}
+		if(defined($anchor)){
+			my $reader=openFile($file);
+			while(<$reader>){
+				chomp;
+				my @token=split(/\t/);
+				my $s=$token[0];
+				if(scalar(@token)==3){
+					if(exists($hash->{$s})&&$anchor eq $token[1]){
+						$hash->{$s}+=$token[2];
+						next;
+					}
+				}
+				print $writer join("\t",@token)."\n";
+				$count++;
+			}
+			close($reader);
+			foreach my $s(keys(%{$hash})){
+				my $o=$hash->{$s};
+				print $writer "$s\t$anchor\t$o\n";
+				$incremented++;
+				$count++;
+			}
+		}else{
+			my $reader=openFile($file);
+			while(<$reader>){
+				chomp;
+				my @token=split(/\t/);
+				my $s=$token[0];
+				if(scalar(@token)==2){
+					if(exists($hash->{$s})){
+						$hash->{$s}+=$token[1];
+						next;
+					}
+				}
+				print $writer join("\t",@token)."\n";
+				$count++;
+			}
+			close($reader);
+			foreach my $s(keys(%{$hash})){
+				my $o=$hash->{$s};
+				print $writer "$s\t$o\n";
+				$incremented++;
+				$count++;
+			}
+		}
+		close($writer);
+		if($count==0){unlink($file);}
+		elsif($incremented>0){
+			my ($writer2,$tempfile2)=tempfile(UNLINK=>1);
+			close($writer2);
+			chmod(0777,$tempfile2);
+			system("sort $tempfile -u > $tempfile2");
+			if(!-e $dbdir){prepareDbDir();}
+			system("mv $tempfile2 $file");
+		}
+		$total+=$incremented;
+	}
+	return $total;
+}
 ############################## commandInsert ##############################
 sub commandInsert{
 	my @args=@_;
@@ -782,9 +893,11 @@ sub commandProcess{
 	my ($deleteWriter,$deleteTemp)=tempfile(UNLINK=>1);
 	my ($insertWriter,$insertTemp)=tempfile(UNLINK=>1);
 	my ($updateWriter,$updateTemp)=tempfile(UNLINK=>1);
+	my ($incrementWriter,$incrementTemp)=tempfile(UNLINK=>1);
 	my $deleteCount=0;
 	my $insertCount=0;
 	my $updateCount=0;
+	my $incrementCount=0;
 	while(<STDIN>){
 		chomp;
 		if(/^delete\s(.+)$/i){
@@ -799,11 +912,16 @@ sub commandProcess{
 			my ($sub,$pre,$obj,$anchor)=commandProcessSplit($1);
 			print $updateWriter "$pre\t$anchor\t$sub\t$obj\n";
 			$updateCount++;
+		}elsif(/^increment\s(.+)$/i){
+			my ($sub,$pre,$obj,$anchor)=commandProcessSplit($1);
+			print $incrementWriter "$pre\t$anchor\t$sub\t$obj\n";
+			$incrementCount++;
 		}
 	}
 	close($deleteWriter);
 	close($insertWriter);
 	close($updateWriter);
+	close($incrementWriter);
 	if($deleteCount==0){unlink($deleteTemp);}
 	else{
 		$deleteCount=processTsv(\&deleteTsv,$deleteTemp);
@@ -818,6 +936,11 @@ sub commandProcess{
 	else{
 		$updateCount=processTsv(\&updateTsv,$updateTemp);
 		if(!defined($opt_q)){print "updated $updateCount\n";}
+	}
+	if($incrementCount==0){unlink($incrementTemp);}
+	else{
+		$incrementCount=processTsv(\&incrementTsv,$incrementTemp);
+		if(!defined($opt_q)){print "incremented $incrementCount\n";}
 	}
 }
 ############################## commandProcessSplit ##############################
@@ -1130,7 +1253,6 @@ sub updateJson{
 			}
 			close($reader);
 			foreach my $s(keys(%{$hash})){
-				if(!exists($hash->{$s})){next;}
 				foreach my $o(@{$hash->{$s}}){
 					print $writer "$s\t$anchor\t$o\n";$updated++;$count++;
 				}
@@ -1146,7 +1268,6 @@ sub updateJson{
 			}
 			close($reader);
 			foreach my $s(keys(%{$hash})){
-				if(!exists($hash->{$s})){next;}
 				foreach my $o(@{$hash->{$s}}){
 					print $writer "$s\t$o\n";$updated++;$count++;
 				}
@@ -2074,13 +2195,14 @@ sub handleTripleQueriesMergeAnchors{
 	my $tmp=$hashtable->{$subject}->{$predicate};
 	push(@{$tmp->{"query"}},$query);
 	if(defined($isIndex)){
-		my ($key,@vals)=split(/\:/,$anchor);
-		my @objs=split(/\:/,$object);
+		my ($key,$value)=split(/\:/,$anchor);
+		my @vals=split(/,/,$value);
+		my @objs=split(/$objectDelim/,$object);
 		my $size=scalar(@vals);
 		if($size!=scalar(@objs)){
 			print STDERR "Number of anchors and values don't match\n";
-			print STDERR "values=".join(",",@vals);
-			print STDERR "objects=".join(",",@objs);
+			print STDERR "values=".join(",",@vals)."\n";
+			print STDERR "objects=".join(",",@objs)."\n";
 			exit(1);
 		}
 		$tmp->{"index"}=[$key,@vals];
@@ -2141,6 +2263,31 @@ sub handleTripleQueriesRegexpVars{
 			if($pipedVars){$triple->{"$key.regexp"}=undef;}
 		}
 	}
+}
+############################## incrementTsv ##############################
+sub incrementTsv{
+	my $predicate=shift();
+	my $tempfile=shift();
+	my $writer=shift();
+	close($writer);
+	my $file=getFileFromPredicate($predicate);
+	if($file=~/\.gz$/){return;}
+	elsif($file=~/\.bz2$/){return;}
+	elsif(-d $file){return;}
+	my $hash=readTsvToKeyValHash($file);#original
+	my $hash2=readTsvToKeyValHash($tempfile);#updates
+	my $count=0;
+	while(my($key,$val)=each(%{$hash2})){
+		if(exists($hash->{$key})){
+			my $sum=0;
+			foreach my $v(@{$hash->{$key}}){$sum+=$v;}
+			foreach my $v(@{$hash2->{$key}}){$sum+=$v;}
+			$hash->{$key}=[$sum];
+		}else{$hash->{$key}=$val;}
+		$count++;
+	}
+	writeKeyValHash($file,$hash);
+	return $count;
 }
 ############################## insertTsv ##############################
 sub insertTsv{
@@ -2261,7 +2408,10 @@ sub jsonEncode{
 	my $object=shift;
 	if(ref($object) eq "ARRAY"){return jsonEncodeArray($object);}
 	elsif(ref($object) eq "HASH"){return jsonEncodeHash($object);}
-	elsif($object=~/^([+-]?)(?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?$/){return $object;}
+	elsif($object=~/^\d+$/){
+		if($object!~/^0/){return $object;}
+		else{return "\"".jsonEscape($object)."\"";}
+	}elsif($object=~/^([+-]?)(?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?$/){return $object;}
 	else{return "\"".jsonEscape($object)."\"";}
 }
 sub jsonEncodeArray{
@@ -2525,7 +2675,8 @@ sub md5Files{
 		if(defined($md5cmd)){
 			my $sum=`$md5cmd $file`;
 			chomp($sum);
-			if($sum=~/(\S+)$/){$sum=$1;}
+			if($sum=~/(\w{32})/){$sum=$1;}
+			else{next;}
 			print $writer "$file\tfile/md5\t$sum\n";
 		}
 	}
@@ -2945,7 +3096,9 @@ sub queryVariables{
 				my $h=queryVariablesHash($p,$query,$result);
 				if(!defined($h)){next;}
 				if(exists($query->{"isVariableAnchor"})){# handle normal join keys
-					push(@array,$h);
+					my $missing=0;
+					while(my ($key,$val)=each(%{$h})){if(!defined($val)){$missing=1;}}
+					if($missing==0){push(@array,$h);}
 					next;
 				}
 				if(defined($joinKeysFake)){#handle fake join keys
@@ -2953,7 +3106,7 @@ sub queryVariables{
 					# There is a very special case where query's subject or object is an actual value
 					# This is when query is used to narrow down candidates
 					# If multiple anchors exist, it's possible to have mixture of success and failure ones.
-					# I later remove hashtable with failure one later.
+					# I will remove hashtable with failure one later.
 					$fakeKeyCounts->{$joinKey}++;
 					$joinFunction->($hashtable,\@array,$joinKey,$h,$a);
 					next;
@@ -3004,7 +3157,16 @@ sub queryVariables{
 	}
 	if(defined($joinKeysFake)){return \@array;}
 	if(defined($noJoinKey)){return \@array;}
-	if(defined($joinKeys)){return $hashtable;}
+	if(defined($joinKeys)){
+		if(exists($query->{"isVariableAnchor"})){
+			foreach my $h(@array){
+				my $joinKey=constructJoinKey($joinKeys,$h);
+				$joinKeyCounts->{$joinKey}++;
+				$joinFunction->($hashtable,undef,$joinKey,$h);
+			}
+		}
+		return $hashtable;
+	}
 	return \@array;#just in case
 }
 ############################## queryVariablesFileHandler ##############################
@@ -3519,7 +3681,7 @@ sub sortSubs{
 	}
 	close($reader);
 	if(defined($name)){$blocks->{$name}=$block;push(@orders,$name);}
-	my ($writer,$file)=tempfile("scriptXXXXXXXXXX",DIR=>"/tmp",SUFFIX=>".pl");
+	my ($writer,$file)=tempfile("scriptXXXXXXXXXX",DIR=>"/tmp",SUFFIX=>".pl",UNLINK=>1);
 	foreach my $line(@headers){print $writer "$line\n";}
 	foreach my $key(sort{$a cmp $b}@orders){foreach my $line(@{$blocks->{$key}}){print $writer "$line\n";}}
 	close($writer);
@@ -3840,6 +4002,7 @@ sub splitTokenByComma{
 	my $currentBlock;
 	my $quoted;
 	my $escapedKey;
+	my $predicate;
 	my $isString;
 	my $text="";
 	my @bases=split(//,$line);
@@ -3852,7 +4015,8 @@ sub splitTokenByComma{
 			next;
 		}elsif($base eq","){
 			if($quoted){}#skip since quoted
-			elsif(defined($currentBlock)){}
+			elsif(defined($currentBlock)){}#blocked with {} or [] or ()
+			elsif(defined($predicate)){}#skip since it's predicate
 			else{
 				push(@tokens,$text);
 				$text="";
@@ -3909,6 +4073,12 @@ sub splitTokenByComma{
 			else{
 				if(defined($currentBlock)){push(@blocks,$currentBlock);}
 				$currentBlock="]";
+			}
+		}elsif($base eq "-"){
+			if($i+1<$length&&$bases[$i+1]eq">"){
+				$base.=$bases[++$i];
+				if(!defined($predicate)){$predicate=1;}
+				else{$predicate=undef;}
 			}
 		}elsif($base eq $currentBlock){
 			$currentBlock=undef;
@@ -4158,6 +4328,8 @@ sub test1{
 	testSub("splitTokenByComma(\"'A',\\\"B\\\",'C'\")",["A","B","C"]);
 	testSub("splitTokenByComma(\"'A',\\\"B,C\\\",'D,E'\")",["A","B,C","D,E"]);
 	testSub("splitTokenByComma(\"'A\\tB','C\\nD','E\\\\F'\")",["A\tB","C\nD","E\\F"]);
+	testSub("splitTokenByComma(\"A->B->C,D->E->F\")",["A->B->C","D->E->F"]);
+	testSub("splitTokenByComma(\"A->B#E,F->C,D->E#G,H->F\")",["A->B#E,F->C","D->E#G,H->F"]);
 	#testing array manipulation
 	testSub("checkArrayDimension(1)",0);
 	testSub("checkArrayDimension([1])",1);
@@ -4171,13 +4343,13 @@ sub test1{
 	testCommand("perl $program_directory/dag.pl -d test update A B D","updated 1");
 	testCommand("perl $program_directory/dag.pl -d test select A B D","A\tB\tD");
 	testCommand("perl $program_directory/dag.pl -d test -f json select A B D","{\"A\":{\"B\":\"D\"}}");
-	system("echo 'A\\tE' >> test/B.txt");
+	system("echo 'A\tE' >> test/B.txt");
 	testCommand("perl $program_directory/dag.pl -d test select","A\tB\tD","A\tB\tE");
 	testCommand("perl $program_directory/dag.pl -d test -f json select","{\"A\":{\"B\":[\"D\",\"E\"]}}");
 	testCommand("perl $program_directory/dag.pl -d test -f json select % B","{\"A\":{\"B\":[\"D\",\"E\"]}}");
 	testCommand("perl $program_directory/dag.pl -d test -f json select A","{\"A\":{\"B\":[\"D\",\"E\"]}}");
 	testCommand("perl $program_directory/dag.pl -d test -f json select % % D","{\"A\":{\"B\":\"D\"}}");
-	system("echo 'F\\tGreg' >> test/B.txt");
+	system("echo 'F\tGreg' >> test/B.txt");
 	testCommand("perl $program_directory/dag.pl -d test -f json select % B %","{\"A\":{\"B\":[\"D\",\"E\"]},\"F\":{\"B\":\"Greg\"}}");
 	testCommand("perl $program_directory/dag.pl -d test -f json select % % %eg","{\"F\":{\"B\":\"Greg\"}}");
 	testCommand("perl $program_directory/dag.pl -d test -f json delete % % %e%","deleted 1");
@@ -4312,6 +4484,12 @@ sub test2{
 	unlink("test/B/value.txt");
 	rmdir("test/A");
 	rmdir("test/B");
+	#Testing predicate with variables with two files
+	createFile("test/one.txt","Akira\tA");
+	createFile("test/two.txt","A\tB\tC","A\tE\tF","B\tB\tG","A\tB\tH");
+	testCommand("perl $program_directory/dag.pl -d test query '\$name->one->\$a' '\$a->two#\$b->\$c'","a\tb\tc\tname","A\tB\tC\tAkira","A\tE\tF\tAkira","A\tB\tH\tAkira");
+	unlink("test/one.txt");
+	unlink("test/two.txt");
 	#Testing assign arguments
 	testCommand("perl $program_directory/dag.pl -d test query '\$a=\"A\"'","a","A");
 	testCommand("perl $program_directory/dag.pl -d test query '\$a=\"A\"' '\$b=\"H\"'","a\tb","A\tH");
@@ -4520,15 +4698,15 @@ sub test4{
 	unlink("test/input2.tsv");
 	createFile("test/input.tsv","A\t1\t2\t3\t4\t5","B\t6\t7\t8\t9\t10");
 	testCommand("perl $program_directory/dag.pl query '\$key->test/input.tsv#0:1->\$val\'","key\tval","A\t1","B\t6");
-	testCommand("perl $program_directory/dag.pl query '\$key->test/input.tsv#0:1:2:3:5->\$v1:\$v2:\$v3:\$v5\'","key\tv1\tv2\tv3\tv5","A\t1\t2\t3\t5","B\t6\t7\t8\t10");
+	testCommand("perl $program_directory/dag.pl query '\$key->test/input.tsv#0:1,2,3,5->\$v1 \$v2 \$v3 \$v5\'","key\tv1\tv2\tv3\tv5","A\t1\t2\t3\t5","B\t6\t7\t8\t10");
 	unlink("test/input.tsv");
 	#CSV
 	createFile("test/input.bed","chr22\t1000\t5000\tcloneA\t960\t+\t1000\t5000\t0\t2\t567,488,\t0,3512","chr22\t2000\t6000\tcloneB\t900\t-\t2000\t6000\t0\t2\t433,399,\t0,3601");
 	testCommand("perl $program_directory/dag.pl query '\$key->test/input.bed->\$val'","key\tval","cloneA\tchr22:1000..5000:+","cloneB\tchr22:2000..6000:-");
 	testCommand("perl $program_directory/dag.pl query '\$key->test/input.bed#name:position->\$val'","key\tval","cloneA\tchr22:1000..5000:+","cloneB\tchr22:2000..6000:-");
 	testCommand("perl $program_directory/dag.pl query '\$id->test/input.bed#name:chrom->\$chr'","chr\tid","chr22\tcloneA","chr22\tcloneB");
-	testCommand("perl $program_directory/dag.pl query '\$id->test/input.bed#3:0:1:2:4:5->\$chr:\$start:\$end:\$score:\$strand'","chr\tend\tid\tscore\tstart\tstrand","chr22\t5000\tcloneA\t960\t1000\t+","chr22\t6000\tcloneB\t900\t2000\t-");
-	testCommand("perl $program_directory/dag.pl query '\$id->test/input.bed#3:0:1:2:4:5:chromLength:position->\$chr:\$start:\$end:\$score:\$strand:\$chromLength:\$position'","chr\tchromLength\tend\tid\tposition\tscore\tstart\tstrand","chr22\t4000\t5000\tcloneA\tchr22:1000..5000:+\t960\t1000\t+","chr22\t4000\t6000\tcloneB\tchr22:2000..6000:-\t900\t2000\t-");
+	testCommand("perl $program_directory/dag.pl query '\$id->test/input.bed#3:0,1,2,4,5->\$chr \$start \$end \$score \$strand'","chr\tend\tid\tscore\tstart\tstrand","chr22\t5000\tcloneA\t960\t1000\t+","chr22\t6000\tcloneB\t900\t2000\t-");
+	testCommand("perl $program_directory/dag.pl query '\$id->test/input.bed#3:0,1,2,4,5,chromLength,position->\$chr \$start \$end \$score \$strand \$chromLength \$position'","chr\tchromLength\tend\tid\tposition\tscore\tstart\tstrand","chr22\t4000\t5000\tcloneA\tchr22:1000..5000:+\t960\t1000\t+","chr22\t4000\t6000\tcloneB\tchr22:2000..6000:-\t900\t2000\t-");
 	unlink("test/input.bed");
 	createFile("test/input.csv","'A',1,2,3,4,5","'B',6,7,8,9,10","'C',11,12,13,14,15");
 	testCommand("perl $program_directory/dag.pl query '\$key->test/input.csv#0:1->\$value\'","key\tvalue","A\t1","B\t6","C\t11");
@@ -4551,17 +4729,17 @@ sub test4{
 	createFile("test/input.fq","\@idA","AAAAAAAAAAAA","+","////////////","\@idB","BBBBBBBBBBBB","+","////////////");
 	testCommand("perl $program_directory/dag.pl query '\$id->test/input.fq->\$seq'","id\tseq","idA\tAAAAAAAAAAAA","idB\tBBBBBBBBBBBB");
 	createFile("test/input.fq","\@idA","AAAAAAAAAAAA","+","////////////","\@idB","BBBBBBBBBBBB","+","////////////");
-	testCommand("perl $program_directory/dag.pl query '\$qual->test/input.fq#quality:id:sequence->\$id:\$seq'","id\tqual\tseq","idA idB\t////////////\tAAAAAAAAAAAA BBBBBBBBBBBB");
-	testCommand("perl $program_directory/dag.pl query '\$id->test/input.fq#id:sequence:quality:length->\$sequence:\$quality:\$length'","id\tlength\tquality\tsequence","idA\t12\t////////////\tAAAAAAAAAAAA","idB\t12\t////////////\tBBBBBBBBBBBB");
+	testCommand("perl $program_directory/dag.pl query '\$qual->test/input.fq#quality:id,sequence->\$id \$seq'","id\tqual\tseq","idA idB\t////////////\tAAAAAAAAAAAA BBBBBBBBBBBB");
+	testCommand("perl $program_directory/dag.pl query '\$id->test/input.fq#id:sequence,quality,length->\$sequence \$quality \$length'","id\tlength\tquality\tsequence","idA\t12\t////////////\tAAAAAAAAAAAA","idB\t12\t////////////\tBBBBBBBBBBBB");
 	unlink("test/input.fq");
 	#GTF
 	createFile("test/input.gtf","GL000213.1\tprotein_coding\tCDS\t138767\t139287\t.\t-\t0\t gene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"1\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\"; protein_id \"ENSP00000329990\";","GL000213.1\tprotein_coding\tstart_codon\t139285\t139287\t.\t-\t0\t gene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"1\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";","GL000213.1\tprotein_coding\texon\t134276\t134390\t.\t-\t.\t gene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"2\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";","GL000213.1\tprotein_coding\tCDS\t134276\t134390\t.\t-\t1\t gene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"2\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\"; protein_id \"ENSP00000329990\";","GL000213.1\tprotein_coding\texon\t133943\t134116\t.\t-\t.\t gene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"3\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";");
 	testCommand("perl $program_directory/dag.pl query '\$id->test/input.gtf->\$value'","id\tvalue","GL000213.1:138767..139287\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"1\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\"; protein_id \"ENSP00000329990\";","GL000213.1:139285..139287\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"1\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";","GL000213.1:134276..134390\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"2\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";","GL000213.1:134276..134390\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"2\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\"; protein_id \"ENSP00000329990\";","GL000213.1:133943..134116\tgene_id \"ENSG00000237375\"; transcript_id \"ENST00000327822\"; exon_number \"3\"; gene_name \"BX072566.1\"; gene_biotype \"protein_coding\"; transcript_name \"BX072566.1-201\";");
-	testCommand("perl $program_directory/dag.pl query '\$id->test/input.gtf#position:gene_id:transcript_id->\$geneId:\$transcriptId'","geneId\tid\ttranscriptId","ENSG00000237375\tGL000213.1:138767..139287\tENST00000327822","ENSG00000237375\tGL000213.1:139285..139287\tENST00000327822","ENSG00000237375\tGL000213.1:134276..134390\tENST00000327822","ENSG00000237375\tGL000213.1:133943..134116\tENST00000327822");
+	testCommand("perl $program_directory/dag.pl query '\$id->test/input.gtf#position:gene_id,transcript_id->\$geneId \$transcriptId'","geneId\tid\ttranscriptId","ENSG00000237375\tGL000213.1:138767..139287\tENST00000327822","ENSG00000237375\tGL000213.1:139285..139287\tENST00000327822","ENSG00000237375\tGL000213.1:134276..134390\tENST00000327822","ENSG00000237375\tGL000213.1:133943..134116\tENST00000327822");
 	unlink("test/input.gtf");
 	#Testing multiple objects
 	createFile("test/input.tsv","#id\tposition","Akira\t1 2","Akita\t3 4","Akisa\t5 6");
-	testCommand("perl $program_directory/dag.pl -d test query '\$id->input#id:position->\$x \$y'","id\tx\ty","Akira\t1\t2","Akita\t3\t4","Akisa\t5\t6");
+	testCommand("perl $program_directory/dag.pl -d test -D ',' query '\$id->input#id:position->\$x\\ \$y'","id\tx\ty","Akira\t1\t2","Akita\t3\t4","Akisa\t5\t6");
 	unlink("test/input.tsv");
 }
 #Testing list and advanced () functionality
@@ -4571,7 +4749,7 @@ sub test5{
 	createFile("css/clean.css");
 	createFile("css/flex.css");
 	createFile("css/tab.css");
-	#Check system->ls with ':'
+	#Check system->ls with ':' (obsolete?)
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$filepath'","[{\"filepath\":\"css/classic.css\"},{\"filepath\":\"css/clean.css\"},{\"filepath\":\"css/flex.css\"},{\"filepath\":\"css/tab.css\"}]");
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$filepath:\$dir'","[{\"dir\":\"css\",\"filepath\":\"css/classic.css\"},{\"dir\":\"css\",\"filepath\":\"css/clean.css\"},{\"dir\":\"css\",\"filepath\":\"css/flex.css\"},{\"dir\":\"css\",\"filepath\":\"css/tab.css\"}]");
 	testCommand("perl $program_directory/dag.pl -f json query 'system->ls css->\$file:\$dir:\$filename'","[{\"dir\":\"css\",\"file\":\"css/classic.css\",\"filename\":\"classic\"},{\"dir\":\"css\",\"file\":\"css/clean.css\",\"filename\":\"clean\"},{\"dir\":\"css\",\"file\":\"css/flex.css\",\"filename\":\"flex\"},{\"dir\":\"css\",\"file\":\"css/tab.css\",\"filename\":\"tab\"}]");
@@ -4735,6 +4913,47 @@ sub test7{
 	unlink("test/db/B.txt");
 	unlink("test/db/F.txt");
 	unlink("test/db/I.txt");
+	system("rmdir test/db");
+	#testing increments
+	testCommand("perl $program_directory/dag.pl -d test increment A count 1","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count","A\tcount\t1");
+	testCommand("perl $program_directory/dag.pl -d test increment A count 1","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count","A\tcount\t2");
+	testCommand("perl $program_directory/dag.pl -d test increment A count 2","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count","A\tcount\t4");
+	testCommand("perl $program_directory/dag.pl -d test increment A count -4","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count","A\tcount\t0");
+	testCommand("perl $program_directory/dag.pl -d test increment A count#B 1","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count#B","A\tcount#B\t1");
+	testCommand("perl $program_directory/dag.pl -d test increment A count#B 1","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count#B","A\tcount#B\t2");
+	testCommand("perl $program_directory/dag.pl -d test increment A count#B 2","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count#B","A\tcount#B\t4");
+	testCommand("perl $program_directory/dag.pl -d test increment A count#B -4","incremented 1");
+	testCommand("perl $program_directory/dag.pl -d test select A count#B","A\tcount#B\t0");
+	unlink("test/count.txt");
+	#testing increment process
+	createFile("test/increment.txt","increment\tA->B->0","increment\tC->B->1","increment\tD->B->2");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/increment.txt","incremented 3");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B","A\tB\t0");
+	testCommand("perl $program_directory/dag.pl -d test/db select C B","C\tB\t1");
+	testCommand("perl $program_directory/dag.pl -d test/db select D B","D\tB\t2");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/increment.txt","incremented 3");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B","A\tB\t0");
+	testCommand("perl $program_directory/dag.pl -d test/db select C B","C\tB\t2");
+	testCommand("perl $program_directory/dag.pl -d test/db select D B","D\tB\t4");
+	testCommand("perl $program_directory/dag.pl -d test/db delete % % %","deleted 3");
+	createFile("test/increment.txt","increment\tA->B#E->0","increment\tA->B#F->1","increment\tA->B#G->2");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/increment.txt","incremented 3");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B#E","A\tB#E\t0");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B#F","A\tB#F\t1");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B#G","A\tB#G\t2");
+	testCommand("perl $program_directory/dag.pl -d test/db process < test/increment.txt","incremented 3");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B#E","A\tB#E\t0");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B#F","A\tB#F\t2");
+	testCommand("perl $program_directory/dag.pl -d test/db select A B#G","A\tB#G\t4");
+	testCommand("perl $program_directory/dag.pl -d test/db delete % % %","deleted 3");
+	unlink("test/increment.txt");
 	system("rmdir test/db");
 }
 ############################## testCommand ##############################

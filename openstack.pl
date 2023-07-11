@@ -701,7 +701,7 @@ sub checkServerConnection{
 	if(defined($opt_q)){STDOUT->autoflush(1);}
 	for(my $i=0;$i<$numberOfTries&&$result eq "";$i++){
 		if(!defined($opt_q)){print ".";}
-		sleep(10);
+		sleep($sleepTime);
 		$result=`ssh -o "ConnectTimeout 5" -oStrictHostKeyChecking=no $openStackRootUser\@$ip hostname 2> /dev/null`;
 		chomp($result);
 	}
@@ -1298,8 +1298,8 @@ sub existsKeyPair{
 	my $size=scalar(@{$keyPairs});
 	for(my $i=0;$i<$size;$i++){
 		my $keyPair=$keyPairs->[$i];
-		my $name=$keyPair->{"Name"};
-		if($name!~/^$name$/){next;}
+		my $name2=$keyPair->{"Name"};
+		if($name ne $name2){next;}
 		if(defined($finger)&&$finger ne $keyPair->{"Fingerprint"}){next;}
 		$index=$i;
 	}
@@ -2467,7 +2467,7 @@ sub runCommand{
 	}
 	if(!executeCommands($ip,\@commands,$user,$opt_c,"run_in_background")){if(!defined($opt_q)){print "FAIL\n";}}
 	elsif(!defined($opt_q)){print "OK\n";}
-	waitForJobIsToComplete($logFile,$completeFile,$stdoutFile,$stderrFile);
+	waitForJobsToComplete($logFile,$completeFile,$stdoutFile,$stderrFile);
 	removeNode($ip);
 }
 ############################## setServerTimezone ##############################
@@ -2497,6 +2497,7 @@ sub setupServer{
 		$serverPublicKey=loadPublicKey($publicKey);
 		if(defined($serverPublicKey)){$hash->{"\$serverPublicKey"}=$serverPublicKey;}
 	}
+	print STDERR "serverKeyPair=$serverKeyPair\n";
 	if(!defined($serverKeyPair)){
 		my $name="$openStackMoiraiId-server-keypair";
 		if(existsKeyPair($name)){deleteKeyPair($name);}
@@ -2879,8 +2880,8 @@ sub waitForFreeJobQueue{
 	if(!defined($opt_q)){print "  OK\n";STDOUT->autoflush(0);}
 	return 1;
 }
-############################## waitForJobIsToComplete ##############################
-sub waitForJobIsToComplete{
+############################## waitForJobsToComplete ##############################
+sub waitForJobsToComplete{
 	my $logFile=shift();
 	my $completeFile=shift();
 	my $stdoutFile=shift();
@@ -2939,7 +2940,7 @@ sub waitUntillImageStatusIsXXXXX{
 			return;
 		}
 		if(!defined($opt_q)){print ".";}
-		sleep(30);
+		sleep($sleepTime);
 	}
 	return;
 }
@@ -2958,7 +2959,7 @@ sub waitForAllInstanceToComplete{
 		}
 		if($hit==0){last;}
 		if(!defined($opt_q)){print ".";}
-		sleep(30);
+		sleep($sleepTime);
 	}
 	if(!defined($opt_q)){
 		print "  OK\n";
@@ -2999,7 +3000,7 @@ sub waitUntillInstanceStatusIsXXXXX{
 			return;
 		}
 		if(!defined($opt_q)){print ".";}
-		sleep(30);
+		sleep($sleepTime);
 	}
 	return;
 }
