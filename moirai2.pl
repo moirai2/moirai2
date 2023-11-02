@@ -11,9 +11,9 @@ use Time::localtime;
 my ($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=Cwd::abs_path($program_directory);
 my $program_path="$program_directory/$program_name";
-my $program_version="2023/07/11";
+my $program_version="2023/11/01";
 ############################## OPTIONS ##############################
-use vars qw($opt_a $opt_A $opt_b $opt_c $opt_C $opt_d $opt_D $opt_e $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_l $opt_L $opt_m $opt_M $opt_n $opt_N $opt_o $opt_O $opt_p $opt_P $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_z $opt_Z);
+use vars qw($opt_a $opt_A $opt_b $opt_c $opt_C $opt_d $opt_D $opt_e $opt_E $opt_f $opt_F $opt_g $opt_G $opt_h $opt_H $opt_i $opt_I $opt_j $opt_J $opt_l $opt_L $opt_m $opt_M $opt_n $opt_o $opt_O $opt_p $opt_P $opt_q $opt_Q $opt_r $opt_R $opt_s $opt_S $opt_t $opt_u $opt_U $opt_v $opt_V $opt_w $opt_x $opt_X $opt_z $opt_Z);
 getopts('a:Ab:c:C:d:D:e:E:f:F:g:G:hHi:I:j:lLm:M:n:N:o:O:pP:q:Q:r:R:s:S:tu:Uv:V:w:xX:zZ:');
 ############################## HELP ##############################
 sub help{
@@ -60,6 +60,7 @@ sub help{
 	if(defined($opt_H)){
 		print "############################## Updates ##############################\n";
 		print "\n";
+		print "2023/11/01  Fixed fag problem.\n";
 		print "2023/07/11  Added increment triple and output/update/increment is used to reduce already dones.\n";
 		print "2023/02/18  Fixed small bugs.\n";
 		print "2023/02/15  All workdirectory files rsynced to current directory.\n";
@@ -276,9 +277,9 @@ if(defined($opt_L)){assignStdoutStderrToFile($logdir,$prgmode,@ARGV);}
 #make sure server paths are correct
 # (-j) laptop =queserver=> lsbdt01
 # (-j)                     lsbdt01 <=jobserver= moirainodes
-# (-a)                     lsbdt01 =remoteserver=> moirainodes
+# (-J)                     lsbdt01 =remoteserver=> moirainodes
 my $remoteServer;
-if(defined($opt_a)){$remoteServer=handleServer($opt_a);}
+if(defined($opt_J)){$remoteServer=handleServer($opt_J);}
 my $jobServer;
 if(defined($opt_j)){$jobServer=handleServer($opt_j);}
 my $processid;
@@ -967,10 +968,10 @@ sub checkNotConditions{
 	my $dagdb=$command->{$urls->{"daemon/dagdb"}};
 	my $query=$command->{$urls->{"daemon/query/not"}};
 	my $outputs=getQueryResults($dagdb,$query);
+	if(scalar(@{$outputs->[1]})==0){return;}#no results
 	my $inputTemp={};
 	foreach my $input(@{$inputs->[0]}){$inputTemp->{$input}=1;}
 	my $commonTemp={};
-	if(scalar(@{$outputs->[1]})==0){return;}
 	foreach my $output(@{$outputs->[0]}){if(exists($inputTemp->{$output})){$commonTemp->{$output}=1;}}
 	my @commonKeys=keys(%{$commonTemp});
 	if(scalar(@commonKeys)==0){return;}
@@ -1239,10 +1240,18 @@ sub controlDelete{
 	my @files=getFiles($deletedir);
 	if(scalar(@files)==0){return 0;}
 	while(startLockfile("$deletedir.lock")){if(defined($opt_l)){print getLogtime()."|Waiting for insert slot to open up again\n"}}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/dag.pl -f tsv delete";
+	my ($writer,$allfile)=tempfile(UNLINK=>1);
+	foreach my $file(@files){
+		my $reader=openFile($file);
+		while(<$reader>){print $writer $_;}
+		close($reader);
+		unlink($file);
+	}
+	close($writer);
+	my $command="cat $allfile|perl $program_directory/dag.pl -f tsv delete";
 	my $count=`$command`;
+	unlink($allfile);
 	endLockfile("$deletedir.lock");
-	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
 	$count=$1;
 	return $count;
@@ -1252,10 +1261,18 @@ sub controlIncrement{
 	my @files=getFiles($incrementdir);
 	if(scalar(@files)==0){return 0;}
 	while(startLockfile("$incrementdir.lock")){if(defined($opt_l)){print getLogtime()."|Waiting for insert slot to open up again\n"}}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/dag.pl -f tsv increment";
+	my ($writer,$allfile)=tempfile(UNLINK=>1);
+	foreach my $file(@files){
+		my $reader=openFile($file);
+		while(<$reader>){print $writer $_;}
+		close($reader);
+		unlink($file);
+	}
+	close($writer);
+	my $command="cat $allfile|perl $program_directory/dag.pl -f tsv increment";
 	my $count=`$command`;
+	unlink($allfile);
 	endLockfile("$incrementdir.lock");
-	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
 	$count=$1;
 	return $count;
@@ -1265,10 +1282,18 @@ sub controlInsert{
 	my @files=getFiles($insertdir);
 	if(scalar(@files)==0){return 0;}
 	while(startLockfile("$insertdir.lock")){if(defined($opt_l)){print getLogtime()."|Waiting for insert slot to open up again\n"}}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/dag.pl -f tsv insert";
+	my ($writer,$allfile)=tempfile(UNLINK=>1);
+	foreach my $file(@files){
+		my $reader=openFile($file);
+		while(<$reader>){print $writer $_;}
+		close($reader);
+		unlink($file);
+	}
+	close($writer);
+	my $command="cat $allfile|perl $program_directory/dag.pl -f tsv insert";
 	my $count=`$command`;
+	unlink($allfile);
 	endLockfile("$insertdir.lock");
-	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
 	$count=$1;
 	return $count;
@@ -1278,10 +1303,18 @@ sub controlUpdate{
 	my @files=getFiles($updatedir);
 	if(scalar(@files)==0){return 0;}
 	while(startLockfile("$updatedir.lock")){if(defined($opt_l)){print getLogtime()."|Waiting for insert slot to open up again\n"}}
-	my $command="cat ".join(" ",@files)."|perl $program_directory/dag.pl -f tsv update";
+	my ($writer,$allfile)=tempfile(UNLINK=>1);
+	foreach my $file(@files){
+		my $reader=openFile($file);
+		while(<$reader>){print $writer $_;}
+		close($reader);
+		unlink($file);
+	}
+	close($writer);
+	my $command="cat $allfile|perl $program_directory/dag.pl -f tsv update";
 	my $count=`$command`;
+	unlink($allfile);
 	endLockfile("$updatedir.lock");
-	foreach my $file(@files){unlink($file);}
 	$count=~/(\d+)/;
 	$count=$1;
 	return $count;
@@ -1290,12 +1323,14 @@ sub controlUpdate{
 sub controlWorkflow{
 	my $processes=shift();
 	my $commands=shift();
-	my $nosync=shift();
+	my $updateMode=shift();
 	my $completed=0;
-	if(defined($processes)&&defined($commands)){
+	if($updateMode==1){}
+	elsif(defined($processes)&&defined($commands)){
 		$completed=checkProcessIsCompleted($processes,$commands);
 		if($completed==0){return;}
 	}
+	if($updateMode==-1){return;}#do not update
 	my $inserted=controlInsert();
 	my $deleted=controlDelete();
 	my $updated=controlUpdate();
@@ -2140,8 +2175,7 @@ sub getBash{
 	my $update;
 	my $script;
 	foreach my $line(split(/\n/,$content)){
-		if($line=~/^#\$\s?-a\s+?(.+)$/){$command->{$urls->{"daemon/remoteserver"}}=handleServer($1);}#-a
-		elsif($line=~/^#\$\s?-b\s+?(.+)$/){$command->{$urls->{"daemon/command/option"}}=jsonDecode($1);}
+		if($line=~/^#\$\s?-b\s+?(.+)$/){$command->{$urls->{"daemon/command/option"}}=jsonDecode($1);}
 		elsif($line=~/^#\$\s?-c\s+?(.+)$/){$command->{$urls->{"daemon/container"}}=$1;}
 		elsif($line=~/^#\$\s?-C\s+?(.+)$/){$command->{$urls->{"daemon/description"}}=$1;}
 		elsif($line=~/^#\$\s?-d\s+?(.+)$/){$command->{$urls->{"daemon/dagdb"}}=checkDatabaseDirectory($1);}#-d
@@ -2150,6 +2184,7 @@ sub getBash{
 		elsif($line=~/^#\$\s?-f\s+?(.+)$/){$command->{$urls->{"daemon/file/stats"}}=handleKeys($1);}#-f
 		elsif($line=~/^#\$\s?-F\s+?(.+)$/){$command->{$urls->{"daemon/error/file/empty"}}=handleKeys($1);}#-F
 		elsif($line=~/^#\$\s?-i\s+?(.+)$/){if(defined($input)){$input.=",";}$input.=$1;}#-i
+		elsif($line=~/^#\$\s?-J\s+?(.+)$/){$command->{$urls->{"daemon/remoteserver"}}=handleServer($1);}#-J
 		elsif($line=~/^#\$\s?-I\s+?(.+)$/){$command->{$urls->{"daemon/container/image"}}=$1;}#-I
 		elsif($line=~/^#\$\s?-m\s+?(.+)$/){$command->{$urls->{"daemon/approximate/time"}}=$1;}#-m
 		elsif($line=~/^#\$\s?-n\s+?(.+)$/){if(defined($not)){$not.=",";}$not.=$1;;}#-n
@@ -2161,6 +2196,7 @@ sub getBash{
 		elsif($line=~/^#\$\s?-s\s+?(.+)$/){$command->{$urls->{"daemon/sleeptime"}}=$1;}#-s
 		elsif($line=~/^#\$\s?-S\s+?(.+)$/){if(defined($script)){$script.=",";}$script.=$1;}#-S
 		elsif($line=~/^#\$\s?-u\s+?(.+)$/){if(defined($update)){$update.=",";}$update.=$1;}#-u
+		elsif($line=~/^#\$\s?-a\s+?(.+)$/){if(defined($increment)){$increment.=",";}$increment.=$1;}#-a
 		elsif($line=~/^#\$\s?-V\s+?(.+)$/){$command->{$urls->{"daemon/container/flavor"}}=$1;}#-V
 		elsif($line=~/^#\$\s?-w\s+?(.+)$/){$command->{$urls->{"daemon/workid"}}=$1;}#-w
 		elsif($line=~/^#\$\s?-X\s+?(.+)$/){$command->{$urls->{"daemon/suffix"}}=handleSuffix($1);}#-X
@@ -3177,49 +3213,7 @@ sub helpCommand{
 	print "    COMMAND  Bash command lines to execute.\n";
 	print "        EOS  Assign command lines with Unix's heredoc.\n";
 	print "\n";
-	print "Options:\n";
-	print "         -a  Process jobs (a)cross server instead of running on local environment\n";
-	print "         -A  Force processes even if input->output queries are (A)lready completed\n";
-	print "         -b  Specify (b)oolean options of a command line (example -a:\$optionA,-b:\$optionB).\n";
-	print "         -c  Specify (c)ontainer image/path for execution for docker or singularity.\n";
-	print "         -C  Simple des(C)ription of a command used for output\n";
-	print "         -d  Path to a directed acyclic graph (d)atabase directory (default='.').\n";
-	print "         -D  (Delim character for splitting filename (None alphabe/number characters+'_')\n";
-	print "         -e  d(e)lete database with '\$sub->\$pred->\$obj' format.\n";
-	print "         -E  Ignore STD(E)RR if specific regexp is found in STDERR messages.\n";
-	print "         -f  Record (f)ilestats[linecount/seqcount/md5/filesize/utime] of output files.\n";
-	print "         -F  If specified output (F)ile has empty content, record as error.\n";
-	print "         -h  Show (h)elp message.\n";
-	print "         -H  Show update (H)istory.\n";
-	print "         -i  (i)nput query for select from database in '\$sub->\$pred->\$obj' format.\n";
-	print "         -I  (I)mage of OpenStack instance to build and process and process job.\n";
-	print "         -j  Upload jobs to a (j)ob server instead of local .moirai2/ctrl/job.\n";
-	print "         -l  Show (l)ogs messages from moirai.pl.\n";
-	print "         -L  Write (L)ogs to .moirai/daemon/*.stdout and .moirai/damone/*.stderr.\n";
-	print "         -m  Approxi(m)ate time to process (default='1'second).\n";
-	print "         -M  (M)ax number of threads handled by daemon(default='1').\n";
-	print "         -n  (n)egation of input queries meaning if match, don't execute process.\n";
-	print "         -N  i(N)crement database with '\$sub->\$pred->\$obj' format.\n";
-	print "         -o  (o)utput query for insert to database in '\$sub->\$pred->\$obj' format.\n";
-	print "         -O  Ignore STD(O)UT if specific regexp is found in STDOUT message.\n";
-	print "         -p  (p)rint command lines instead of executing for test purpose.\n";
-	print "         -P  Use user specified tem(P) directory instead of /tmp.\n";
-	print "         -q  Use (q)sub or slurm for throwing jobs [qsub|slurm|openstack].\n";
-	print "         -Q  (Q)sub/slurm options [qsub/sge/squeue/slurm].\n";
-	print "         -r  Print (r)eturn value (in exec mode, stdout is default).\n";
-	print "         -s  Loop (s)leep time in second (default=1).\n";
-	print "         -S  Implement/import (S)cript code to a command json file.\n";
-	print "         -t  Check (t)imestamp of inputs and outputs and execute command if needed.\n";
-	print "         -u  (u)pdate database with '\$sub->\$pred->\$obj' format.\n";
-	print "         -U  Run in (U)ser mode where input parameters are prompted.\n";
-	print "         -v  (v)olume directories to rsync across net.\n";
-	print "         -V  Fla(V)or of Openstack instance to build and process job.\n";
-	print "         -w  Assign (w)ork id (default is 'local').\n";
-	print "         -x  Don't e(x)ecute process, but just submit process.\n";
-	print "         -X  Set suffi(X)s of input/output files (format is '\$output.txt').\n";
-	print "         -z  Unzip input files before processing.\n";
-	print "         -Z  Create done file to signal completion to daemon.\n";
-	print "\n";
+	helpOptions();
 	print "############################## Examples ##############################\n";
 	print "\n";
 	print "(1) perl $program_name -o 'root->input->\$output' command << 'EOS'\n";
@@ -3260,12 +3254,12 @@ sub helpDaemon{
 	print "  terminate  Teminate jobs if no jobs remain\n";
 	print "\n";
 	print "Options:\n";
-	print "         -a  process jobs by (a)cessing remote server instead of using local.\n";
 	print "         -b  (B)uild daemon on specified server instead of local environment.\n";
 	print "         -d  path to a directed acyclic graph (d)atabase directory (default='.').\n";
 	print "         -h  Show (h)elp message.\n";
 	print "         -H  Show update (h)istory.\n";
 	print "         -j  Retrieve jobs from a (j)ob server instead of retrieving from a local .moirai2/ctrl/job.\n";
+	print "         -J  process (J)obs by acessing remote server instead of using local.\n";
 	print "         -l  Show (l)ogs from moirai.pl.\n";
 	print "         -q  Use (q)sub or slurm for running daemon [qsub|slurm|openstack].\n";
 	print "         -M  (M)ax number of threads (default='1').\n";
@@ -3283,7 +3277,7 @@ sub helpDaemon{
 	print " perl $program_name cron submit process\n";
 	print " This will 'process' jobs along with 'cron' and 'submit',\n";
 	print "\n";
-	print " perl $program_name -a USER\@SERVER:DIR  process\n";
+	print " perl $program_name -J USER\@SERVER:DIR process\n";
 	print " This will process jobs using remote server specified with '-a'\n";
 	print " Make sure you have SSH access to the remote server.\n";
 	print "\n";
@@ -3299,49 +3293,7 @@ sub helpExec{
 	print "\n";
 	print "       CMD  One line command like 'ls'.\n";
 	print "\n";
-	print "Options:\n";
-	print "         -a  Process jobs (a)cross server instead of running on local environment\n";
-	print "         -A  Force processes where input->output queries are (A)lready completed\n";
-	print "         -b  Specify (b)oolean options of a command line (example -a:\$optionA,-b:\$optionB).\n";
-	print "         -c  Specify (c)ontainer image/path for execution for docker or singularity.\n";
-	print "         -C  Simple des(C)ription of a command used for output\n";
-	print "         -d  Path to a directed acyclic graph (d)atabase directory (default='.').\n";
-	print "         -D  (Delim character for splitting filename (None alphabe/number characters+'_')\n";
-	print "         -e  d(e)lete database with '\$sub->\$pred->\$obj' format.\n";
-	print "         -E  Ignore STD(E)RR if specific regexp is found in STDERR messages.\n";
-	print "         -f  Record (f)ilestats[linecount/seqcount/md5/filesize/utime] of output files.\n";
-	print "         -F  If specified output (F)ile has empty content, record as error.\n";
-	print "         -h  Show (h)elp message.\n";
-	print "         -H  Show update (H)istory.\n";
-	print "         -i  (i)nput query for select from database in '\$sub->\$pred->\$obj' format.\n";
-	print "         -I  (I)mage of OpenStack instance to build and process and process job.\n";
-	print "         -j  Upload jobs to a (j)ob server instead of local .moirai2/ctrl/job.\n";
-	print "         -l  Show (l)ogs messages from moirai.pl.\n";
-	print "         -L  Write (L)ogs to .moirai/daemon/*.stdout and .moirai/damone/*.stderr.\n";
-	print "         -m  Approxi(m)ate time to process (default='1'second).\n";
-	print "         -M  (M)ax number of threads handled by daemon(default='1').\n";
-	print "         -n  (n)egation of input queries meaning if match, don't execute process.\n";
-	print "         -N  i(N)crement database with '\$sub->\$pred->\$obj' format.\n";
-	print "         -o  (o)utput query for insert to database in '\$sub->\$pred->\$obj' format.\n";
-	print "         -O  Ignore STD(O)UT if specific regexp is found in STDOUT message.\n";
-	print "         -p  (p)rint command lines instead of executing for test purpose.\n";
-	print "         -P  Use user specified tem(P) directory instead of /tmp.\n";
-	print "         -q  Use (q)sub or slurm for throwing jobs [qsub|slurm|openstack].\n";
-	print "         -Q  (Q)sub/slurm options [qsub/sge/squeue/slurm].\n";
-	print "         -r  Print (r)eturn value (in exec mode, stdout is default).\n";
-	print "         -s  Loop (s)leep time in second (default=1).\n";
-	print "         -S  Implement/import (S)cript code to a command json file.\n";
-	print "         -t  Check (t)imestamps of inputs and outputs and execute command if needed.\n";
-	print "         -u  (u)pdate database with '\$sub->\$pred->\$obj' format.\n";
-	print "         -U  Run in (U)ser mode where input parameters are prompted.\n";
-	print "         -v  (v)olume directories to rsync across net.\n";
-	print "         -V  Fla(V)or of Openstack instance to build and process job.\n";
-	print "         -w  Assign (w)ork id (default is 'local').\n";
-	print "         -x  Don't e(x)ecute process, but just submit process.\n";
-	print "         -X  Set suffi(X)s of input/output files (format is '\$output.txt').\n";
-	print "         -z  Unzip input files before processing.\n";
-	print "         -Z  Create done file to signal completion to daemon.\n";
-	print "\n";
+	helpOptions();
 	print "Note: Log file (including execution time, STDOUT, STDERR) stored under moirai/log/YYYYMMDD/ directory\n";
 	print "      Error files will be stored under moirai/log/error/ directory\n";
 	print "\n";
@@ -3358,10 +3310,10 @@ sub helpExec{
 	print "(4) perl $program_name -q sge exec ls -lt\n";
 	print "  - List files under current directory using Sun Grid Engine (SGE) qsub\n";
 	print "\n";
-	print "(5) perl $program_name -a ah3q\@dgt-ac4 exec echo hello world\n";
+	print "(5) perl $program_name -j ah3q\@dgt-ac4 exec echo hello world\n";
 	print "  - Returns 'hello world' at dgt-ac4 server\n";
 	print "\n";
-	print "(6) perl $program_name -q slurm -a ah3q\@dgt-ac4 exec ls -lt /work/ah3q/\n";
+	print "(6) perl $program_name -q slurm -j ah3q\@dgt-ac4 exec ls -lt /work/ah3q/\n";
 	print "  - List files under /work/ah3q at dgt-ac4 server using slurm queing system\n";
 	print "\n";
 	print "(7) perl $program_name -o '\$output' exec 'output=(`ls`)'\n";
@@ -3478,6 +3430,52 @@ sub helpOpenstack{
 	print "Program: Openstack.\n";
 	print "\n";
 	print "Usage: perl $program_name openstack\n";
+	print "\n";
+}
+############################## helpOptions ##############################
+sub helpOptions{
+	print "Options:\n";
+	print "         -a  increment/(a)dd number to database with '\$sub->\$pred->\$obj' format.\n";
+	print "         -A  Force processes even if input->output queries are (A)lready completed\n";
+	print "         -b  Specify (b)oolean options of a command line (example -a:\$optionA,-b:\$optionB).\n";
+	print "         -c  Specify (c)ontainer image/path for execution for docker or singularity.\n";
+	print "         -C  Simple des(C)ription of a command used for output\n";
+	print "         -d  Path to a directed acyclic graph (d)atabase directory (default='.').\n";
+	print "         -D  (Delim character for splitting filename (None alphabe/number characters+'_')\n";
+	print "         -e  d(e)lete database with '\$sub->\$pred->\$obj' format.\n";
+	print "         -E  Ignore STD(E)RR if specific regexp is found in STDERR messages.\n";
+	print "         -f  Record (f)ilestats[linecount/seqcount/md5/filesize/utime] of output files.\n";
+	print "         -F  If specified output (F)ile has empty content, record as error.\n";
+	print "         -h  Show (h)elp message.\n";
+	print "         -H  Show update (H)istory.\n";
+	print "         -i  (i)nput query for select from database in '\$sub->\$pred->\$obj' format.\n";
+	print "         -I  (I)mage of OpenStack instance to build and process and process job.\n";
+	print "         -j  Upload jobs to a (j)ob server instead of local .moirai2/ctrl/job.\n";
+	print "         -J  Process (J)obs across server instead of running on local environment\n";
+	print "         -l  Show (l)ogs messages from moirai.pl.\n";
+	print "         -L  Write (L)ogs to .moirai/daemon/*.stdout and .moirai/damone/*.stderr.\n";
+	print "         -m  Approxi(m)ate time to process (default='1'second).\n";
+	print "         -M  (M)ax number of threads handled by daemon(default='1').\n";
+	print "         -n  (n)egation of input queries meaning if match, don't execute process.\n";
+	print "         -o  (o)utput query for insert to database in '\$sub->\$pred->\$obj' format.\n";
+	print "         -O  Ignore STD(O)UT if specific regexp is found in STDOUT message.\n";
+	print "         -p  (p)rint command lines instead of executing for test purpose.\n";
+	print "         -P  Use user specified tem(P) directory instead of /tmp.\n";
+	print "         -q  Use (q)sub or slurm for throwing jobs [qsub|slurm|openstack].\n";
+	print "         -Q  (Q)sub/slurm options [qsub/sge/squeue/slurm].\n";
+	print "         -r  Print (r)eturn value (in exec mode, stdout is default).\n";
+	print "         -s  Loop (s)leep time in second (default=1).\n";
+	print "         -S  Implement/import (S)cript code to a command json file.\n";
+	print "         -t  Check (t)imestamp of inputs and outputs and execute command if needed.\n";
+	print "         -u  (u)pdate database with '\$sub->\$pred->\$obj' format.\n";
+	print "         -U  Run in (U)ser mode where input parameters are prompted.\n";
+	print "         -v  (v)olume directories to rsync across net.\n";
+	print "         -V  Fla(V)or of Openstack instance to build and process job.\n";
+	print "         -w  Assign (w)ork id (default is 'local').\n";
+	print "         -x  Don't e(x)ecute process, but just submit process.\n";
+	print "         -X  Set suffi(X)s of input/output files (format is '\$output.txt').\n";
+	print "         -z  Unzip input files before processing.\n";
+	print "         -Z  Create done file to signal completion to daemon.\n";
 	print "\n";
 }
 ############################## helpReprocess ##############################
@@ -3893,12 +3891,12 @@ sub loadCommandFromURL{
 	loadCommandFromURLRemoveDollar($command,$urls->{"daemon/error/stderr/ignore"});
 	loadCommandFromURLRemoveDollar($command,$urls->{"daemon/error/stdout/ignore"});
 	loadCommandFromURLToArray($command,$urls->{"daemon/bash"});
+	loadCommandFromURLToArray($command,$urls->{"daemon/query/in"});
+	loadCommandFromURLToArray($command,$urls->{"daemon/query/out"});
+	loadCommandFromURLToArray($command,$urls->{"daemon/query/not"});
+	loadCommandFromURLToArray($command,$urls->{"daemon/query/update"});
 	loadCommandFromURLToArray($command,$urls->{"daemon/query/delete"});
 	loadCommandFromURLToArray($command,$urls->{"daemon/query/increment"});
-	loadCommandFromURLToArray($command,$urls->{"daemon/query/in"});
-	loadCommandFromURLToArray($command,$urls->{"daemon/query/not"});
-	loadCommandFromURLToArray($command,$urls->{"daemon/query/out"});
-	loadCommandFromURLToArray($command,$urls->{"daemon/query/update"});
 	handleScript($command);
 	if(!exists($command->{$urls->{"daemon/approximate/time"}})){$command->{$urls->{"daemon/approximate/time"}}=1;}
 	if(scalar(keys(%{$default}))>0){$command->{$urls->{"daemon/default"}}=$default;}
@@ -4361,7 +4359,7 @@ sub moiraiMain{
 	my @execids=moiraiPrepare($command,$queryResults,@{$arguments});
 	#-j server -x = upload inputs, and quit
 	#-j server = upload inputs to server, process at server, wait, and download results
-	#-j server -a remote = upload inputs to server, upload inputs to remote, process at remote, wait, download results from remote, download results from server
+	#-j server -J remote = upload inputs to server, upload inputs to remote, process at remote, wait, download results from remote, download results from server
 	if(defined($jobServer)){#-j becomes queServer
 		copyProcessToQueServer($jobServer,$remoteServer,$commands,@execids);
 	}
@@ -4465,17 +4463,16 @@ sub moiraiPrepareMatch{
 	my $hash=shift();
 	my $vars=shift();
 	if(!defined($vars)){return;}
-	my $hit;
-	foreach my $var(@{$vars}){
-		my $match=1;
-		while(my($key,$val)=each(%{$hash})){
-			if(!exists($var->{$key})){$match=0;last;}
-			elsif($val ne $var->{$key}){$match=0;last;}
+	while(my($key,$val)=each(%{$hash})){#{json}=>"json/sra/SRP464630.json"
+		my $match=0;
+		foreach my $var(@{$vars}){#[{json}=>"json/sra/SRP464628.json",{json}=>"json/sra/SRP464629.json"]
+			if(!exists($var->{$key})){next;}
+			elsif($val ne $var->{$key}){next;}
+			$match=1;
 		}
-		if($match==0){next;}
-		$hit=1;last;
+		if($match==0){return 0;}
 	}
-	return $hit;
+	return 1;
 }
 ############################## moiraiPrepareRemoveFlag ##############################
 sub moiraiPrepareRemoveFlag{
@@ -4964,11 +4961,12 @@ sub removeAlreadyDones{
 	my $command=shift();
 	my $dagdb=$command->{$urls->{"daemon/dagdb"}};
 	my $queryKeys=$command->{$urls->{"daemon/query/in"}};
-	if(!exists($command->{$urls->{"daemon/query/out"}})&&!exists($command->{$urls->{"daemon/query/update"}})&&!exists($command->{$urls->{"daemon/query/increment"}})){return;}
+	#if(!exists($command->{$urls->{"daemon/query/out"}})&&!exists($command->{$urls->{"daemon/query/update"}})&&!exists($command->{$urls->{"daemon/query/increment"}})){return;}
+	if(!exists($command->{$urls->{"daemon/query/out"}})){return;}
 	my $query=[];
 	if(exists($command->{$urls->{"daemon/query/out"}})){push(@{$query},@{$command->{$urls->{"daemon/query/out"}}});}
-	if(exists($command->{$urls->{"daemon/query/update"}})){push(@{$query},@{$command->{$urls->{"daemon/query/update"}}});}
-	if(exists($command->{$urls->{"daemon/query/increment"}})){push(@{$query},@{$command->{$urls->{"daemon/query/increment"}}});}
+	#if(exists($command->{$urls->{"daemon/query/update"}})){push(@{$query},@{$command->{$urls->{"daemon/query/update"}}});}
+	#if(exists($command->{$urls->{"daemon/query/increment"}})){push(@{$query},@{$command->{$urls->{"daemon/query/increment"}}});}
 	my $outputs=getQueryResults($dagdb,$query);
 	my $inputTemp={};
 	foreach my $input(@{$inputs->[0]}){$inputTemp->{$input}=1;}
@@ -4993,16 +4991,16 @@ sub removeAlreadyDones{
 	$inputs->[1]=\@kepts;
 	#Query in contains flagged, but output already exist
 	#Do't execute, but remove those flagged ones
-	my $flagged;
-	foreach my $query(@{$queryKeys}){
-		my @tokens=split(/\-\>/,$query);
-		if($tokens[1]=~/flag\/(\w+)$/){$flagged=1;last;}
-	}
-	if($flagged&&scalar(@removeds)>0){
-		my $dagdb=$command->{$urls->{"daemon/dagdb"}};
-		if(moiraiPrepareRemoveFlag($dagdb,$queryKeys,[$inputs->[0],\@removeds])>0){controlWorkflow();}
+	#my $flagged;
+	#foreach my $query(@{$queryKeys}){
+	#	my @tokens=split(/\-\>/,$query);
+	#	if($tokens[1]=~/flag\/(\w+)$/){$flagged=1;last;}
+	#}
+	#if($flagged&&scalar(@removeds)>0){
+		#my $dagdb=$command->{$urls->{"daemon/dagdb"}};
+		#if(moiraiPrepareRemoveFlag($dagdb,$queryKeys,[$inputs->[0],\@removeds])>0){controlWorkflow();}
 		#handle insert/update/delete
-	}
+	#}
 }
 ############################## removeDirs ##############################
 sub removeDirs{
@@ -5027,7 +5025,6 @@ sub removeFiles{
 		else{unlink($file);}
 	}
 }
-
 ############################## removeSlash ##############################
 sub removeSlash{
 	my $path=shift();
@@ -5244,8 +5241,9 @@ sub runDaemon{
 	my $stopMode;#stop daemon mode
 	my $submitMode;#assign new jobs from submit directory
 	my $terminateMode;#If jobless for few loop, it'll terminate
+	my $updateMode=0;
 	foreach my $argument(@arguments){
-		if($argument=~/^complete$/i){$completeMode=1;}
+		if($argument=~/^complete$/i){$completeMode=1;$updateMode=1;}
 		if($argument=~/^cron$/i){$cronMode=1;}
 		if($argument=~/^openstack$/i){$openstackMode=1;}
 		if($argument=~/^process$/i){$processMode=1;}
@@ -5253,6 +5251,7 @@ sub runDaemon{
 		if($argument=~/^stop$/i){$stopMode=1;}
 		if($argument=~/^submit$/i){$submitMode=1;}
 		if($argument=~/^terminate$/i){$terminateMode=1;}
+		if($argument=~/^noupdate$/i){$updateMode=-1;}
 	}
 	my $openstackFlavors=defined($openstackMode)?getOpenstackFlavors():{};
 	if(defined($opt_b)){
@@ -5262,9 +5261,9 @@ sub runDaemon{
 		if(defined($stopMode)){touchFile($stopFile);terminate(1);}
 		elsif(fileExists($stopFile)){removeFiles($stopFile);}
 		my $command="perl moirai2.pl";
-		if(defined($opt_a)){$command.=" -a $opt_a";}
 		if(defined($opt_d)){$command.=" -d $opt_d";}
 		if(defined($opt_j)){$command.=" -j $opt_j";}
+		if(defined($opt_J)){$command.=" -J $opt_J";}
 		if(defined($opt_l)){$command.=" -l";}
 		if(defined($opt_L)){$command.=" -L";}
 		if(defined($opt_m)){$command.=" -m $opt_m";}
@@ -5326,7 +5325,7 @@ sub runDaemon{
 	my $execurls=[];
 	my @execids=();
 	while(true){
-		controlWorkflow($processes,$commands);
+		controlWorkflow($processes,$commands,$updateMode);
 		if(defined($submitMode)){#handle submit
 			foreach my $file(getFiles($submitdir)){
 				my $cmdline="perl $program_directory/moirai2.pl";
@@ -5403,7 +5402,7 @@ sub runDaemon{
 			my $jobs_running=getNumberOfJobsRunning();
 			my $job_remaining=getNumberOfJobsRemaining();
 			if($jobs_running==0&&$job_remaining==0){
-				if(scalar(keys(%{$processes}))>0){controlWorkflow($processes,$commands);}
+				if(scalar(keys(%{$processes}))>0){controlWorkflow($processes,$commands,$updateMode);}
 				else{
 					if(defined($opt_l)){print getLogtime()."|Terminating daemon since no jobs remain\n";}
 					if(defined($opt_Z)){touchFile($opt_Z);}
@@ -5419,14 +5418,14 @@ sub runDaemon{
 	#Wait until job is completed when daemon's loop count is defined
 	if(defined($runCount)){
 		while(true){
-			controlWorkflow($processes,$commands);
+			controlWorkflow($processes,$commands,$updateMode);
 			my $jobs_running=getNumberOfJobsRunning();
 			if($jobs_running>=$maxThread){sleep($sleeptime);next;}
 			my $job_remaining=getNumberOfJobsRemaining();
 			if($jobs_running==0&&$job_remaining==0){last;}
 			sleep($sleeptime);
 		}
-		controlWorkflow($processes,$commands);#last update
+		controlWorkflow($processes,$commands,$updateMode);#last update
 		moiraiFinally($commands,$processes,@execids);
 	}
 	if(defined($opt_l)){STDOUT->autoflush(0);}
@@ -5455,14 +5454,14 @@ sub saveCommand{
 	print $writer saveCommandSub($command,$urls->{"daemon/qjob/opt"});#-Q
 	print $writer saveCommandSub($command,$urls->{"daemon/queserver"});#-j
 	print $writer saveCommandSub($command,$urls->{"daemon/query/delete"});#-e
-	print $writer saveCommandSub($command,$urls->{"daemon/query/increment"});#-N
+	print $writer saveCommandSub($command,$urls->{"daemon/query/increment"});#-a
 	print $writer saveCommandSub($command,$urls->{"daemon/query/in"});#-i
 	print $writer saveCommandSub($command,$urls->{"daemon/query/not"});#-n
 	print $writer saveCommandSub($command,$urls->{"daemon/query/out"});#-o
 	print $writer saveCommandSub($command,$urls->{"daemon/query/update"});#-u
 	print $writer saveCommandSub($command,$urls->{"daemon/dagdb"});#-d
-	print $writer saveCommandSub($command,$urls->{"daemon/remoteserver"});#-a
 	print $writer saveCommandSub($command,$urls->{"daemon/jobserver"});#-j
+	print $writer saveCommandSub($command,$urls->{"daemon/remoteserver"});#-J
 	print $writer saveCommandSub($command,$urls->{"daemon/return"});#-r
 	print $writer saveCommandSub($command,$urls->{"daemon/script"});#-S
 	print $writer saveCommandSub($command,$urls->{"daemon/sleeptime"});#-s
@@ -5621,8 +5620,8 @@ sub setCommandFromOptions{
 		foreach my $key(@{$keys}){if(!exists($inputKeys->{$key})){$outputKeys->{$key}=1;}}
 		if(defined($query)){$command->{$urls->{"daemon/query/delete"}}=$query;}
 	}
-	if(defined($opt_N)){
-		my ($keys,$query)=handleInputOutput($opt_N,$userdefined,$suffixs);
+	if(defined($opt_a)){
+		my ($keys,$query)=handleInputOutput($opt_a,$userdefined,$suffixs);
 		foreach my $key(@{$keys}){if(!exists($inputKeys->{$key})){$outputKeys->{$key}=1;}}
 		if(defined($query)){$command->{$urls->{"daemon/query/increment"}}=$query;}
 	}
@@ -5934,7 +5933,7 @@ sub startLockfile{
 		if($opt_l){print getLogtime()."|Waiting $time seconds for the next job offer\n";}
 		sleep($time);#acutal sleep
 	}
-	my $keyid=defined($processid)?$processid:$hostname;
+	my $keyid=$$;
 	writeFileContent($lockfile,$keyid);
 	sleep(1);#This make sure the lockfile is not updated by other daemon
 	my $content=readFileContent($lockfile);
@@ -6380,7 +6379,7 @@ sub test6{
 	testCommandRegex("ssh $testserver 'ls moiraitest/.moirai2/log/$datetime/*.txt'","moiraitest/.moirai2/log/\\d+/.+\\.txt");
 	# assign on a local daemon and execute on a remote server (-a)
 	createFile("input2.txt","Akira Hasegawa");
-	testCommand("perl $program_directory/moirai2.pl -s 1 -r output -i input -o output -a $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
+	testCommand("perl $program_directory/moirai2.pl -s 1 -r output -i input -o output -J $testserver:moiraitest exec 'wc -c \$input > \$output;' input=input2.txt output=output2.txt","output2.txt");
 	testCommandRegex("cat output2.txt","15 .*input2.txt");
 	unlink("input2.txt");
 	unlink("output2.txt");
@@ -6402,11 +6401,11 @@ sub test6{
 	unlink("input4.txt");
 	unlink("output4.txt");
 	#Test singularity with remote server
-	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver:moiraitest exec uname","Linux");
-	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver:moiraitest -c ubuntu exec uname -a","^Linux .+ x86_64 x86_64 x86_64 GNU/Linux\$");
-	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver:moiraitest -c ../singularity/lolcow.sif exec cowsay 'Hello World'"," _____________","< Hello World >"," -------------","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
-	#testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver:moiraitest exec hostname","^moirai\\d+-server");
-	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver:moiraitest exec hostname","lsbdt01");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -J $testserver:moiraitest exec uname","Linux");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -J $testserver:moiraitest -c ubuntu exec uname -a","^Linux .+ x86_64 x86_64 x86_64 GNU/Linux\$");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -J $testserver:moiraitest -c ../singularity/lolcow.sif exec cowsay 'Hello World'"," _____________","< Hello World >"," -------------","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
+	#testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -J $testserver:moiraitest exec hostname","^moirai\\d+-server");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -J $testserver:moiraitest exec hostname","lsbdt01");
 	system("ssh $testserver 'rm -r moiraitest'");
 }
 #Testing daemons across server part2
@@ -6491,8 +6490,8 @@ sub test8{
 }
 #Testing Hokusai openstack (Takes about 5-10 minutes)
 sub test9{
-	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver:moiraitest -q openstack exec hostname","^moirai\\d+-node-\\d+\$");
-	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -a $testserver:moiraitest -c ../singularity/lolcow.sif -q openstack exec cowsay"," __","<  >"," --","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
+	testCommandRegex("perl $program_directory/moirai2.pl -d test -s 1 -J $testserver:moiraitest -q openstack exec hostname","^moirai\\d+-node-\\d+\$");
+	testCommand("perl $program_directory/moirai2.pl -d test -s 1 -J $testserver:moiraitest -c ../singularity/lolcow.sif -q openstack exec cowsay"," __","<  >"," --","        \\   ^__^","         \\  (oo)\\_______","            (__)\\       )\\/\\","                ||----w |","                ||     ||");
 }
 ############################## testCommand ##############################
 sub testCommand{

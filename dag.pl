@@ -12,7 +12,7 @@ use Time::localtime;
 ############################## HEADER ##############################
 my($program_name,$program_directory,$program_suffix)=fileparse($0);
 $program_directory=substr($program_directory,0,-1);
-my $program_version="2023/07/11";
+my $program_version="2023/11/01";
 ############################## OPTIONS ##############################
 use vars qw($opt_d $opt_D $opt_f $opt_g $opt_G $opt_h $opt_i $opt_o $opt_q $opt_r $opt_s $opt_x);
 getopts('d:D:f:g:G:hi:qo:r:s:w:x');
@@ -399,6 +399,24 @@ sub checkInputOutput{
 	}
 	return $triple;
 }
+############################## checkQueryExists ##############################
+sub checkQueryExists{
+	my $query=shift();
+	my $subject=$query->{"subject"};
+	my $predicate=$query->{"predicate"};
+	my $object=$query->{"object"};
+	my $results=tripleSelect($subject,$predicate,$object);
+	return defined($results);
+}
+############################## checkQueryHasNoVariables ##############################
+sub checkQueryHasNoVariables{
+	my $query=shift();
+	if(exists($query->{"anchor"})){return;}
+	if(scalar(@{$query->{"subject.variables"}})>0){return;}
+	if(scalar(@{$query->{"predicate.variables"}})>0){return;}
+	if(scalar(@{$query->{"object.variables"}})>0){return;}
+	return 1;
+}
 ############################## checkTimestamp ##############################
 sub checkTimestamp{
 	my $path=shift();
@@ -512,6 +530,8 @@ sub commandConfig{
 		if(/^\s*$/){next;}
 		if(/^#/){next;}
 		my ($key,$val)=split(/\t+/,$_);
+		if($key eq ""){print STDERR "Not value found for key\n";exit(1);}
+		if($val eq ""){print STDERR "Not value found for value\n";exit(1);}
 		my @tokens=split(/\-\>/,$key);
 		push(@tokens,$val);
 		if(scalar(@tokens)>2){
@@ -549,10 +569,12 @@ sub commandDelete{
 }
 sub deleteJson{
 	my $json=shift();
+	my $wildCardObject=0;
 	foreach my $sub(keys(%{$json})){
 		foreach my $pre(keys(%{$json->{$sub}})){
 			my $hash={};
 			my $obj=$json->{$sub}->{$pre};
+			if($obj eq "%"){$wildCardObject=1;}
 			if(ref($obj)eq"ARRAY"){
 				foreach my $o(@{$obj}){$hash->{$o}=1;}
 			}else{$hash->{$obj}=1;}
@@ -580,11 +602,13 @@ sub deleteJson{
 				my $p="$pre#".$tokens[1];
 				my $o=$tokens[2];
 				if(exists($json->{$s}->{$p}->{$o})){$deleted++;}
+				elsif($wildCardObject&&exists($json->{$s}->{$p})){$deleted++;}
 				else{print $writer join("\t",@tokens)."\n";$count++;}
 			}else{
 				my $s=$tokens[0];
 				my $o=$tokens[1];
 				if(exists($json->{$s}->{$pre}->{$o})){$deleted++;}
+				elsif($wildCardObject&&exists($json->{$s}->{$pre})){$deleted++;}
 				else{print $writer join("\t",@tokens)."\n";$count++;}
 			}
 		}
@@ -1280,6 +1304,7 @@ sub updateJson{
 			close($writer2);
 			chmod(0777,$tempfile2);
 			system("sort $tempfile -u > $tempfile2");
+			unlink($tempfile);
 			if(!-e $dbdir){prepareDbDir();}
 			system("mv $tempfile2 $file");
 		}
@@ -1542,6 +1567,12 @@ sub downloadUrlFromQuery{
 	my ($subject,$predicate,$object)=split(/->/,$query);
 	return downloadUrlFromPredicate($predicate);
 }
+############################## endLockfile ##############################
+#Terminate lockfile
+sub endLockfile{
+	my $lockfile=shift();
+	removeFiles($lockfile);
+}
 ############################## equals ##############################
 sub equals{
 	my $obj1=shift();
@@ -1596,6 +1627,17 @@ sub expectedLabeledTable{
 		}
 	}
 	$hashtable->{"expected"}=$expectTable;
+}
+############################## fileExists ##############################
+sub fileExists{
+	my $path=shift();
+	if($path=~/^(.+)\:(.+)\@(.+)\:(.+)$/){
+		my $result=`sshpass -p $2 ssh $1\@$3 'if [ -e $4 ]; then echo 1; fi'`;chomp($result);return ($result==1);
+	}elsif($path=~/^(.+\@.+)\:(.+)$/){
+		my $result=`ssh $1 'if [ -e "$2" ]; then echo 1; fi'`;chomp($result);return ($result==1);
+	}
+	elsif(-e $path){return 1;}
+	return;
 }
 ############################## fileExistsInDirectory ##############################
 sub fileExistsInDirectory{
@@ -2968,6 +3010,14 @@ sub queryResults{
 	}
 	for(my $i=0;$i<scalar(@queries);$i++){
 		my $query=$queries[$i];
+		if(checkQueryHasNoVariables($query)){
+			if(checkQueryExists($query)){
+				if($i==0){
+					$results=[{"subject"=>$query->{"subject"},"predicate"=>$query->{"predicate"},"object"=>$query->{"object"}}];
+				}
+				next;
+			}
+		}
 		if($i==0){
 			my $queryResult=queryVariables($query,$expand);
 			if(scalar(@{$queryResult}==0)){return @{$queryResult};}
@@ -3471,6 +3521,15 @@ sub queryVariablesSystem{
 		}
 	}
 }
+############################## readFileContent ##############################
+sub readFileContent{
+	my $path=shift();
+	my $reader=openFile($path);
+	my $content;
+	while(<$reader>){s/\r//g;$content.=$_;}
+	close($reader);
+	return $content;
+}
 ############################## readHash ##############################
 sub readHash{
 	my $reader=shift();
@@ -3545,6 +3604,14 @@ sub readTsvToKeyValHash{
 	}
 	close($reader);
 	return wantarray?($hash,$count):$hash;
+}
+############################## removeFiles ##############################
+sub removeFiles{
+	my @files=@_;
+	foreach my $file(@files){
+		if($file=~/^(.+\@.+)\:(.+)$/){system("ssh $1 'rm $2'");}
+		else{unlink($file);}
+	}
 }
 ############################## retrieveValuesFromArrayR ##############################
 sub retrieveValuesFromArrayR{
@@ -4148,6 +4215,40 @@ sub sqliteCheckType{
 		$types->{$variable}=$type;
 	}
 	return $types;
+}
+############################## startLockfile ##############################
+#This make sure that only one program is looking at jobdir or insert/delete/update directories
+#jobdir can be set across internet (example,jobdir=ah3q@dgt-ac4:moirai2/.moirai2/ctrl/jobdir)
+#Program make sure that the processid is correct before progressing
+sub startLockfile{
+	my $lockfile=shift();
+	my $jobCoolingTime=10;
+	my $jobDeleteTime=60;
+	my $t1;#time when daemon start looking at
+	my $ts1;#timestamp of job lock file
+	while(fileExists($lockfile)){
+		if(!defined($ts1)){$t1=time();$ts1=checkTimestamp($lockfile);}
+		my $t2=time();#current time
+		my $diff=$t2-$t1;#diff since daemon start looking at this
+		if($diff>$jobDeleteTime){
+			my $ts2=checkTimestamp($lockfile);
+			if($ts1==$ts2){#make sure lockfile is not updated
+				last;#don't remove the file, but just progress to writing a lockfile
+			}
+			#update time and timestamp information and repeat from beginning again
+			$t1=$t2;
+			$ts1=$ts2;
+		}
+		my $time=$jobCoolingTime+int(rand(3));#Added random seconds to make sure daemons don't synchronize
+		sleep($time);#acutal sleep
+	}
+	my $processid=$$;
+	writeFileContent($lockfile,$processid);
+	sleep(1);#This make sure the lockfile is not updated by other daemon
+	my $content=readFileContent($lockfile);
+	chomp($content);
+	if($content eq $processid){return 0;}
+	else{return 1;}
 }
 ############################## sumArray ##############################
 sub sumArray{
@@ -5220,6 +5321,16 @@ sub which{
 	}
 	if($result ne ""){$hash->{$cmd}=$result;}
 	return $result;
+}
+############################## writeFileContent ##############################
+sub writeFileContent{
+	my @array=@_;
+	my $file=shift(@array);
+	my ($writer,$tmpfile)=tempfile(DIR=>"/tmp",SUFFIX=>".txt",UNLINK=>1);
+	foreach my $line(@array){print $writer "$line\n";}
+	close($writer);
+	if($file=~/^(.+\@.+)\:(.+)$/){system("scp $tmpfile $1:$2 2>&1 1>/dev/null");unlink($tmpfile);}
+	else{system("mv $tmpfile $file");}
 }
 ############################## writeKeyValHash ##############################
 sub writeKeyValHash{
